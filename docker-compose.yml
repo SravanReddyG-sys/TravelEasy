@@ -1,0 +1,170 @@
+version: '3.8'
+
+services:
+  mysqldb:
+    image: mysql:8.0
+    container_name: traveleasy-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - mysql_data:/var/lib/mysql
+    networks:
+      - traveleasy-network
+
+  auth-service:
+    build: ./auth-service
+    container_name: traveleasy-auth-service
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysqldb:3306/traveleasy_auth_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=rootpassword
+    depends_on:
+      - mysqldb
+    networks:
+      - traveleasy-network
+
+  bus-service:
+    build: ./bus-service
+    container_name: traveleasy-bus-service
+    restart: always
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysqldb:3306/traveleasy_bus_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=rootpassword
+    depends_on:
+      - mysqldb
+    networks:
+      - traveleasy-network
+
+  hotel-service:
+    build: ./hotel-service
+    container_name: traveleasy-hotel-service
+    restart: always
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysqldb:3306/traveleasy_hotel_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=rootpassword
+    depends_on:
+      - mysqldb
+    networks:
+      - traveleasy-network
+
+  booking-service:
+    build: ./booking-service
+    container_name: traveleasy-booking-service
+    restart: always
+    ports:
+      - "8084:8084"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysqldb:3306/traveleasy_booking_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=rootpassword
+      - BUS_SERVICE_URL=http://bus-service:8082
+      - HOTEL_SERVICE_URL=http://hotel-service:8083
+      - PAYMENT_SERVICE_URL=http://payment-service:8085
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8086
+    depends_on:
+      - mysqldb
+      - bus-service
+      - hotel-service
+    networks:
+      - traveleasy-network
+
+  payment-service:
+    build: ./payment-service
+    container_name: traveleasy-payment-service
+    restart: always
+    ports:
+      - "8085:8085"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysqldb:3306/traveleasy_payment_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=rootpassword
+    depends_on:
+      - mysqldb
+    networks:
+      - traveleasy-network
+
+  notification-service:
+    build: ./notification-service
+    container_name: traveleasy-notification-service
+    restart: always
+    ports:
+      - "8086:8086"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysqldb:3306/traveleasy_notification_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=rootpassword
+    depends_on:
+      - mysqldb
+    networks:
+      - traveleasy-network
+
+  review-service:
+    build: ./review-service
+    container_name: traveleasy-review-service
+    restart: always
+    ports:
+      - "8087:8087"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysqldb:3306/traveleasy_review_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=rootpassword
+    depends_on:
+      - mysqldb
+    networks:
+      - traveleasy-network
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: traveleasy-api-gateway
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - BUS_SERVICE_URL=http://bus-service:8082
+      - HOTEL_SERVICE_URL=http://hotel-service:8083
+      - BOOKING_SERVICE_URL=http://booking-service:8084
+      - PAYMENT_SERVICE_URL=http://payment-service:8085
+      - NOTIFICATION_SERVICE_URL=http://notification-service:8086
+      - REVIEW_SERVICE_URL=http://review-service:8087
+    depends_on:
+      - auth-service
+      - bus-service
+      - hotel-service
+      - booking-service
+      - payment-service
+      - notification-service
+      - review-service
+    networks:
+      - traveleasy-network
+
+  frontend:
+    build: ./frontend
+    container_name: traveleasy-frontend
+    restart: always
+    ports:
+      - "4200:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - traveleasy-network
+
+networks:
+  traveleasy-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
