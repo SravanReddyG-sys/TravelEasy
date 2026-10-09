@@ -15,7 +15,7 @@
     <artifactId>review-service</artifactId>
     <version>1.0.0</version>
     <name>review-service</name>
-    <description>Review & Rating Microservice for TravelEasy</description>
+    <description>Review and Rating Microservice for TravelEasy</description>
 
     <properties>
         <java.version>17</java.version>
