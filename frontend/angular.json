@@ -50,6 +50,9 @@
         },
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
+          "options": {
+            "proxyConfig": "src/proxy.conf.json"
+          },
           "configurations": {
             "production": {
               "buildTarget": "traveleasy-frontend:build:production"
@@ -62,5 +65,8 @@
         }
       }
     }
+  },
+  "cli": {
+    "analytics": "872c2c5e-b00a-4aca-bbed-4d4517f130cb"
   }
 }

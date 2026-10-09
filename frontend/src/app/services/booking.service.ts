@@ -6,7 +6,7 @@ import { Observable } from 'rxjs';
   providedIn: 'root'
 })
 export class BookingService {
-  private apiUrl = '/api';
+  private apiUrl = window.location.port === '4200' ? 'http://localhost:8080/api' : '/api';
 
   constructor(private http: HttpClient) {}
 

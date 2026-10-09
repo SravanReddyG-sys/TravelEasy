@@ -76,9 +76,26 @@ public class GatewayController {
         HttpEntity<byte[]> entity = new HttpEntity<>(body, headers);
 
         try {
-            return restTemplate.exchange(URI.create(targetUrl), method, entity, byte[].class);
+            ResponseEntity<byte[]> response = restTemplate.exchange(URI.create(targetUrl), method, entity, byte[].class);
+            HttpHeaders responseHeaders = new HttpHeaders();
+            if (response.getHeaders() != null) {
+                response.getHeaders().forEach((name, values) -> {
+                    if (!name.equalsIgnoreCase("transfer-encoding") && !name.equalsIgnoreCase("content-length")) {
+                        responseHeaders.put(name, values);
+                    }
+                });
+            }
+            return new ResponseEntity<>(response.getBody(), responseHeaders, response.getStatusCode());
         } catch (HttpStatusCodeException e) {
-            return ResponseEntity.status(e.getStatusCode()).headers(e.getResponseHeaders()).body(e.getResponseBodyAsByteArray());
+            HttpHeaders responseHeaders = new HttpHeaders();
+            if (e.getResponseHeaders() != null) {
+                e.getResponseHeaders().forEach((name, values) -> {
+                    if (!name.equalsIgnoreCase("transfer-encoding") && !name.equalsIgnoreCase("content-length")) {
+                        responseHeaders.put(name, values);
+                    }
+                });
+            }
+            return new ResponseEntity<>(e.getResponseBodyAsByteArray(), responseHeaders, e.getStatusCode());
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(("Gateway Error: " + e.getMessage()).getBytes());

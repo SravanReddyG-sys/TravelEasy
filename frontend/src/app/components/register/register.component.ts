@@ -104,7 +104,7 @@ export class RegisterComponent {
       },
       error: (err) => {
         this.loading = false;
-        this.errorMessage = err.error?.message || 'Registration failed. Please check inputs.';
+        this.errorMessage = err.error?.message || err.message || 'Registration failed. Please check inputs.';
       }
     });
   }

@@ -100,7 +100,7 @@ export class LoginComponent {
       },
       error: (err) => {
         this.loading = false;
-        this.errorMessage = err.error?.message || 'Invalid email or password. Please try again.';
+        this.errorMessage = err.error?.message || err.message || 'Invalid email or password. Please try again.';
       }
     });
   }

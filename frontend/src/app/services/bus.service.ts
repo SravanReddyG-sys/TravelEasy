@@ -6,7 +6,7 @@ import { Observable } from 'rxjs';
   providedIn: 'root'
 })
 export class BusService {
-  private apiUrl = '/api/buses';
+  private apiUrl = window.location.port === '4200' ? 'http://localhost:8080/api/buses' : '/api/buses';
 
   constructor(private http: HttpClient) {}
 
