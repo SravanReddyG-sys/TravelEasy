@@ -25,19 +25,39 @@ export class AuthService {
   login(credentials: any): Observable<User> {
     return this.http.post<User>(`${this.apiUrl}/auth/login`, credentials).pipe(
       tap(user => {
-        localStorage.setItem('traveleasy_user', JSON.stringify(user));
-        this.currentUserSubject.next(user);
+        if (user && user.token) {
+          localStorage.setItem('traveleasy_user', JSON.stringify(user));
+          this.currentUserSubject.next(user);
+        }
       })
     );
   }
 
-  register(userData: any): Observable<User> {
-    return this.http.post<User>(`${this.apiUrl}/auth/register`, userData).pipe(
+  registerTraveller(userData: any): Observable<User> {
+    return this.http.post<User>(`${this.apiUrl}/auth/register/traveller`, userData).pipe(
       tap(user => {
-        localStorage.setItem('traveleasy_user', JSON.stringify(user));
-        this.currentUserSubject.next(user);
+        if (user && user.token) {
+          localStorage.setItem('traveleasy_user', JSON.stringify(user));
+          this.currentUserSubject.next(user);
+        }
       })
     );
+  }
+
+  registerBusOperator(userData: any): Observable<User> {
+    return this.http.post<User>(`${this.apiUrl}/auth/register/bus-operator`, userData);
+  }
+
+  registerHotelPartner(userData: any): Observable<User> {
+    return this.http.post<User>(`${this.apiUrl}/auth/register/hotel-partner`, userData);
+  }
+
+  forgotPassword(email: string): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/auth/forgot-password`, { email });
+  }
+
+  resetPassword(data: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/auth/reset-password`, data);
   }
 
   logout() {

@@ -6,6 +6,8 @@ export interface User {
   fullName: string;
   phone?: string;
   role: Role;
+  status?: string;
+  verificationStatus?: string;
   verified?: boolean;
   token?: string;
 }
