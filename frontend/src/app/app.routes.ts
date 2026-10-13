@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { HomeComponent } from './components/home/home.component';
 import { LoginComponent } from './components/login/login.component';
 import { RegisterSelectComponent } from './components/register/register-select.component';
 import { TravellerRegisterComponent } from './components/register/traveller-register.component';
@@ -15,7 +16,8 @@ import { HotelManagerDashboardComponent } from './components/hotel-manager-dashb
 import { AdminDashboardComponent } from './components/admin-dashboard/admin-dashboard.component';
 
 export const routes: Routes = [
-  { path: '', redirectTo: 'customer', pathMatch: 'full' },
+  { path: '', redirectTo: 'home', pathMatch: 'full' },
+  { path: 'home', component: HomeComponent },
   { path: 'login', component: LoginComponent },
   { path: 'register', component: RegisterSelectComponent },
   { path: 'register/traveller', component: TravellerRegisterComponent },
@@ -30,5 +32,5 @@ export const routes: Routes = [
   { path: 'bus-operator', component: BusOperatorDashboardComponent },
   { path: 'hotel-manager', component: HotelManagerDashboardComponent },
   { path: 'admin', component: AdminDashboardComponent },
-  { path: '**', redirectTo: 'customer' }
+  { path: '**', redirectTo: 'home' }
 ];
