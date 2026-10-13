@@ -35,7 +35,7 @@ export class AppComponent {
       filter(event => event instanceof NavigationEnd)
     ).subscribe((event: any) => {
       const url: string = event.urlAfterRedirects || event.url || '';
-      this.isHomePage = url === '/' || url.startsWith('/home');
+      this.isHomePage = url === '/' || url.startsWith('/home') || url.startsWith('/login');
     });
   }
 }
