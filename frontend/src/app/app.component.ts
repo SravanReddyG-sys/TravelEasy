@@ -28,14 +28,14 @@ import { filter } from 'rxjs/operators';
   `
 })
 export class AppComponent {
-  isHomePage = false;
+  isHomePage = true;
 
   constructor(private router: Router) {
     this.router.events.pipe(
       filter(event => event instanceof NavigationEnd)
     ).subscribe((event: any) => {
       const url: string = event.urlAfterRedirects || event.url || '';
-      this.isHomePage = url === '/home' || url === '/home?';
+      this.isHomePage = url === '/' || url.startsWith('/home');
     });
   }
 }

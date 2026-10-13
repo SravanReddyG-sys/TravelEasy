@@ -40,7 +40,7 @@ import { User } from '../../models/user.model';
             <button class="te-btn te-btn-outline" (click)="logout()">Logout</button>
           </ng-container>
           <ng-template #guestButtons>
-            <a routerLink="/login" class="te-btn te-btn-outline">Login</a>
+            <a routerLink="/login" class="te-btn te-btn-white">Login</a>
             <a routerLink="/register" class="te-btn te-btn-primary">Register</a>
           </ng-template>
         </div>
@@ -67,28 +67,36 @@ import { User } from '../../models/user.model';
 
           <div class="te-hero-badges">
             <div class="te-badge">
-              <i class="fa-solid fa-earth-asia te-badge-icon"></i>
+              <span class="te-badge-icon-wrap">
+                <i class="fa-solid fa-map-location-dot te-badge-icon"></i>
+              </span>
               <div>
                 <div class="te-badge-title">Wide Network</div>
                 <div class="te-badge-sub">Across India</div>
               </div>
             </div>
             <div class="te-badge">
-              <i class="fa-solid fa-shield-halved te-badge-icon"></i>
+              <span class="te-badge-icon-wrap">
+                <i class="fa-solid fa-shield-halved te-badge-icon"></i>
+              </span>
               <div>
                 <div class="te-badge-title">Trusted Operators</div>
                 <div class="te-badge-sub">Safe &amp; Reliable</div>
               </div>
             </div>
             <div class="te-badge">
-              <i class="fa-solid fa-hotel te-badge-icon"></i>
+              <span class="te-badge-icon-wrap">
+                <i class="fa-solid fa-hotel te-badge-icon"></i>
+              </span>
               <div>
                 <div class="te-badge-title">Great Stays</div>
                 <div class="te-badge-sub">Verified Hotels</div>
               </div>
             </div>
             <div class="te-badge">
-              <i class="fa-solid fa-bolt te-badge-icon"></i>
+              <span class="te-badge-icon-wrap">
+                <i class="fa-solid fa-bolt te-badge-icon"></i>
+              </span>
               <div>
                 <div class="te-badge-title">Easy Booking</div>
                 <div class="te-badge-sub">Fast &amp; Secure</div>
@@ -100,96 +108,96 @@ import { User } from '../../models/user.model';
         <!-- Right tagline -->
         <div class="te-hero-right">
           <div class="te-hero-tagline">
-            <em>New journeys,<br>brighter stories</em>
+            <em>New journeys<br>brighter stories</em>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===================== SEARCH PANEL (OVERLAPPING HERO BOTTOM) ===================== -->
+      <div class="te-search-wrapper">
+        <div class="te-search-panel">
+          <!-- Tabs -->
+          <div class="te-search-tabs">
+            <button class="te-tab" [class.te-tab--active]="searchTab === 'bus'" (click)="searchTab = 'bus'">
+              <i class="fa-solid fa-bus me-2"></i>Buses
+            </button>
+            <button class="te-tab" [class.te-tab--active]="searchTab === 'hotel'" (click)="searchTab = 'hotel'">
+              <i class="fa-solid fa-bed me-2"></i>Hotels
+            </button>
+          </div>
+
+          <!-- Bus Search -->
+          <div class="te-search-form" *ngIf="searchTab === 'bus'">
+            <div class="te-search-fields">
+              <div class="te-field">
+                <label class="te-field-label">From</label>
+                <div class="te-input-wrap">
+                  <i class="fa-solid fa-location-dot te-input-icon"></i>
+                  <input type="text" class="te-input" [(ngModel)]="busFrom" placeholder="Enter source city">
+                </div>
+              </div>
+
+              <button class="te-swap-btn" (click)="swapCities()" title="Swap cities">
+                <i class="fa-solid fa-arrow-right-arrow-left"></i>
+              </button>
+
+              <div class="te-field">
+                <label class="te-field-label">To</label>
+                <div class="te-input-wrap">
+                  <i class="fa-solid fa-location-dot te-input-icon"></i>
+                  <input type="text" class="te-input" [(ngModel)]="busTo" placeholder="Enter destination city">
+                </div>
+              </div>
+
+              <div class="te-field">
+                <label class="te-field-label">Travel Date</label>
+                <div class="te-input-wrap">
+                  <i class="fa-regular fa-calendar te-input-icon"></i>
+                  <input type="date" class="te-input" [(ngModel)]="busDate">
+                </div>
+              </div>
+
+              <button class="te-search-btn" (click)="searchBuses()">
+                <i class="fa-solid fa-magnifying-glass me-2"></i>Search Buses
+              </button>
+            </div>
+          </div>
+
+          <!-- Hotel Search -->
+          <div class="te-search-form" *ngIf="searchTab === 'hotel'">
+            <div class="te-search-fields">
+              <div class="te-field te-field--wide">
+                <label class="te-field-label">City / Destination</label>
+                <div class="te-input-wrap">
+                  <i class="fa-solid fa-location-dot te-input-icon"></i>
+                  <input type="text" class="te-input" [(ngModel)]="hotelCity" placeholder="Enter city or destination">
+                </div>
+              </div>
+
+              <div class="te-field">
+                <label class="te-field-label">Check-in Date</label>
+                <div class="te-input-wrap">
+                  <i class="fa-regular fa-calendar te-input-icon"></i>
+                  <input type="date" class="te-input" [(ngModel)]="hotelCheckIn">
+                </div>
+              </div>
+
+              <div class="te-field">
+                <label class="te-field-label">Check-out Date</label>
+                <div class="te-input-wrap">
+                  <i class="fa-regular fa-calendar te-input-icon"></i>
+                  <input type="date" class="te-input" [(ngModel)]="hotelCheckOut">
+                </div>
+              </div>
+
+              <button class="te-search-btn" (click)="searchHotels()">
+                <i class="fa-solid fa-magnifying-glass me-2"></i>Search Hotels
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </section>
-
-    <!-- ===================== SEARCH PANEL ===================== -->
-    <div class="te-search-wrapper">
-      <div class="te-search-panel">
-        <!-- Tabs -->
-        <div class="te-search-tabs">
-          <button class="te-tab" [class.te-tab--active]="searchTab === 'bus'" (click)="searchTab = 'bus'">
-            <i class="fa-solid fa-bus me-2"></i>Buses
-          </button>
-          <button class="te-tab" [class.te-tab--active]="searchTab === 'hotel'" (click)="searchTab = 'hotel'">
-            <i class="fa-solid fa-bed me-2"></i>Hotels
-          </button>
-        </div>
-
-        <!-- Bus Search -->
-        <div class="te-search-form" *ngIf="searchTab === 'bus'">
-          <div class="te-search-fields">
-            <div class="te-field">
-              <label class="te-field-label">From</label>
-              <div class="te-input-wrap">
-                <i class="fa-solid fa-location-dot te-input-icon"></i>
-                <input type="text" class="te-input" [(ngModel)]="busFrom" placeholder="Enter source city">
-              </div>
-            </div>
-
-            <button class="te-swap-btn" (click)="swapCities()" title="Swap cities">
-              <i class="fa-solid fa-arrow-right-arrow-left"></i>
-            </button>
-
-            <div class="te-field">
-              <label class="te-field-label">To</label>
-              <div class="te-input-wrap">
-                <i class="fa-solid fa-location-dot te-input-icon"></i>
-                <input type="text" class="te-input" [(ngModel)]="busTo" placeholder="Enter destination city">
-              </div>
-            </div>
-
-            <div class="te-field">
-              <label class="te-field-label">Travel Date</label>
-              <div class="te-input-wrap">
-                <i class="fa-regular fa-calendar te-input-icon"></i>
-                <input type="date" class="te-input" [(ngModel)]="busDate">
-              </div>
-            </div>
-
-            <button class="te-search-btn" (click)="searchBuses()">
-              <i class="fa-solid fa-magnifying-glass me-2"></i>Search Buses
-            </button>
-          </div>
-        </div>
-
-        <!-- Hotel Search -->
-        <div class="te-search-form" *ngIf="searchTab === 'hotel'">
-          <div class="te-search-fields">
-            <div class="te-field te-field--wide">
-              <label class="te-field-label">City / Destination</label>
-              <div class="te-input-wrap">
-                <i class="fa-solid fa-location-dot te-input-icon"></i>
-                <input type="text" class="te-input" [(ngModel)]="hotelCity" placeholder="Enter city or destination">
-              </div>
-            </div>
-
-            <div class="te-field">
-              <label class="te-field-label">Check-in Date</label>
-              <div class="te-input-wrap">
-                <i class="fa-regular fa-calendar te-input-icon"></i>
-                <input type="date" class="te-input" [(ngModel)]="hotelCheckIn">
-              </div>
-            </div>
-
-            <div class="te-field">
-              <label class="te-field-label">Check-out Date</label>
-              <div class="te-input-wrap">
-                <i class="fa-regular fa-calendar te-input-icon"></i>
-                <input type="date" class="te-input" [(ngModel)]="hotelCheckOut">
-              </div>
-            </div>
-
-            <button class="te-search-btn" (click)="searchHotels()">
-              <i class="fa-solid fa-magnifying-glass me-2"></i>Search Hotels
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <!-- ===================== DESTINATIONS ===================== -->
     <section class="te-destinations" id="destinations">
@@ -425,93 +433,103 @@ import { User } from '../../models/user.model';
       display: flex;
       align-items: center;
       gap: 0;
-      padding: 14px 32px;
-      max-width: 1280px;
+      padding: 16px 32px;
+      max-width: 1200px;
       margin: 0 auto;
     }
     .te-brand {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       text-decoration: none;
       flex-shrink: 0;
     }
     .te-brand-icon {
-      width: 36px; height: 36px;
-      background: #1a56db;
-      border-radius: 8px;
+      width: 38px; height: 38px;
+      background: #0d5bd9;
+      border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
       color: white;
       font-size: 16px;
     }
     .te-brand-text {
-      font-size: 20px;
+      font-size: 21px;
       font-weight: 700;
-      color: #1e293b;
+      color: #0f172a;
     }
-    .te-brand-blue { color: #1a56db; }
+    .te-brand-blue { color: #0d5bd9; }
 
     .te-nav-links {
       display: flex;
       list-style: none;
-      margin: 0 0 0 40px;
+      margin: 0 0 0 44px;
       padding: 0;
-      gap: 28px;
+      gap: 30px;
       flex: 1;
     }
     .te-nav-link {
       text-decoration: none;
-      color: #374151;
-      font-weight: 500;
+      color: #0f172a;
+      font-weight: 600;
       font-size: 14.5px;
-      padding: 4px 0;
-      border-bottom: 2px solid transparent;
+      padding: 5px 0;
+      border-bottom: 2.5px solid transparent;
       transition: color 0.2s, border-color 0.2s;
     }
-    .te-nav-link:hover { color: #1a56db; }
+    .te-nav-link:hover { color: #0d5bd9; }
     .te-nav-link--active {
-      color: #1a56db;
-      border-bottom-color: #1a56db;
+      color: #0d5bd9;
+      border-bottom-color: #0d5bd9;
     }
 
     .te-nav-actions {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
       flex-shrink: 0;
     }
     .te-nav-username {
       font-size: 14px;
-      color: #374151;
-      font-weight: 500;
+      color: #0f172a;
+      font-weight: 600;
     }
     .te-btn {
-      display: inline-flex; align-items: center;
-      padding: 8px 20px;
-      border-radius: 6px;
-      font-size: 14px;
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 8px 24px;
+      border-radius: 8px;
+      font-size: 14.5px;
       font-weight: 600;
       cursor: pointer;
       text-decoration: none;
       border: 2px solid transparent;
       transition: all 0.2s;
     }
+    .te-btn-white {
+      background: #ffffff;
+      color: #0d5bd9;
+      border-color: #ffffff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .te-btn-white:hover {
+      background: #f8fafc;
+      color: #0a4bb5;
+    }
     .te-btn-outline {
-      border-color: #1a56db;
-      color: #1a56db;
-      background: transparent;
+      border-color: #0d5bd9;
+      color: #0d5bd9;
+      background: #ffffff;
     }
     .te-btn-outline:hover {
-      background: #1a56db;
+      background: #0d5bd9;
       color: white;
     }
     .te-btn-primary {
-      background: #1a56db;
+      background: #0d5bd9;
       color: white;
-      border-color: #1a56db;
+      border-color: #0d5bd9;
     }
     .te-btn-primary:hover {
-      background: #1648c0;
+      background: #0a4bb5;
     }
     .te-hamburger {
       display: none;
@@ -533,148 +551,193 @@ import { User } from '../../models/user.model';
     /* ============ HERO ============ */
     .te-hero {
       position: relative;
-      min-height: 500px;
-      height: 68vh;
+      min-height: 550px;
       background-image: url('/assets/images/travel-hero.png');
       background-size: cover;
-      background-position: center 30%;
+      background-position: center bottom;
       background-repeat: no-repeat;
       display: flex;
-      align-items: center;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 92px 0 22px;
       overflow: hidden;
     }
     .te-hero-overlay {
       position: absolute;
       inset: 0;
-      background: linear-gradient(
-        90deg,
-        rgba(255,255,255,0.88) 0%,
-        rgba(255,255,255,0.55) 40%,
-        rgba(255,255,255,0.1) 65%,
-        rgba(255,255,255,0) 100%
+      background: radial-gradient(
+        ellipse 52% 48% at 24% 38%,
+        rgba(255, 255, 255, 0.42) 0%,
+        rgba(255, 255, 255, 0.12) 65%,
+        rgba(255, 255, 255, 0) 100%
       );
+      pointer-events: none;
     }
     .te-hero-content {
       position: relative;
       z-index: 2;
       width: 100%;
-      max-width: 1280px;
+      max-width: 1200px;
       margin: 0 auto;
-      padding: 80px 32px 60px;
+      padding: 12px 32px 26px;
       display: flex;
       align-items: center;
       justify-content: space-between;
     }
     .te-hero-left {
-      max-width: 520px;
+      max-width: 650px;
     }
     .te-hero-title {
-      font-size: clamp(38px, 5vw, 58px);
-      font-weight: 800;
-      line-height: 1.1;
-      color: #0f172a;
-      margin-bottom: 14px;
+      font-family: Georgia, 'Times New Roman', Times, serif;
+      font-size: clamp(40px, 4.8vw, 58px);
+      font-weight: 700;
+      line-height: 1.08;
+      color: #0b192c;
+      margin-bottom: 12px;
     }
-    .te-hero-title-blue { color: #1a56db; }
+    .te-hero-title-blue { color: #0d5bd9; }
     .te-hero-subtitle {
-      font-size: 16px;
-      color: #374151;
-      margin-bottom: 28px;
-      font-weight: 400;
+      font-size: 16.5px;
+      color: #0f172a;
+      margin-bottom: 24px;
+      font-weight: 500;
     }
     .te-hero-badges {
       display: flex;
       flex-wrap: wrap;
-      gap: 14px;
+      align-items: center;
+      gap: 22px;
     }
     .te-badge {
       display: flex;
       align-items: center;
       gap: 10px;
-      background: rgba(255,255,255,0.85);
-      border-radius: 10px;
-      padding: 10px 14px;
-      min-width: 140px;
-      border: 1px solid rgba(255,255,255,0.6);
-      backdrop-filter: blur(4px);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      background: transparent;
+      padding: 0;
+      border: none;
+      box-shadow: none;
+    }
+    .te-badge-icon-wrap {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.92);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      flex-shrink: 0;
     }
     .te-badge-icon {
-      font-size: 20px;
-      color: #1a56db;
+      font-size: 17px;
+      color: #0f172a;
       flex-shrink: 0;
     }
     .te-badge-title {
-      font-size: 13px;
+      font-size: 13.5px;
       font-weight: 700;
       color: #0f172a;
       line-height: 1.2;
     }
     .te-badge-sub {
-      font-size: 11px;
-      color: #64748b;
+      font-size: 12px;
+      color: #1e293b;
+      font-weight: 500;
     }
     .te-hero-right {
       flex-shrink: 0;
+      align-self: flex-start;
+      margin-top: 32px;
     }
     .te-hero-tagline {
-      font-size: clamp(18px, 2.5vw, 26px);
-      font-weight: 700;
-      color: white;
-      text-align: right;
-      text-shadow: 1px 2px 12px rgba(0,0,0,0.55);
+      position: relative;
+      font-size: clamp(20px, 2.4vw, 27px);
+      font-weight: 600;
+      color: #ffffff;
+      text-align: center;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.65);
       font-style: italic;
-      line-height: 1.4;
+      line-height: 1.25;
+      transform: rotate(-4deg);
+      padding-bottom: 8px;
+    }
+    .te-hero-tagline::after {
+      content: '';
+      display: block;
+      width: 72%;
+      height: 3px;
+      margin: 4px auto 0;
+      background: #facc15;
+      border-radius: 4px;
     }
 
-    /* ============ SEARCH PANEL ============ */
+    /* ============ SEARCH PANEL (OVERLAPPING HERO BOTTOM) ============ */
     .te-search-wrapper {
       display: flex;
       justify-content: center;
       position: relative;
       z-index: 10;
-      margin-top: -56px;
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
       padding: 0 32px;
     }
     .te-search-panel {
-      background: white;
-      border-radius: 16px;
-      box-shadow: 0 8px 40px rgba(0,0,0,0.14);
+      background: transparent;
+      border-radius: 0;
+      box-shadow: none;
       padding: 0;
       width: 100%;
-      max-width: 1100px;
-      overflow: hidden;
+      overflow: visible;
     }
     .te-search-tabs {
       display: flex;
-      border-bottom: 1px solid #e2e8f0;
+      align-items: stretch;
+      gap: 4px;
+      border-bottom: none;
     }
     .te-tab {
-      padding: 14px 28px;
+      position: relative;
+      padding: 13px 34px;
       border: none;
-      background: transparent;
-      font-size: 14px;
-      font-weight: 600;
-      color: #64748b;
+      border-radius: 12px 12px 0 0;
+      background: rgba(255, 255, 255, 0.92);
+      font-size: 15px;
+      font-weight: 700;
+      color: #0f172a;
       cursor: pointer;
-      border-bottom: 3px solid transparent;
-      margin-bottom: -1px;
       transition: all 0.2s;
-      display: flex; align-items: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
     }
-    .te-tab:hover { color: #1a56db; }
+    .te-tab:hover { color: #0d5bd9; }
     .te-tab--active {
-      color: #1a56db;
-      background: #eff6ff;
-      border-bottom-color: #1a56db;
+      color: #ffffff;
+      background: #0d5bd9;
+    }
+    .te-tab--active:hover { color: #ffffff; }
+    .te-tab--active::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 7px solid transparent;
+      border-right: 7px solid transparent;
+      border-bottom: 7px solid #ffffff;
     }
     .te-search-form {
-      padding: 20px 24px 24px;
+      background: #ffffff;
+      border-radius: 10px 14px 14px 14px;
+      box-shadow: 0 10px 36px rgba(0, 0, 0, 0.18);
+      padding: 18px 26px 22px;
     }
     .te-search-fields {
       display: flex;
       align-items: flex-end;
-      gap: 12px;
+      gap: 14px;
       flex-wrap: wrap;
     }
     .te-field {
@@ -686,73 +749,72 @@ import { User } from '../../models/user.model';
     }
     .te-field--wide { flex: 2; min-width: 200px; }
     .te-field-label {
-      font-size: 12px;
-      font-weight: 600;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+      letter-spacing: 0;
     }
     .te-input-wrap {
       position: relative;
     }
     .te-input-icon {
       position: absolute;
-      left: 12px;
+      left: 13px;
       top: 50%;
       transform: translateY(-50%);
-      color: #94a3b8;
+      color: #334155;
       font-size: 14px;
       pointer-events: none;
     }
     .te-input {
       width: 100%;
       padding: 11px 12px 11px 36px;
-      border: 1.5px solid #e2e8f0;
+      border: 1.5px solid #dbe3ee;
       border-radius: 8px;
       font-size: 14px;
       color: #0f172a;
-      background: #f8fafc;
+      background: #ffffff;
       transition: border-color 0.2s;
       outline: none;
     }
-    .te-input:focus { border-color: #1a56db; background: white; }
+    .te-input:focus { border-color: #0d5bd9; background: white; }
     .te-input::placeholder { color: #94a3b8; }
     .te-swap-btn {
-      width: 40px; height: 40px;
+      width: 38px; height: 38px;
       border-radius: 50%;
-      border: 1.5px solid #e2e8f0;
-      background: white;
-      color: #64748b;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      color: #0f172a;
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
-      margin-bottom: 0;
+      margin-bottom: 3px;
       transition: all 0.2s;
     }
     .te-swap-btn:hover {
       background: #eff6ff;
-      color: #1a56db;
-      border-color: #1a56db;
+      color: #0d5bd9;
+      border-color: #0d5bd9;
     }
     .te-search-btn {
-      padding: 11px 28px;
-      background: #1a56db;
+      padding: 11px 30px;
+      background: #0d5bd9;
       color: white;
       border: none;
       border-radius: 8px;
-      font-size: 14px;
-      font-weight: 700;
+      font-size: 14.5px;
+      font-weight: 600;
       cursor: pointer;
       white-space: nowrap;
       display: flex; align-items: center;
       transition: background 0.2s;
       flex-shrink: 0;
     }
-    .te-search-btn:hover { background: #1648c0; }
+    .te-search-btn:hover { background: #0a4bb5; }
 
     /* ============ COMMON CONTAINER ============ */
     .te-container {
-      max-width: 1280px;
+      max-width: 1200px;
       margin: 0 auto;
       padding: 0 32px;
     }
@@ -765,12 +827,12 @@ import { User } from '../../models/user.model';
     .te-section-label {
       font-size: 12px;
       font-weight: 700;
-      color: #64748b;
+      color: #0d5bd9;
       letter-spacing: 1.2px;
       text-transform: uppercase;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
-    .te-section-label--blue { color: #1a56db; }
+    .te-section-label--blue { color: #0d5bd9; }
     .te-section-title {
       font-size: clamp(22px, 3vw, 32px);
       font-weight: 800;
@@ -788,7 +850,7 @@ import { User } from '../../models/user.model';
     /* ============ DESTINATIONS ============ */
     .te-destinations {
       background: #f0f7ff;
-      padding: 56px 0 60px;
+      padding: 48px 0 60px;
     }
     .te-view-all {
       display: inline-flex;
@@ -943,11 +1005,11 @@ import { User } from '../../models/user.model';
       overflow: hidden;
       box-shadow: 0 16px 48px rgba(0,0,0,0.14);
       width: 100%;
-      max-width: 500px;
+      max-width: 800px;
     }
     .te-simpler-img {
       width: 100%;
-      height: 400px;
+      height: 500px;
       object-fit: cover;
       display: block;
     }
@@ -1198,15 +1260,16 @@ import { User } from '../../models/user.model';
         box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         z-index: 200;
       }
-      .te-hero { height: auto; min-height: 420px; padding-top: 60px; }
-      .te-hero-content { flex-direction: column; padding: 70px 20px 40px; }
+      .te-hero { height: auto; min-height: auto; padding: 76px 0 24px; }
+      .te-hero-content { flex-direction: column; align-items: flex-start; padding: 16px 20px 24px; }
       .te-hero-right { display: none; }
-      .te-hero-badges { gap: 10px; }
+      .te-hero-badges { gap: 14px; }
       .te-badge { min-width: auto; flex: 1 0 calc(50% - 7px); }
-      .te-search-wrapper { margin-top: -30px; padding: 0 16px; }
+      .te-search-wrapper { margin-top: 0; padding: 0 16px; }
       .te-search-fields { flex-direction: column; }
       .te-swap-btn { display: none; }
       .te-field { min-width: 100%; }
+      .te-search-btn { width: 100%; justify-content: center; }
       .te-dest-grid { grid-template-columns: repeat(2, 1fr); }
       .te-testi-grid { grid-template-columns: 1fr; }
       .te-footer-grid { grid-template-columns: 1fr; gap: 24px; }
