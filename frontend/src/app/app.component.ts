@@ -36,7 +36,7 @@ export class AppComponent {
     ).subscribe((event: any) => {
       const url: string = event.urlAfterRedirects || event.url || '';
       const path = url.split('?')[0].replace(/\/+$/, '');
-      this.isHomePage = path === '' || path === '/home' || path === '/login' || path === '/register';
+      this.isHomePage = path === '' || path === '/home' || path === '/login' || path.startsWith('/register');
     });
   }
 }
