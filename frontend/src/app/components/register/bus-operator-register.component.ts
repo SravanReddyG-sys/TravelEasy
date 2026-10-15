@@ -614,9 +614,23 @@ import { AuthService } from '../../services/auth.service';
       font-weight: 500;
     }
 
-    /* Stepper Styling */
+    /* Stepper Styling with Translucent Container */
     .stepper-wrap {
-      margin-bottom: 2.5rem;
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.75);
+      border-radius: 16px;
+      padding: 22px 20px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      margin-bottom: 2rem;
+      max-width: 380px;
+    }
+
+    @supports not (backdrop-filter: blur(12px)) {
+      .stepper-wrap {
+        background: rgba(255, 255, 255, 0.94);
+      }
     }
 
     .stepper-item {
@@ -631,53 +645,66 @@ import { AuthService } from '../../services/auth.service';
     }
 
     .stepper-circle {
-      width: 44px;
-      height: 44px;
+      width: 42px;
+      height: 42px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 700;
-      font-size: 1.05rem;
-      background: #e2e8f0;
-      color: #64748b;
+      font-size: 1rem;
+      background: #ffffff;
+      color: #0c2044;
+      border: 1.5px solid #cbd5e1;
       flex-shrink: 0;
       transition: all 0.3s ease;
     }
+
     .stepper-circle.active {
       background: #0d6efd;
       color: #ffffff;
-      box-shadow: 0 4px 14px rgba(13, 110, 253, 0.4);
+      border-color: #0d6efd;
+      box-shadow: 0 4px 14px rgba(13, 110, 253, 0.35);
     }
+
     .stepper-circle.completed {
       background: #0d6efd;
-      color: #ffffffe7;
+      color: #ffffff;
+      border-color: #0d6efd;
     }
 
     .stepper-connector {
       width: 2px;
-      height: 36px;
+      height: 28px;
       background: #cbd5e1;
-      margin-left: 21px;
-      margin-top: -4px;
-      margin-bottom: -4px;
+      margin-left: 20px;
+      margin-top: -2px;
+      margin-bottom: -2px;
       transition: background 0.3s ease;
     }
+
     .stepper-connector.completed {
       background: #0d6efd;
     }
 
+    .stepper-text {
+      flex: 1;
+      min-width: 0;
+    }
+
     .stepper-title {
       font-weight: 700;
-      font-size: 2rem;
-      color: #e06813;
-      line-height: 1.25;
+      font-size: 1rem;
+      color: #0c2044;
+      line-height: 1.3;
       margin-bottom: 2px;
     }
+
     .stepper-desc {
-      font-size: 1.5rem;
-      color: #d4d9e0;
+      font-size: 0.85rem;
+      color: #475569;
       font-weight: 400;
+      line-height: 1.35;
     }
 
     /* Scenic Caption & Bar */
@@ -687,7 +714,7 @@ import { AuthService } from '../../services/auth.service';
       color: #ffffff;
       text-shadow: 0 2px 6px rgba(0, 0, 0, 0.85);
       font-weight: 600;
-      font-size: 2rem;
+      font-size: 1.05rem;
       margin-bottom: 12px;
     }
 
