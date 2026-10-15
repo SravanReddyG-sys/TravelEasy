@@ -75,6 +75,54 @@ public class AuthController {
                 .build());
     }
 
+    private static final java.util.Set<String> ALLOWED_BUS_OPERATOR_DESIGNATIONS = java.util.Set.of(
+        "OWNER_PROPRIETOR", "Owner / Proprietor",
+        "MANAGING_DIRECTOR", "Managing Director",
+        "DIRECTOR", "Director",
+        "TRANSPORT_MANAGER", "Transport Manager",
+        "OPERATIONS_MANAGER", "Operations Manager",
+        "GENERAL_MANAGER", "General Manager",
+        "AUTHORIZED_REPRESENTATIVE", "Authorized Representative",
+        "OTHER", "Other"
+    );
+
+    private static final java.util.Set<String> ALLOWED_HOTEL_PARTNER_DESIGNATIONS = java.util.Set.of(
+        "HOTEL_OWNER", "Hotel Owner",
+        "MANAGING_DIRECTOR", "Managing Director",
+        "GENERAL_MANAGER", "General Manager",
+        "HOTEL_MANAGER", "Hotel Manager",
+        "OPERATIONS_MANAGER", "Operations Manager",
+        "PROPERTY_MANAGER", "Property Manager",
+        "RESERVATIONS_MANAGER", "Reservations Manager",
+        "FRONT_OFFICE_MANAGER", "Front Office Manager",
+        "AUTHORIZED_REPRESENTATIVE", "Authorized Representative",
+        "OTHER", "Other"
+    );
+
+    private boolean isValidBusOperatorDesignation(String designation) {
+        if (designation == null || designation.trim().isEmpty()) {
+            return false;
+        }
+        for (String allowed : ALLOWED_BUS_OPERATOR_DESIGNATIONS) {
+            if (allowed.equalsIgnoreCase(designation.trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isValidHotelPartnerDesignation(String designation) {
+        if (designation == null || designation.trim().isEmpty()) {
+            return false;
+        }
+        for (String allowed : ALLOWED_HOTEL_PARTNER_DESIGNATIONS) {
+            if (allowed.equalsIgnoreCase(designation.trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @PostMapping("/register/bus-operator")
     public ResponseEntity<?> registerBusOperator(@Valid @RequestBody BusOperatorRegisterRequest request) {
         if (!request.getPassword().equals(request.getConfirmPassword())) {
@@ -91,10 +139,37 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("message", "Phone number is already registered!"));
         }
 
+        // Validate representative designation
+        String rawDesignation = request.getRepresentativeDesignation().trim();
+        String savedDesignation;
+        if ("OTHER".equalsIgnoreCase(rawDesignation) || "Other".equalsIgnoreCase(rawDesignation)) {
+            if (request.getCustomDesignation() == null || request.getCustomDesignation().trim().length() < 2 || request.getCustomDesignation().trim().length() > 100) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Please specify a valid custom designation between 2 and 100 characters"));
+            }
+            savedDesignation = request.getCustomDesignation().trim();
+        } else if (!isValidBusOperatorDesignation(rawDesignation)) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Invalid representative designation selected"));
+        } else {
+            savedDesignation = rawDesignation;
+        }
+
         String firstName = request.getFirstName().trim();
         String lastName = request.getLastName().trim();
         String gstin = request.getGstinNumber() != null && !request.getGstinNumber().trim().isEmpty() 
                 ? request.getGstinNumber().trim().toUpperCase() : null;
+
+        String resolvedAddress = request.getRegisteredAddress() != null ? request.getRegisteredAddress().trim() : "";
+        if (resolvedAddress.isEmpty() && request.getFlatBuildingOffice() != null) {
+            java.util.List<String> parts = new java.util.ArrayList<>();
+            if (request.getFlatBuildingOffice() != null && !request.getFlatBuildingOffice().trim().isEmpty()) parts.add(request.getFlatBuildingOffice().trim());
+            if (request.getStreetRoad() != null && !request.getStreetRoad().trim().isEmpty()) parts.add(request.getStreetRoad().trim());
+            if (request.getLandmark() != null && !request.getLandmark().trim().isEmpty()) parts.add(request.getLandmark().trim());
+            if (request.getCityLocality() != null && !request.getCityLocality().trim().isEmpty()) parts.add(request.getCityLocality().trim());
+            if (request.getState() != null && !request.getState().trim().isEmpty()) parts.add(request.getState().trim());
+            if (request.getCountry() != null && !request.getCountry().trim().isEmpty()) parts.add(request.getCountry().trim());
+            if (request.getPinCode() != null && !request.getPinCode().trim().isEmpty()) parts.add(request.getPinCode().trim());
+            resolvedAddress = String.join(", ", parts);
+        }
 
         User user = User.builder()
                 .firstName(firstName)
@@ -107,13 +182,13 @@ public class AuthController {
                 .verified(false)
                 .status("PENDING")
                 .verificationStatus("UNDER_REVIEW")
-                .representativeDesignation(request.getRepresentativeDesignation().trim())
+                .representativeDesignation(savedDesignation)
                 .legalOrganizationName(request.getLegalOrganizationName().trim())
                 .businessStructure(request.getBusinessStructure().trim())
                 .licensePermitNumber(request.getPassengerTransportPermitNumber().trim())
                 .businessPan(request.getBusinessPanNumber().trim().toUpperCase())
                 .gstin(gstin)
-                .registeredAddress(request.getRegisteredAddress().trim())
+                .registeredAddress(resolvedAddress)
                 .businessContactEmail(request.getBusinessContactEmail().trim().toLowerCase())
                 .businessContactPhone(request.getBusinessContactPhone().trim())
                 .termsAccepted(true)
@@ -149,10 +224,37 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("message", "Phone number is already registered!"));
         }
 
+        // Validate representative designation
+        String rawDesignation = request.getRepresentativeDesignation().trim();
+        String savedDesignation;
+        if ("OTHER".equalsIgnoreCase(rawDesignation) || "Other".equalsIgnoreCase(rawDesignation)) {
+            if (request.getCustomDesignation() == null || request.getCustomDesignation().trim().length() < 2 || request.getCustomDesignation().trim().length() > 100) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Please specify a valid custom designation between 2 and 100 characters"));
+            }
+            savedDesignation = request.getCustomDesignation().trim();
+        } else if (!isValidHotelPartnerDesignation(rawDesignation)) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Invalid representative designation selected"));
+        } else {
+            savedDesignation = rawDesignation;
+        }
+
         String firstName = request.getFirstName().trim();
         String lastName = request.getLastName().trim();
         String gstin = request.getGstinNumber() != null && !request.getGstinNumber().trim().isEmpty()
                 ? request.getGstinNumber().trim().toUpperCase() : null;
+
+        String resolvedAddress = request.getRegisteredAddress() != null ? request.getRegisteredAddress().trim() : "";
+        if (resolvedAddress.isEmpty() && request.getFlatBuildingOffice() != null) {
+            java.util.List<String> parts = new java.util.ArrayList<>();
+            if (request.getFlatBuildingOffice() != null && !request.getFlatBuildingOffice().trim().isEmpty()) parts.add(request.getFlatBuildingOffice().trim());
+            if (request.getStreetRoad() != null && !request.getStreetRoad().trim().isEmpty()) parts.add(request.getStreetRoad().trim());
+            if (request.getLandmark() != null && !request.getLandmark().trim().isEmpty()) parts.add(request.getLandmark().trim());
+            if (request.getCityLocality() != null && !request.getCityLocality().trim().isEmpty()) parts.add(request.getCityLocality().trim());
+            if (request.getState() != null && !request.getState().trim().isEmpty()) parts.add(request.getState().trim());
+            if (request.getCountry() != null && !request.getCountry().trim().isEmpty()) parts.add(request.getCountry().trim());
+            if (request.getPinCode() != null && !request.getPinCode().trim().isEmpty()) parts.add(request.getPinCode().trim());
+            resolvedAddress = String.join(", ", parts);
+        }
 
         User user = User.builder()
                 .firstName(firstName)
@@ -165,13 +267,13 @@ public class AuthController {
                 .verified(false)
                 .status("PENDING")
                 .verificationStatus("UNDER_REVIEW")
-                .representativeDesignation(request.getRepresentativeDesignation().trim())
+                .representativeDesignation(savedDesignation)
                 .legalOrganizationName(request.getLegalOrganizationName().trim())
                 .businessStructure(request.getBusinessStructure().trim())
                 .licensePermitNumber(request.getCompanyLicenseNumber().trim())
                 .businessPan(request.getBusinessPanNumber().trim().toUpperCase())
                 .gstin(gstin)
-                .registeredAddress(request.getRegisteredAddress().trim())
+                .registeredAddress(resolvedAddress)
                 .businessContactEmail(request.getBusinessContactEmail().trim().toLowerCase())
                 .businessContactPhone(request.getBusinessContactPhone().trim())
                 .termsAccepted(true)
