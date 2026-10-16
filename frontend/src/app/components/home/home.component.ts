@@ -372,10 +372,10 @@ import { User } from '../../models/user.model';
           <div class="te-footer-col">
             <h4 class="te-footer-heading">Quick Links</h4>
             <ul class="te-footer-links">
-              <li><a routerLink="/home">Home</a></li>
+              <li><a href="#">Home</a></li>
               <li><a routerLink="/customer">Buses</a></li>
               <li><a routerLink="/customer">Hotels</a></li>
-              <li><a routerLink="/register">About Us</a></li>
+              <li><a class="te-nav-link" href="#about">About Us</a></li>
             </ul>
           </div>
 
@@ -395,11 +395,11 @@ import { User } from '../../models/user.model';
           <div class="te-footer-col">
             <h4 class="te-footer-heading">Follow Us</h4>
             <div class="te-social-icons">
-              <a class="te-social-icon" href="#" aria-label="Facebook"><i class="fa-brands fa-facebook-f"></i></a>
-              <a class="te-social-icon" href="#" aria-label="Instagram"><i class="fa-brands fa-instagram"></i></a>
-              <a class="te-social-icon" href="#" aria-label="Twitter"><i class="fa-brands fa-x-twitter"></i></a>
-              <a class="te-social-icon" href="#" aria-label="YouTube"><i class="fa-brands fa-youtube"></i></a>
-              <a class="te-social-icon" href="#" aria-label="LinkedIn"><i class="fa-brands fa-linkedin-in"></i></a>
+              <a class="te-social-icon" href="https://www.facebook.com/" aria-label="Facebook"><i class="fa-brands fa-facebook-f"></i></a>
+              <a class="te-social-icon" href="https://www.instagram.com/" aria-label="Instagram"><i class="fa-brands fa-instagram"></i></a>
+              <a class="te-social-icon" href="https://x.com/" aria-label="Twitter"><i class="fa-brands fa-x-twitter"></i></a>
+              <a class="te-social-icon" href="https://www.youtube.com/" aria-label="YouTube"><i class="fa-brands fa-youtube"></i></a>
+              <a class="te-social-icon" href="https://www.linkedin.com/in/sravan-reddy-g-3546242b4/?isSelfProfile=true" aria-label="LinkedIn"><i class="fa-brands fa-linkedin-in"></i></a>
             </div>
           </div>
 

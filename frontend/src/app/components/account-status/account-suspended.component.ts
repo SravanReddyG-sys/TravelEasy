@@ -25,7 +25,7 @@ import { AuthService } from '../../services/auth.service';
 
             <div class="d-flex gap-2 justify-content-center">
               <button class="btn btn-outline-secondary px-4 py-2 rounded-pill fw-semibold" (click)="logout()">
-                <i class="fa-solid fa-right-from-bracket me-1"></i> Sign Out
+                <i class="fa-solid fa-right-from-bracket me-1"></i> Login Page
               </button>
               <a href="mailto:support@traveleasy.com" class="btn btn-dark px-4 py-2 rounded-pill fw-semibold">
                 <i class="fa-solid fa-headset me-1"></i> Contact Support

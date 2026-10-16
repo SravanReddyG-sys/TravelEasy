@@ -423,11 +423,13 @@ import { AuthService } from '../../services/auth.service';
       border: 1px solid #fecaca;
       color: #b91c1c;
       font-size: 13.5px;
+      line-height: 1.45;
       padding: 10px 14px;
       border-radius: 8px;
       margin-bottom: 18px;
       display: flex;
       align-items: center;
+      word-break: break-word;
     }
 
     .te-form-group {
