@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { User } from '../../models/user.model';
+import { NewsletterService } from '../../services/newsletter.service';
 
 @Component({
   selector: 'app-home',
@@ -407,12 +408,36 @@ import { User } from '../../models/user.model';
           <div class="te-footer-col">
             <h4 class="te-footer-heading">Subscribe to Our Newsletter</h4>
             <p class="te-footer-newsletter-sub">Get the latest updates and travel deals</p>
-            <div class="te-newsletter-form">
+            <form (ngSubmit)="subscribeNewsletter()" class="te-newsletter-form">
               <div class="te-newsletter-input-wrap">
                 <i class="fa-regular fa-envelope te-newsletter-icon"></i>
-                <input type="email" class="te-newsletter-input" [(ngModel)]="newsletterEmail" placeholder="Enter your email">
+                <input
+                  type="email"
+                  class="te-newsletter-input"
+                  [class.te-newsletter-input--error]="newsletterFeedback?.type === 'error'"
+                  [(ngModel)]="newsletterEmail"
+                  (input)="onNewsletterInput()"
+                  name="newsletterEmail"
+                  placeholder="Enter your email"
+                  required
+                >
               </div>
-              <button class="te-newsletter-btn">Subscribe</button>
+              <button
+                type="submit"
+                class="te-newsletter-btn"
+                [disabled]="newsletterLoading"
+              >
+                <span *ngIf="newsletterLoading" class="spinner-border spinner-border-sm me-1"></span>
+                <span>{{ newsletterLoading ? 'Subscribing...' : 'Subscribe' }}</span>
+              </button>
+            </form>
+            <div *ngIf="newsletterFeedback" class="te-newsletter-feedback" [ngClass]="'te-newsletter-feedback--' + newsletterFeedback.type">
+              <i class="fa-solid" [ngClass]="{
+                'fa-circle-check': newsletterFeedback.type === 'success',
+                'fa-circle-info': newsletterFeedback.type === 'info',
+                'fa-circle-exclamation': newsletterFeedback.type === 'error'
+              }"></i>
+              <span>{{ newsletterFeedback.message }}</span>
             </div>
           </div>
         </div>
@@ -1244,6 +1269,7 @@ import { User } from '../../models/user.model';
       outline: none;
     }
     .te-newsletter-input:focus { border-color: #1a56db; }
+    .te-newsletter-input--error { border-color: #ef4444 !important; }
     .te-newsletter-btn {
       padding: 9px 16px;
       background: #1a56db;
@@ -1255,8 +1281,39 @@ import { User } from '../../models/user.model';
       cursor: pointer;
       white-space: nowrap;
       transition: background 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
-    .te-newsletter-btn:hover { background: #1648c0; }
+    .te-newsletter-btn:hover:not(:disabled) { background: #1648c0; }
+    .te-newsletter-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+
+    .te-newsletter-feedback {
+      margin-top: 10px;
+      font-size: 12.5px;
+      padding: 7px 10px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .te-newsletter-feedback--success {
+      background: #ecfdf5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+    .te-newsletter-feedback--info {
+      background: #eff6ff;
+      color: #1e40af;
+      border: 1px solid #bfdbfe;
+    }
+    .te-newsletter-feedback--error {
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
     .te-footer-bottom {
       border-top: 1px solid #e2e8f0;
       padding: 18px 0;
@@ -1327,6 +1384,8 @@ export class HomeComponent {
   hotelCheckIn = '';
   hotelCheckOut = '';
   newsletterEmail = '';
+  newsletterLoading = false;
+  newsletterFeedback: { type: 'success' | 'info' | 'error'; message: string } | null = null;
   testimonialPage = 0;
   mobileMenuOpen = false;
 
@@ -1433,7 +1492,11 @@ export class HomeComponent {
     return this.testimonials;
   }
 
-  constructor(private router: Router, private authService: AuthService) {
+  constructor(
+    private router: Router,
+    private authService: AuthService,
+    private newsletterService: NewsletterService
+  ) {
     this.busDate = this.getTodayDate();
     this.hotelCheckIn = this.getTodayDate();
     this.hotelCheckOut = this.getTomorrowDate();
@@ -1583,5 +1646,90 @@ export class HomeComponent {
   logout() {
     this.authService.logout();
     this.router.navigate(['/login']);
+  }
+
+  onNewsletterInput() {
+    if (this.newsletterFeedback?.type === 'error') {
+      this.newsletterFeedback = null;
+    }
+  }
+
+  subscribeNewsletter() {
+    if (this.newsletterLoading) return;
+
+    const email = this.newsletterEmail ? this.newsletterEmail.trim() : '';
+
+    if (!email) {
+      this.newsletterFeedback = {
+        type: 'error',
+        message: 'Please enter a valid email address.'
+      };
+      return;
+    }
+
+    const emailRegex = /^[a-zA-Z0-9_+&*-]+(?:\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,7}$/;
+    if (!emailRegex.test(email) || email.length > 150) {
+      this.newsletterFeedback = {
+        type: 'error',
+        message: 'Please enter a valid email address.'
+      };
+      return;
+    }
+
+    this.newsletterLoading = true;
+    this.newsletterFeedback = null;
+
+    this.newsletterService.subscribe(email.toLowerCase()).subscribe({
+      next: (res) => {
+        this.newsletterLoading = false;
+        if (res.status === 'SUCCESS') {
+          this.newsletterFeedback = {
+            type: 'success',
+            message: res.message || "You're subscribed to Travel Easy updates!"
+          };
+          this.newsletterEmail = '';
+        } else if (res.status === 'ALREADY_SUBSCRIBED') {
+          this.newsletterFeedback = {
+            type: 'info',
+            message: res.message || 'This email is already subscribed.'
+          };
+        } else {
+          this.newsletterFeedback = {
+            type: 'info',
+            message: res.message || 'Subscription processed.'
+          };
+        }
+      },
+      error: (err) => {
+        this.newsletterLoading = false;
+        const errObj = err.error;
+        if (err.status === 400) {
+          const msg = (typeof errObj === 'object' && errObj?.message)
+            ? errObj.message
+            : 'Please enter a valid email address.';
+          this.newsletterFeedback = {
+            type: 'error',
+            message: msg
+          };
+        } else if (err.status === 409 || (errObj && errObj.status === 'ALREADY_SUBSCRIBED')) {
+          this.newsletterFeedback = {
+            type: 'info',
+            message: (typeof errObj === 'object' && errObj?.message)
+              ? errObj.message
+              : 'This email is already subscribed.'
+          };
+        } else if (err.status === 0) {
+          this.newsletterFeedback = {
+            type: 'error',
+            message: "We couldn't complete your subscription. Please check your connection and try again."
+          };
+        } else {
+          this.newsletterFeedback = {
+            type: 'error',
+            message: "We couldn't complete your subscription. Please try again."
+          };
+        }
+      }
+    });
   }
 }

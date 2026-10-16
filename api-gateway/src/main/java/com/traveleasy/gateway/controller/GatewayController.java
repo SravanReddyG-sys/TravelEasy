@@ -54,7 +54,7 @@ public class GatewayController {
             targetBaseUrl = bookingServiceUrl;
         } else if (path.startsWith("/api/payments")) {
             targetBaseUrl = paymentServiceUrl;
-        } else if (path.startsWith("/api/notifications")) {
+        } else if (path.startsWith("/api/notifications") || path.startsWith("/api/newsletter")) {
             targetBaseUrl = notificationServiceUrl;
         } else if (path.startsWith("/api/reviews")) {
             targetBaseUrl = reviewServiceUrl;
