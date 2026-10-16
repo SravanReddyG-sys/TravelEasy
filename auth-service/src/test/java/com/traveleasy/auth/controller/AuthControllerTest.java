@@ -498,4 +498,89 @@ public class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Password has been reset successfully. You can now login with your new password."));
     }
+
+    @Test
+    void testGetApplicationDetails_Success_BusOperator() throws Exception {
+        User operator = User.builder()
+                .id(50L)
+                .email("operator@traveleasy.com")
+                .firstName("John")
+                .lastName("Doe")
+                .fullName("John Doe")
+                .phone("+919876543210")
+                .role(Role.ROLE_BUS_OPERATOR)
+                .status("PENDING")
+                .verificationStatus("UNDER_REVIEW")
+                .representativeDesignation("Operations Manager")
+                .legalOrganizationName("ABC Grand Pvt. Ltd.")
+                .businessStructure("Private Limited")
+                .licensePermitNumber("123456789012")
+                .businessPan("ABCDE1234F")
+                .gstin("22AAAAA0000A1Z5")
+                .registeredAddress("No. 12, ABC Plaza, MG Road, Vijayawada, Andhra Pradesh - 520001, India")
+                .businessContactEmail("contact@abcgrand.com")
+                .businessContactPhone("+918012345678")
+                .createdAt(LocalDateTime.of(2026, 10, 14, 9, 45))
+                .build();
+
+        when(jwtUtil.validateToken("validPartnerToken")).thenReturn(true);
+        when(jwtUtil.extractEmail("validPartnerToken")).thenReturn("operator@traveleasy.com");
+        when(userRepository.findByEmail("operator@traveleasy.com")).thenReturn(Optional.of(operator));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/auth/application-details")
+                .header("Authorization", "Bearer validPartnerToken"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.organizationName").value("ABC Grand Pvt. Ltd."))
+                .andExpect(jsonPath("$.applicationType").value("New Bus Service Registration"))
+                .andExpect(jsonPath("$.applicationStatus").value("UNDER_REVIEW"))
+                .andExpect(jsonPath("$.firstName").value("John"))
+                .andExpect(jsonPath("$.lastName").value("Doe"))
+                .andExpect(jsonPath("$.representativeDesignation").value("Operations Manager"))
+                .andExpect(jsonPath("$.licensePermitNumber").value("123456789012"))
+                .andExpect(jsonPath("$.businessPanNumber").value("ABCDE1234F"))
+                .andExpect(jsonPath("$.gstinNumber").value("22AAAAA0000A1Z5"));
+    }
+
+    @Test
+    void testGetApplicationDetails_Success_HotelPartner() throws Exception {
+        User hotelUser = User.builder()
+                .id(51L)
+                .email("hotel@traveleasy.com")
+                .firstName("Sarah")
+                .lastName("Connor")
+                .fullName("Sarah Connor")
+                .phone("+919876543299")
+                .role(Role.ROLE_HOTEL_MANAGER)
+                .status("PENDING")
+                .verificationStatus("UNDER_REVIEW")
+                .representativeDesignation("General Manager")
+                .legalOrganizationName("Grand Palm Resort Ltd.")
+                .businessStructure("Private Limited")
+                .licensePermitNumber("HOTEL-998877")
+                .businessPan("XYZDE1234F")
+                .registeredAddress("45 Beach Road, Goa - 403001, India")
+                .businessContactEmail("info@grandpalm.com")
+                .businessContactPhone("+918099887766")
+                .createdAt(LocalDateTime.of(2026, 10, 14, 10, 30))
+                .build();
+
+        when(jwtUtil.validateToken("validHotelToken")).thenReturn(true);
+        when(jwtUtil.extractEmail("validHotelToken")).thenReturn("hotel@traveleasy.com");
+        when(userRepository.findByEmail("hotel@traveleasy.com")).thenReturn(Optional.of(hotelUser));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/auth/application-details")
+                .header("Authorization", "Bearer validHotelToken"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.organizationName").value("Grand Palm Resort Ltd."))
+                .andExpect(jsonPath("$.applicationType").value("New Hotel Partner Registration"))
+                .andExpect(jsonPath("$.applicationStatus").value("UNDER_REVIEW"))
+                .andExpect(jsonPath("$.representativeDesignation").value("General Manager"))
+                .andExpect(jsonPath("$.licensePermitNumber").value("HOTEL-998877"));
+    }
+
+    @Test
+    void testGetApplicationDetails_Unauthorized() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/auth/application-details"))
+                .andExpect(status().isUnauthorized());
+    }
 }

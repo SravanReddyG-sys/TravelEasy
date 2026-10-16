@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { BusService } from '../../services/bus.service';
 import { HotelService } from '../../services/hotel.service';
@@ -23,17 +24,17 @@ import { User } from '../../models/user.model';
       <!-- Navigation Tabs -->
       <ul class="nav nav-pills nav-fill mb-4 bg-white p-2 rounded-pill shadow-sm border">
         <li class="nav-item">
-          <button class="nav-link rounded-pill fw-bold" [class.active]="activeTab === 'bus'" (click)="activeTab = 'bus'">
+          <button class="nav-link rounded-pill fw-bold" [class.active]="activeTab === 'bus'" (click)="switchTab('bus')">
             <i class="fa-solid fa-bus me-2"></i> Bus Ticket Booking
           </button>
         </li>
         <li class="nav-item">
-          <button class="nav-link rounded-pill fw-bold" [class.active]="activeTab === 'hotel'" (click)="activeTab = 'hotel'">
+          <button class="nav-link rounded-pill fw-bold" [class.active]="activeTab === 'hotel'" (click)="switchTab('hotel')">
             <i class="fa-solid fa-hotel me-2"></i> Hotel Room Booking
           </button>
         </li>
         <li class="nav-item">
-          <button class="nav-link rounded-pill fw-bold" [class.active]="activeTab === 'my-bookings'" (click)="loadMyBookings(); activeTab = 'my-bookings'">
+          <button class="nav-link rounded-pill fw-bold" [class.active]="activeTab === 'my-bookings'" (click)="switchTab('my-bookings')">
             <i class="fa-solid fa-ticket me-2"></i> My Bookings & Tickets
           </button>
         </li>
@@ -356,13 +357,63 @@ export class CustomerDashboardComponent implements OnInit {
     private authService: AuthService,
     private busService: BusService,
     private hotelService: HotelService,
-    private bookingService: BookingService
+    private bookingService: BookingService,
+    private route: ActivatedRoute
   ) {}
 
   ngOnInit() {
     this.currentUser = this.authService.currentUserValue;
-    this.onSearchBuses();
-    this.onSearchHotels();
+
+    this.route.queryParams.subscribe(params => {
+      if (params['tab']) {
+        this.activeTab = params['tab'];
+      }
+      if (params['from']) {
+        this.busOrigin = params['from'];
+      }
+      if (params['to']) {
+        this.busDestination = params['to'];
+      }
+      if (params['date']) {
+        this.busDate = params['date'];
+      }
+      if (params['city']) {
+        this.hotelCity = params['city'];
+      }
+      if (params['checkIn']) {
+        this.checkInDate = params['checkIn'];
+      }
+      if (params['checkOut']) {
+        this.checkOutDate = params['checkOut'];
+      }
+
+      if (this.activeTab === 'hotel') {
+        this.onSearchHotels();
+      } else {
+        this.onSearchBuses();
+      }
+    });
+
+    this.route.fragment.subscribe(fragment => {
+      if (fragment === 'hotels') {
+        this.activeTab = 'hotel';
+        if (!this.hotelsSearched) this.onSearchHotels();
+      } else if (fragment === 'buses') {
+        this.activeTab = 'bus';
+        if (!this.busesSearched) this.onSearchBuses();
+      }
+    });
+  }
+
+  switchTab(tab: string) {
+    this.activeTab = tab;
+    if (tab === 'hotel' && !this.hotelsSearched) {
+      this.onSearchHotels();
+    } else if (tab === 'bus' && !this.busesSearched) {
+      this.onSearchBuses();
+    } else if (tab === 'my-bookings') {
+      this.loadMyBookings();
+    }
   }
 
   onSearchBuses() {

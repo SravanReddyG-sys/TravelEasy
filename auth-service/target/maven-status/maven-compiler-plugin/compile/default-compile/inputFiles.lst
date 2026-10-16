@@ -10,6 +10,7 @@ C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Proje
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\model\Role.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\AuthResponse.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\controller\UserController.java
+C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\ApplicationDetailsResponse.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\LoginRequest.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\security\SecurityConfig.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\HotelPartnerRegisterRequest.java

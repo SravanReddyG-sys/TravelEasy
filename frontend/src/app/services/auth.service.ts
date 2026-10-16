@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, tap } from 'rxjs';
 import { User } from '../models/user.model';
+import { ApplicationDetails } from '../models/application-details.model';
 
 @Injectable({
   providedIn: 'root'
@@ -25,7 +26,7 @@ export class AuthService {
   login(credentials: any): Observable<User> {
     return this.http.post<User>(`${this.apiUrl}/auth/login`, credentials).pipe(
       tap(user => {
-        if (user && user.token) {
+        if (user) {
           localStorage.setItem('traveleasy_user', JSON.stringify(user));
           this.currentUserSubject.next(user);
         }
@@ -45,11 +46,37 @@ export class AuthService {
   }
 
   registerBusOperator(userData: any): Observable<User> {
-    return this.http.post<User>(`${this.apiUrl}/auth/register/bus-operator`, userData);
+    return this.http.post<User>(`${this.apiUrl}/auth/register/bus-operator`, userData).pipe(
+      tap(user => {
+        if (user) {
+          localStorage.setItem('traveleasy_user', JSON.stringify(user));
+          this.currentUserSubject.next(user);
+        }
+      })
+    );
   }
 
   registerHotelPartner(userData: any): Observable<User> {
-    return this.http.post<User>(`${this.apiUrl}/auth/register/hotel-partner`, userData);
+    return this.http.post<User>(`${this.apiUrl}/auth/register/hotel-partner`, userData).pipe(
+      tap(user => {
+        if (user) {
+          localStorage.setItem('traveleasy_user', JSON.stringify(user));
+          this.currentUserSubject.next(user);
+        }
+      })
+    );
+  }
+
+  getApplicationDetails(): Observable<ApplicationDetails> {
+    const user = this.currentUserValue;
+    const headers: { [key: string]: string } = {};
+    if (user?.token) {
+      headers['Authorization'] = `Bearer ${user.token}`;
+    }
+    return this.http.get<ApplicationDetails>(
+      `${this.apiUrl}/auth/application-details`,
+      { headers }
+    );
   }
 
   forgotPassword(email: string): Observable<any> {

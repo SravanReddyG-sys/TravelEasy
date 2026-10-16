@@ -118,26 +118,30 @@ import { User } from '../../models/user.model';
         <div class="te-search-panel">
           <!-- Tabs -->
           <div class="te-search-tabs">
-            <button class="te-tab" [class.te-tab--active]="searchTab === 'bus'" (click)="searchTab = 'bus'">
+            <button type="button" class="te-tab" [class.te-tab--active]="searchTab === 'bus'" (click)="setTab('bus')">
               <i class="fa-solid fa-bus me-2"></i>Buses
             </button>
-            <button class="te-tab" [class.te-tab--active]="searchTab === 'hotel'" (click)="searchTab = 'hotel'">
+            <button type="button" class="te-tab" [class.te-tab--active]="searchTab === 'hotel'" (click)="setTab('hotel')">
               <i class="fa-solid fa-bed me-2"></i>Hotels
             </button>
           </div>
 
           <!-- Bus Search -->
           <div class="te-search-form" *ngIf="searchTab === 'bus'">
+            <div *ngIf="busErrorMessage" class="te-search-error">
+              <i class="fa-solid fa-circle-exclamation me-2"></i>{{ busErrorMessage }}
+            </div>
+
             <div class="te-search-fields">
               <div class="te-field">
                 <label class="te-field-label">From</label>
                 <div class="te-input-wrap">
                   <i class="fa-solid fa-location-dot te-input-icon"></i>
-                  <input type="text" class="te-input" [(ngModel)]="busFrom" placeholder="Enter source city">
+                  <input type="text" class="te-input" [class.te-input--error]="busErrors.from" [(ngModel)]="busFrom" (input)="clearBusError('from')" placeholder="Enter source city" list="tePopularCities">
                 </div>
               </div>
 
-              <button class="te-swap-btn" (click)="swapCities()" title="Swap cities">
+              <button type="button" class="te-swap-btn" (click)="swapCities()" title="Swap source and destination">
                 <i class="fa-solid fa-arrow-right-arrow-left"></i>
               </button>
 
@@ -145,7 +149,7 @@ import { User } from '../../models/user.model';
                 <label class="te-field-label">To</label>
                 <div class="te-input-wrap">
                   <i class="fa-solid fa-location-dot te-input-icon"></i>
-                  <input type="text" class="te-input" [(ngModel)]="busTo" placeholder="Enter destination city">
+                  <input type="text" class="te-input" [class.te-input--error]="busErrors.to" [(ngModel)]="busTo" (input)="clearBusError('to')" placeholder="Enter destination city" list="tePopularCities">
                 </div>
               </div>
 
@@ -153,24 +157,29 @@ import { User } from '../../models/user.model';
                 <label class="te-field-label">Travel Date</label>
                 <div class="te-input-wrap">
                   <i class="fa-regular fa-calendar te-input-icon"></i>
-                  <input type="date" class="te-input" [(ngModel)]="busDate">
+                  <input type="date" class="te-input" [class.te-input--error]="busErrors.date" [(ngModel)]="busDate" (input)="clearBusError('date')" [min]="minDate">
                 </div>
               </div>
 
-              <button class="te-search-btn" (click)="searchBuses()">
-                <i class="fa-solid fa-magnifying-glass me-2"></i>Search Buses
+              <button type="button" class="te-search-btn" [disabled]="isSearchingBus" (click)="searchBuses()">
+                <i class="fa-solid fa-magnifying-glass me-2"></i>
+                <span>{{ isSearchingBus ? 'Searching...' : 'Search Buses' }}</span>
               </button>
             </div>
           </div>
 
           <!-- Hotel Search -->
           <div class="te-search-form" *ngIf="searchTab === 'hotel'">
+            <div *ngIf="hotelErrorMessage" class="te-search-error">
+              <i class="fa-solid fa-circle-exclamation me-2"></i>{{ hotelErrorMessage }}
+            </div>
+
             <div class="te-search-fields">
               <div class="te-field te-field--wide">
                 <label class="te-field-label">City / Destination</label>
                 <div class="te-input-wrap">
                   <i class="fa-solid fa-location-dot te-input-icon"></i>
-                  <input type="text" class="te-input" [(ngModel)]="hotelCity" placeholder="Enter city or destination">
+                  <input type="text" class="te-input" [class.te-input--error]="hotelErrors.city" [(ngModel)]="hotelCity" (input)="clearHotelError('city')" placeholder="Enter city or destination" list="tePopularCities">
                 </div>
               </div>
 
@@ -178,7 +187,7 @@ import { User } from '../../models/user.model';
                 <label class="te-field-label">Check-in Date</label>
                 <div class="te-input-wrap">
                   <i class="fa-regular fa-calendar te-input-icon"></i>
-                  <input type="date" class="te-input" [(ngModel)]="hotelCheckIn">
+                  <input type="date" class="te-input" [class.te-input--error]="hotelErrors.checkIn" [(ngModel)]="hotelCheckIn" (input)="onCheckInChange()" [min]="minDate">
                 </div>
               </div>
 
@@ -186,15 +195,21 @@ import { User } from '../../models/user.model';
                 <label class="te-field-label">Check-out Date</label>
                 <div class="te-input-wrap">
                   <i class="fa-regular fa-calendar te-input-icon"></i>
-                  <input type="date" class="te-input" [(ngModel)]="hotelCheckOut">
+                  <input type="date" class="te-input" [class.te-input--error]="hotelErrors.checkOut" [(ngModel)]="hotelCheckOut" (input)="clearHotelError('checkOut')" [min]="minCheckOutDate">
                 </div>
               </div>
 
-              <button class="te-search-btn" (click)="searchHotels()">
-                <i class="fa-solid fa-magnifying-glass me-2"></i>Search Hotels
+              <button type="button" class="te-search-btn" [disabled]="isSearchingHotel" (click)="searchHotels()">
+                <i class="fa-solid fa-magnifying-glass me-2"></i>
+                <span>{{ isSearchingHotel ? 'Searching...' : 'Search Hotels' }}</span>
               </button>
             </div>
           </div>
+
+          <!-- Shared Datalist for Popular Indian Destinations -->
+          <datalist id="tePopularCities">
+            <option *ngFor="let city of popularCities" [value]="city"></option>
+          </datalist>
         </div>
       </div>
     </section>
@@ -811,6 +826,26 @@ import { User } from '../../models/user.model';
       flex-shrink: 0;
     }
     .te-search-btn:hover { background: #0a4bb5; }
+    .te-search-btn:disabled {
+      background: #93c5fd;
+      cursor: not-allowed;
+    }
+    .te-search-error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #b91c1c;
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+    }
+    .te-input--error {
+      border-color: #ef4444 !important;
+      background-color: #fff8f8;
+    }
 
     /* ============ COMMON CONTAINER ============ */
     .te-container {
@@ -1267,7 +1302,7 @@ import { User } from '../../models/user.model';
       .te-badge { min-width: auto; flex: 1 0 calc(50% - 7px); }
       .te-search-wrapper { margin-top: 0; padding: 0 16px; }
       .te-search-fields { flex-direction: column; }
-      .te-swap-btn { display: none; }
+      .te-swap-btn { display: flex; align-self: center; margin: 2px 0; transform: rotate(90deg); }
       .te-field { min-width: 100%; }
       .te-search-btn { width: 100%; justify-content: center; }
       .te-dest-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1296,6 +1331,76 @@ export class HomeComponent {
   mobileMenuOpen = false;
 
   currentUser: User | null = null;
+
+  popularCities: string[] = [
+    'Bengaluru',
+    'Hyderabad',
+    'Vijayawada',
+    'Chennai',
+    'Goa',
+    'Ooty',
+    'Munnar',
+    'Varanasi'
+  ];
+
+  busErrorMessage = '';
+  hotelErrorMessage = '';
+  busErrors = { from: false, to: false, date: false };
+  hotelErrors = { city: false, checkIn: false, checkOut: false };
+  isSearchingBus = false;
+  isSearchingHotel = false;
+
+  get minDate(): string {
+    return this.getTodayDate();
+  }
+
+  get minCheckOutDate(): string {
+    return this.hotelCheckIn ? this.getTomorrowDate(this.hotelCheckIn) : this.getTomorrowDate();
+  }
+
+  getTodayDate(): string {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  getTomorrowDate(baseDateStr?: string): string {
+    const d = baseDateStr ? new Date(baseDateStr) : new Date();
+    d.setDate(d.getDate() + 1);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  setTab(tab: 'bus' | 'hotel') {
+    this.searchTab = tab;
+    this.busErrorMessage = '';
+    this.hotelErrorMessage = '';
+  }
+
+  clearBusError(field: 'from' | 'to' | 'date') {
+    this.busErrors[field] = false;
+    if (!this.busErrors.from && !this.busErrors.to && !this.busErrors.date) {
+      this.busErrorMessage = '';
+    }
+  }
+
+  clearHotelError(field: 'city' | 'checkIn' | 'checkOut') {
+    this.hotelErrors[field] = false;
+    if (!this.hotelErrors.city && !this.hotelErrors.checkIn && !this.hotelErrors.checkOut) {
+      this.hotelErrorMessage = '';
+    }
+  }
+
+  onCheckInChange() {
+    this.clearHotelError('checkIn');
+    if (this.hotelCheckIn && this.hotelCheckOut && this.hotelCheckOut <= this.hotelCheckIn) {
+      this.hotelCheckOut = this.getTomorrowDate(this.hotelCheckIn);
+    }
+  }
 
   destinations = [
     { name: 'Goa',       subtitle: 'Beaches, Sun & Fun',     image: 'assets/images/goa.png' },
@@ -1329,6 +1434,10 @@ export class HomeComponent {
   }
 
   constructor(private router: Router, private authService: AuthService) {
+    this.busDate = this.getTodayDate();
+    this.hotelCheckIn = this.getTodayDate();
+    this.hotelCheckOut = this.getTomorrowDate();
+
     this.authService.currentUser$.subscribe(user => {
       this.currentUser = user;
     });
@@ -1350,19 +1459,106 @@ export class HomeComponent {
     const tmp = this.busFrom;
     this.busFrom = this.busTo;
     this.busTo = tmp;
+    this.clearBusError('from');
+    this.clearBusError('to');
   }
 
   searchBuses() {
-    if (!this.busFrom || !this.busTo) return;
+    this.busErrorMessage = '';
+    this.busErrors = { from: false, to: false, date: false };
+
+    const from = this.busFrom ? this.busFrom.trim() : '';
+    const to = this.busTo ? this.busTo.trim() : '';
+    const date = this.busDate ? this.busDate.trim() : '';
+
+    if (!from) {
+      this.busErrorMessage = 'Please enter a source city.';
+      this.busErrors.from = true;
+      return;
+    }
+    if (!to) {
+      this.busErrorMessage = 'Please enter a destination city.';
+      this.busErrors.to = true;
+      return;
+    }
+    if (from.toLowerCase() === to.toLowerCase()) {
+      this.busErrorMessage = 'Source and destination cities cannot be the same.';
+      this.busErrors.from = true;
+      this.busErrors.to = true;
+      return;
+    }
+    if (!date) {
+      this.busErrorMessage = 'Please select a travel date.';
+      this.busErrors.date = true;
+      return;
+    }
+    if (date < this.minDate) {
+      this.busErrorMessage = 'Travel date cannot be in the past.';
+      this.busErrors.date = true;
+      return;
+    }
+
+    if (this.isSearchingBus) return;
+    this.isSearchingBus = true;
+
     this.router.navigate(['/customer'], {
-      queryParams: { tab: 'bus', from: this.busFrom, to: this.busTo, date: this.busDate }
+      queryParams: {
+        tab: 'bus',
+        from: from,
+        to: to,
+        date: date
+      }
+    }).finally(() => {
+      this.isSearchingBus = false;
     });
   }
 
   searchHotels() {
-    if (!this.hotelCity) return;
+    this.hotelErrorMessage = '';
+    this.hotelErrors = { city: false, checkIn: false, checkOut: false };
+
+    const city = this.hotelCity ? this.hotelCity.trim() : '';
+    const checkIn = this.hotelCheckIn ? this.hotelCheckIn.trim() : '';
+    const checkOut = this.hotelCheckOut ? this.hotelCheckOut.trim() : '';
+
+    if (!city) {
+      this.hotelErrorMessage = 'Please enter a city or destination.';
+      this.hotelErrors.city = true;
+      return;
+    }
+    if (!checkIn) {
+      this.hotelErrorMessage = 'Please select a check-in date.';
+      this.hotelErrors.checkIn = true;
+      return;
+    }
+    if (checkIn < this.minDate) {
+      this.hotelErrorMessage = 'Check-in date cannot be in the past.';
+      this.hotelErrors.checkIn = true;
+      return;
+    }
+    if (!checkOut) {
+      this.hotelErrorMessage = 'Please select a check-out date.';
+      this.hotelErrors.checkOut = true;
+      return;
+    }
+    if (checkOut <= checkIn) {
+      this.hotelErrorMessage = 'Check-out date must be later than check-in date.';
+      this.hotelErrors.checkOut = true;
+      return;
+    }
+
+    if (this.isSearchingHotel) return;
+    this.isSearchingHotel = true;
+
     this.router.navigate(['/customer'], {
-      queryParams: { tab: 'hotel', city: this.hotelCity }
+      queryParams: {
+        tab: 'hotel',
+        city: city,
+        checkIn: checkIn,
+        checkOut: checkOut
+      }
+    }).finally(() => {
+      this.isSearchingHotel = false;
     });
   }
 

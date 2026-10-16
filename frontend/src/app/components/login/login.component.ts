@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Router, RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 
@@ -105,6 +106,7 @@ import { AuthService } from '../../services/auth.service';
                     type="email"
                     class="te-input"
                     [(ngModel)]="email"
+                    (input)="clearError()"
                     name="email"
                     required
                     placeholder="Enter your email address"
@@ -123,6 +125,7 @@ import { AuthService } from '../../services/auth.service';
                     [type]="showPassword ? 'text' : 'password'"
                     class="te-input te-input--password"
                     [(ngModel)]="password"
+                    (input)="clearError()"
                     name="password"
                     required
                     placeholder="Enter your password"
@@ -161,7 +164,7 @@ import { AuthService } from '../../services/auth.service';
                 [disabled]="loading"
               >
                 <span *ngIf="loading" class="spinner-border spinner-border-sm me-2"></span>
-                <span>Login</span>
+                <span>{{ loading ? 'Logging in...' : 'Login' }}</span>
                 <i class="fa-solid fa-arrow-right ms-2" *ngIf="!loading"></i>
               </button>
             </form>
@@ -645,8 +648,21 @@ export class LoginComponent {
 
   constructor(private authService: AuthService, private router: Router) {}
 
+  clearError() {
+    if (this.errorMessage) {
+      this.errorMessage = '';
+    }
+  }
+
   onSubmit() {
-    if (!this.email || !this.password) {
+    if (this.loading) {
+      return;
+    }
+
+    const trimmedEmail = this.email ? this.email.trim() : '';
+    const trimmedPassword = this.password ? this.password.trim() : '';
+
+    if (!trimmedEmail || !trimmedPassword) {
       this.errorMessage = 'Please enter email address and password.';
       return;
     }
@@ -654,7 +670,7 @@ export class LoginComponent {
     this.loading = true;
     this.errorMessage = '';
 
-    this.authService.login({ email: this.email, password: this.password }).subscribe({
+    this.authService.login({ email: trimmedEmail, password: this.password }).subscribe({
       next: (user) => {
         this.loading = false;
 
@@ -680,18 +696,44 @@ export class LoginComponent {
             this.router.navigate(['/']);
         }
       },
-      error: (err) => {
+      error: (err: HttpErrorResponse) => {
         this.loading = false;
         const errObj = err.error;
-        if (errObj && errObj.status === 'SUSPENDED') {
-          this.router.navigate(['/account-suspended']);
-          return;
+
+        // Account status checks (403 Forbidden redirects)
+        if (errObj && typeof errObj === 'object') {
+          if (errObj.status === 'SUSPENDED') {
+            this.router.navigate(['/account-suspended']);
+            return;
+          }
+          if (errObj.status === 'REJECTED') {
+            this.router.navigate(['/account-rejected']);
+            return;
+          }
         }
-        if (errObj && errObj.status === 'REJECTED') {
-          this.router.navigate(['/account-rejected']);
-          return;
+
+        // Categorize HTTP status and display clean, user-friendly messages
+        if (err.status === 401) {
+          this.errorMessage = 'Invalid email or password. Please provide valid credentials and try again.';
+        } else if (err.status === 403) {
+          this.errorMessage = (typeof errObj === 'object' && errObj?.message)
+            ? errObj.message
+            : 'Access denied. Your account is not authorized to log in.';
+        } else if (err.status === 400) {
+          this.errorMessage = (typeof errObj === 'object' && errObj?.message)
+            ? errObj.message
+            : 'Invalid request. Please check your email and password and try again.';
+        } else if (err.status === 429) {
+          this.errorMessage = 'Too many failed login attempts. Please wait a few minutes and try again.';
+        } else if (err.status === 0) {
+          this.errorMessage = 'Unable to connect to the server. Please check your connection and try again.';
+        } else if (err.status >= 500) {
+          this.errorMessage = 'Something went wrong on the server. Please try again later.';
+        } else if (typeof errObj === 'object' && errObj?.message && typeof errObj.message === 'string') {
+          this.errorMessage = errObj.message;
+        } else {
+          this.errorMessage = 'Invalid email or password. Please provide valid credentials and try again.';
         }
-        this.errorMessage = errObj?.message || err.message || 'Invalid email or password. Please try again.';
       }
     });
   }

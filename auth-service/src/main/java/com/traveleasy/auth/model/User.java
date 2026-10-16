@@ -22,6 +22,7 @@ public class User {
     private String email;
 
     @Column(nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String password;
 
     private String firstName;
@@ -65,7 +66,9 @@ public class User {
     private LocalDateTime termsAcceptedAt;
 
     // Password Reset
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String resetPasswordToken;
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private LocalDateTime resetPasswordTokenExpiry;
 
     @Builder.Default

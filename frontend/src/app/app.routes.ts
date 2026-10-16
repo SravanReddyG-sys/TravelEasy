@@ -10,6 +10,7 @@ import { ResetPasswordComponent } from './components/password/reset-password.com
 import { AccountPendingComponent } from './components/account-status/account-pending.component';
 import { AccountRejectedComponent } from './components/account-status/account-rejected.component';
 import { AccountSuspendedComponent } from './components/account-status/account-suspended.component';
+import { ApplicationDetailsComponent } from './components/application-details/application-details.component';
 import { CustomerDashboardComponent } from './components/customer-dashboard/customer-dashboard.component';
 import { BusOperatorDashboardComponent } from './components/bus-operator-dashboard/bus-operator-dashboard.component';
 import { HotelManagerDashboardComponent } from './components/hotel-manager-dashboard/hotel-manager-dashboard.component';
@@ -26,6 +27,7 @@ export const routes: Routes = [
   { path: 'forgot-password', component: ForgotPasswordComponent },
   { path: 'reset-password', component: ResetPasswordComponent },
   { path: 'account-pending', component: AccountPendingComponent },
+  { path: 'application-details', component: ApplicationDetailsComponent },
   { path: 'account-rejected', component: AccountRejectedComponent },
   { path: 'account-suspended', component: AccountSuspendedComponent },
   { path: 'customer', component: CustomerDashboardComponent },

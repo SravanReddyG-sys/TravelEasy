@@ -63,16 +63,51 @@ public class AuthController {
 
         String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName());
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(AuthResponse.builder()
+        return ResponseEntity.status(HttpStatus.CREATED).body(buildAuthResponse(user, token));
+    }
+
+    private AuthResponse buildAuthResponse(User user, String token) {
+        String firstName = user.getFirstName();
+        String lastName = user.getLastName();
+        if ((firstName == null || firstName.trim().isEmpty()) && (lastName == null || lastName.trim().isEmpty())) {
+            if (user.getFullName() != null && !user.getFullName().trim().isEmpty()) {
+                String fullName = user.getFullName().trim();
+                int spaceIdx = fullName.indexOf(' ');
+                if (spaceIdx > 0) {
+                    firstName = fullName.substring(0, spaceIdx).trim();
+                    lastName = fullName.substring(spaceIdx + 1).trim();
+                } else {
+                    firstName = fullName;
+                    lastName = "";
+                }
+            }
+        }
+
+        return AuthResponse.builder()
                 .token(token)
                 .id(user.getId())
                 .email(user.getEmail())
+                .firstName(firstName)
+                .lastName(lastName)
                 .fullName(user.getFullName())
+                .phone(user.getPhone())
                 .role(user.getRole())
                 .status(user.getStatus())
                 .verificationStatus(user.getVerificationStatus())
                 .verified(user.isVerified())
-                .build());
+                .legalOrganizationName(user.getLegalOrganizationName())
+                .representativeDesignation(user.getRepresentativeDesignation())
+                .businessStructure(user.getBusinessStructure())
+                .licensePermitNumber(user.getLicensePermitNumber())
+                .businessPan(user.getBusinessPan())
+                .businessPanNumber(user.getBusinessPan())
+                .gstin(user.getGstin())
+                .gstinNumber(user.getGstin())
+                .registeredAddress(user.getRegisteredAddress())
+                .businessContactEmail(user.getBusinessContactEmail())
+                .businessContactPhone(user.getBusinessContactPhone())
+                .createdAt(user.getCreatedAt())
+                .build();
     }
 
     private static final java.util.Set<String> ALLOWED_BUS_OPERATOR_DESIGNATIONS = java.util.Set.of(
@@ -197,15 +232,9 @@ public class AuthController {
 
         userRepository.save(user);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(AuthResponse.builder()
-                .id(user.getId())
-                .email(user.getEmail())
-                .fullName(user.getFullName())
-                .role(user.getRole())
-                .status(user.getStatus())
-                .verificationStatus(user.getVerificationStatus())
-                .verified(user.isVerified())
-                .build());
+        String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName());
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(buildAuthResponse(user, token));
     }
 
     @PostMapping("/register/hotel-partner")
@@ -282,15 +311,9 @@ public class AuthController {
 
         userRepository.save(user);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(AuthResponse.builder()
-                .id(user.getId())
-                .email(user.getEmail())
-                .fullName(user.getFullName())
-                .role(user.getRole())
-                .status(user.getStatus())
-                .verificationStatus(user.getVerificationStatus())
-                .verified(user.isVerified())
-                .build());
+        String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName());
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(buildAuthResponse(user, token));
     }
 
     @PostMapping("/login")
@@ -317,30 +340,9 @@ public class AuthController {
             ));
         }
 
-        if ("PENDING".equalsIgnoreCase(user.getStatus()) || "UNDER_REVIEW".equalsIgnoreCase(user.getVerificationStatus())) {
-            return ResponseEntity.ok(AuthResponse.builder()
-                .id(user.getId())
-                .email(user.getEmail())
-                .fullName(user.getFullName())
-                .role(user.getRole())
-                .status("PENDING")
-                .verificationStatus("UNDER_REVIEW")
-                .verified(user.isVerified())
-                .build());
-        }
-
         String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName());
 
-        return ResponseEntity.ok(AuthResponse.builder()
-                .token(token)
-                .id(user.getId())
-                .email(user.getEmail())
-                .fullName(user.getFullName())
-                .role(user.getRole())
-                .status(user.getStatus())
-                .verificationStatus(user.getVerificationStatus())
-                .verified(user.isVerified())
-                .build());
+        return ResponseEntity.ok(buildAuthResponse(user, token));
     }
 
     @PostMapping("/forgot-password")
@@ -401,5 +403,93 @@ public class AuthController {
         travellerReq.setTermsAccepted(true);
 
         return registerTraveller(travellerReq);
+    }
+
+    @GetMapping("/application-details")
+    public ResponseEntity<?> getApplicationDetails(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Authorization Bearer token is required"));
+        }
+
+        String token = authHeader.substring(7).trim();
+        if (!jwtUtil.validateToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Invalid or expired token"));
+        }
+
+        String authenticatedEmail = jwtUtil.extractEmail(token);
+        if (authenticatedEmail == null || authenticatedEmail.trim().isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Token contains no valid email subject"));
+        }
+
+        User user = userRepository.findByEmail(authenticatedEmail.trim().toLowerCase()).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "User record not found for authenticated email"));
+        }
+
+        // Resolving names: use first_name and last_name, falling back to full_name if absent
+        String firstName = user.getFirstName();
+        String lastName = user.getLastName();
+        if ((firstName == null || firstName.trim().isEmpty()) && (lastName == null || lastName.trim().isEmpty())) {
+            if (user.getFullName() != null && !user.getFullName().trim().isEmpty()) {
+                String fullName = user.getFullName().trim();
+                int spaceIdx = fullName.indexOf(' ');
+                if (spaceIdx > 0) {
+                    firstName = fullName.substring(0, spaceIdx).trim();
+                    lastName = fullName.substring(spaceIdx + 1).trim();
+                } else {
+                    firstName = fullName;
+                    lastName = "";
+                }
+            }
+        }
+
+        // Role to application type mapping
+        String applicationType;
+        if (user.getRole() == Role.ROLE_BUS_OPERATOR) {
+            applicationType = "New Bus Service Registration";
+        } else if (user.getRole() == Role.ROLE_HOTEL_MANAGER) {
+            applicationType = "New Hotel Partner Registration";
+        } else {
+            applicationType = user.getRole() != null ? user.getRole().name() : "Partner Registration";
+        }
+
+        // Organization name from legal_organization_name, falling back to full_name
+        String orgName = user.getLegalOrganizationName() != null && !user.getLegalOrganizationName().trim().isEmpty()
+                ? user.getLegalOrganizationName().trim()
+                : user.getFullName();
+
+        ApplicationDetailsResponse response = ApplicationDetailsResponse.builder()
+                .id(user.getId())
+                .organizationName(orgName)
+                .legalOrganizationName(user.getLegalOrganizationName())
+                .applicationType(applicationType)
+                .role(user.getRole())
+                .submittedOn(user.getCreatedAt() != null ? user.getCreatedAt() : LocalDateTime.now())
+                .createdAt(user.getCreatedAt())
+                .applicationStatus(user.getVerificationStatus() != null ? user.getVerificationStatus() : "UNDER_REVIEW")
+                .verificationStatus(user.getVerificationStatus() != null ? user.getVerificationStatus() : "UNDER_REVIEW")
+                .accountStatus(user.getStatus() != null ? user.getStatus() : "PENDING")
+                .status(user.getStatus() != null ? user.getStatus() : "PENDING")
+                .verified(user.isVerified())
+                .firstName(firstName)
+                .lastName(lastName)
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .phone(user.getPhone())
+                .representativeDesignation(user.getRepresentativeDesignation())
+                .businessStructure(user.getBusinessStructure())
+                .licensePermitNumber(user.getLicensePermitNumber())
+                .businessPan(user.getBusinessPan())
+                .businessPanNumber(user.getBusinessPan())
+                .gstin(user.getGstin())
+                .gstinNumber(user.getGstin())
+                .registeredAddress(user.getRegisteredAddress())
+                .businessContactEmail(user.getBusinessContactEmail())
+                .businessContactPhone(user.getBusinessContactPhone())
+                .build();
+
+        return ResponseEntity.ok(response);
     }
 }
