@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 @Builder
 public class AuthResponse {
     private String token;
+    private String applicationToken;
     private Long id;
     private String email;
     private String firstName;

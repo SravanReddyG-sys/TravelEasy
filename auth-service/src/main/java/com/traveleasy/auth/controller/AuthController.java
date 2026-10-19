@@ -13,6 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -232,9 +233,11 @@ public class AuthController {
 
         userRepository.save(user);
 
-        String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName());
+        String appToken = jwtUtil.generateApplicationToken(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName());
+        AuthResponse response = buildAuthResponse(user, null);
+        response.setApplicationToken(appToken);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(buildAuthResponse(user, token));
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/register/hotel-partner")
@@ -311,21 +314,27 @@ public class AuthController {
 
         userRepository.save(user);
 
-        String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName());
+        String appToken = jwtUtil.generateApplicationToken(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName());
+        AuthResponse response = buildAuthResponse(user, null);
+        response.setApplicationToken(appToken);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(buildAuthResponse(user, token));
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
-        String normalizedEmail = request.getEmail() != null ? request.getEmail().trim().toLowerCase() : "";
+        if (request == null || request.getEmail() == null || request.getPassword() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Invalid email or password"));
+        }
+
+        String normalizedEmail = request.getEmail().trim().toLowerCase();
         User user = userRepository.findByEmail(normalizedEmail).orElse(null);
 
         if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Invalid email or password"));
         }
 
-        // Account status checks
+        // 1. Account status check: Suspended accounts
         if ("SUSPENDED".equalsIgnoreCase(user.getStatus())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
                 "message", "Your account has been temporarily suspended.",
@@ -333,6 +342,7 @@ public class AuthController {
             ));
         }
 
+        // 2. Verification status check: Rejected accounts
         if ("REJECTED".equalsIgnoreCase(user.getVerificationStatus())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
                 "message", "Unfortunately, your application has not been approved.",
@@ -340,6 +350,50 @@ public class AuthController {
             ));
         }
 
+        // 3. Account status check: Deactivated accounts
+        if ("DEACTIVATED".equalsIgnoreCase(user.getStatus())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                "message", "Your account has been deactivated. Please contact support.",
+                "status", "DEACTIVATED"
+            ));
+        }
+
+        // 4. Role-specific account status and verification checks
+        if (user.getRole() == Role.ROLE_BUS_OPERATOR || user.getRole() == Role.ROLE_HOTEL_MANAGER) {
+            if ("PENDING".equalsIgnoreCase(user.getStatus()) || "UNDER_REVIEW".equalsIgnoreCase(user.getVerificationStatus())) {
+                String appToken = jwtUtil.generateApplicationToken(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName());
+                Map<String, Object> responseBody = new HashMap<>();
+                responseBody.put("message", "Your application is currently under review.");
+                responseBody.put("status", "UNDER_REVIEW");
+                responseBody.put("applicationToken", appToken);
+                responseBody.put("applicationDetails", buildApplicationDetailsResponse(user));
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(responseBody);
+            }
+
+            boolean isApprovedPartner = "ACTIVE".equalsIgnoreCase(user.getStatus()) &&
+                    ("APPROVED".equalsIgnoreCase(user.getVerificationStatus()) || user.isVerified());
+
+            if (!isApprovedPartner) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "message", "Access denied. Your partner account is not approved to log in.",
+                    "status", "FORBIDDEN"
+                ));
+            }
+        } else if (user.getRole() == Role.ROLE_CUSTOMER || user.getRole() == Role.ROLE_ADMIN) {
+            if (!"ACTIVE".equalsIgnoreCase(user.getStatus())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "message", "Access denied. Your account is not active.",
+                    "status", "FORBIDDEN"
+                ));
+            }
+        } else {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                "message", "Access denied. Your account is not authorized to log in.",
+                "status", "FORBIDDEN"
+            ));
+        }
+
+        // 5. Generate token and authenticated session ONLY after all checks succeed
         String token = jwtUtil.generateToken(user.getId(), user.getEmail(), user.getRole().name(), user.getFullName());
 
         return ResponseEntity.ok(buildAuthResponse(user, token));
@@ -407,13 +461,23 @@ public class AuthController {
 
     @GetMapping("/application-details")
     public ResponseEntity<?> getApplicationDetails(
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Application-Token", required = false) String appTokenHeader,
+            @RequestParam(value = "token", required = false) String tokenParam) {
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        String token = null;
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            token = authHeader.substring(7).trim();
+        } else if (appTokenHeader != null && !appTokenHeader.trim().isEmpty()) {
+            token = appTokenHeader.trim();
+        } else if (tokenParam != null && !tokenParam.trim().isEmpty()) {
+            token = tokenParam.trim();
+        }
+
+        if (token == null || token.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Authorization Bearer token is required"));
         }
 
-        String token = authHeader.substring(7).trim();
         if (!jwtUtil.validateToken(token)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Invalid or expired token"));
         }
@@ -428,6 +492,25 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "User record not found for authenticated email"));
         }
 
+        // Account status check for protected endpoint
+        if ("SUSPENDED".equalsIgnoreCase(user.getStatus())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                "message", "Your account has been temporarily suspended.",
+                "status", "SUSPENDED"
+            ));
+        }
+
+        if ("DEACTIVATED".equalsIgnoreCase(user.getStatus())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                "message", "Your account has been deactivated. Please contact support.",
+                "status", "DEACTIVATED"
+            ));
+        }
+
+        return ResponseEntity.ok(buildApplicationDetailsResponse(user));
+    }
+
+    private ApplicationDetailsResponse buildApplicationDetailsResponse(User user) {
         // Resolving names: use first_name and last_name, falling back to full_name if absent
         String firstName = user.getFirstName();
         String lastName = user.getLastName();
@@ -460,7 +543,7 @@ public class AuthController {
                 ? user.getLegalOrganizationName().trim()
                 : user.getFullName();
 
-        ApplicationDetailsResponse response = ApplicationDetailsResponse.builder()
+        return ApplicationDetailsResponse.builder()
                 .id(user.getId())
                 .organizationName(orgName)
                 .legalOrganizationName(user.getLegalOrganizationName())
@@ -489,7 +572,5 @@ public class AuthController {
                 .businessContactEmail(user.getBusinessContactEmail())
                 .businessContactPhone(user.getBusinessContactPhone())
                 .build();
-
-        return ResponseEntity.ok(response);
     }
 }

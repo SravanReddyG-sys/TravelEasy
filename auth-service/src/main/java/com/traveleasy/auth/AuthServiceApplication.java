@@ -42,6 +42,7 @@ public class AuthServiceApplication {
                         .role(Role.ROLE_BUS_OPERATOR)
                         .verified(true)
                         .status("ACTIVE")
+                        .verificationStatus("APPROVED")
                         .build());
             }
 
@@ -55,6 +56,7 @@ public class AuthServiceApplication {
                         .role(Role.ROLE_HOTEL_MANAGER)
                         .verified(true)
                         .status("ACTIVE")
+                        .verificationStatus("APPROVED")
                         .build());
             }
 

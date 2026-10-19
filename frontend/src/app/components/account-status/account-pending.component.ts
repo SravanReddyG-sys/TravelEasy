@@ -70,7 +70,7 @@ import { ApplicationDetails } from '../../models/application-details.model';
           </div>
 
           <!-- Application Details Summary Box -->
-          <div *ngIf="!loading" class="details-summary-card">
+          <div *ngIf="!loading && appDetails" class="details-summary-card">
             <div class="card-header-row">
               <div class="doc-icon-box">
                 <i class="fa-solid fa-file-lines"></i>
@@ -191,7 +191,7 @@ import { ApplicationDetails } from '../../models/application-details.model';
           <!-- Subtle Sign Out Link -->
           <div class="signout-row">
             <button class="btn-signout" (click)="logout()">
-              <i class="fa-solid fa-right-from-bracket me-1"></i> Sign Out
+              <i class="fa-solid fa-right-from-bracket me-1"></i> Login
             </button>
           </div>
         </div>
@@ -590,6 +590,10 @@ export class AccountPendingComponent implements OnInit {
   constructor(private authService: AuthService, private router: Router) {}
 
   ngOnInit(): void {
+    const cached = this.authService.getPendingApplicationDetails();
+    if (cached) {
+      this.appDetails = cached;
+    }
     this.loadApplicationDetails();
   }
 
@@ -603,42 +607,8 @@ export class AccountPendingComponent implements OnInit {
         this.loading = false;
       },
       error: (err) => {
-        // Fallback to locally stored current user info if available
-        const currentUser = this.authService.currentUserValue;
-        if (currentUser) {
-          const orgName = currentUser.legalOrganizationName || currentUser.fullName || 'Not provided';
-          const appType = currentUser.role === 'ROLE_BUS_OPERATOR'
-            ? 'New Bus Service Registration'
-            : (currentUser.role === 'ROLE_HOTEL_MANAGER' ? 'New Hotel Partner Registration' : 'Partner Registration');
-
-          this.appDetails = {
-            id: currentUser.id,
-            organizationName: orgName,
-            legalOrganizationName: currentUser.legalOrganizationName || '',
-            applicationType: appType,
-            role: currentUser.role,
-            submittedOn: currentUser.createdAt || '',
-            applicationStatus: currentUser.verificationStatus || 'UNDER_REVIEW',
-            accountStatus: currentUser.status || 'PENDING',
-            verified: !!currentUser.verified,
-            firstName: currentUser.firstName || '',
-            lastName: currentUser.lastName || '',
-            email: currentUser.email || '',
-            phone: currentUser.phone || '',
-            representativeDesignation: currentUser.representativeDesignation || '',
-            businessStructure: currentUser.businessStructure || '',
-            licensePermitNumber: currentUser.licensePermitNumber || '',
-            businessPanNumber: currentUser.businessPanNumber || currentUser.businessPan || '',
-            gstinNumber: currentUser.gstinNumber || currentUser.gstin || '',
-            registeredAddress: currentUser.registeredAddress || '',
-            businessContactEmail: currentUser.businessContactEmail || '',
-            businessContactPhone: currentUser.businessContactPhone || ''
-          };
-          this.loading = false;
-        } else {
-          this.loading = false;
-          this.error = 'Unable to load application details. Please sign in to view your application status.';
-        }
+        this.loading = false;
+        this.error = err.error?.message || 'Unable to load application details. Please check your connection or sign in again.';
       }
     });
   }

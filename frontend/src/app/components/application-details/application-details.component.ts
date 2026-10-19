@@ -133,7 +133,7 @@ import { ApplicationDetails } from '../../models/application-details.model';
                 </div>
 
                 <div class="kv-row">
-                  <div class="kv-label">Designation</div>
+                  <div class="kv-label">Representative Designation</div>
                   <div class="kv-sep">:</div>
                   <div class="kv-val">{{ formatDesignation(appDetails.representativeDesignation) }}</div>
                 </div>
@@ -151,24 +151,17 @@ import { ApplicationDetails } from '../../models/application-details.model';
 
               <div class="kv-grid">
                 <!-- Legal Organization Name -->
-                <div class="kv-row" *ngIf="appDetails.legalOrganizationName && appDetails.legalOrganizationName !== appDetails.organizationName">
+                <div class="kv-row">
                   <div class="kv-label">Legal Organization Name</div>
                   <div class="kv-sep">:</div>
-                  <div class="kv-val">{{ appDetails.legalOrganizationName }}</div>
+                  <div class="kv-val">{{ appDetails.legalOrganizationName || appDetails.organizationName || 'Not provided' }}</div>
                 </div>
 
                 <!-- Business Structure -->
-                <div class="kv-row" *ngIf="appDetails.businessStructure">
+                <div class="kv-row">
                   <div class="kv-label">Business Structure</div>
                   <div class="kv-sep">:</div>
                   <div class="kv-val">{{ formatBusinessStructure(appDetails.businessStructure) }}</div>
-                </div>
-
-                <!-- Address (Multi-line formatted) -->
-                <div class="kv-row align-items-start">
-                  <div class="kv-label">Address</div>
-                  <div class="kv-sep">:</div>
-                  <div class="kv-val multiline-val">{{ formattedAddress }}</div>
                 </div>
 
                 <!-- Passenger Transport Permit Number (for Bus Operator) -->
@@ -192,9 +185,9 @@ import { ApplicationDetails } from '../../models/application-details.model';
                   <div class="kv-val">{{ appDetails.licensePermitNumber }}</div>
                 </div>
 
-                <!-- PAN Number -->
+                <!-- Business PAN Number -->
                 <div class="kv-row">
-                  <div class="kv-label">PAN Number</div>
+                  <div class="kv-label">Business PAN Number</div>
                   <div class="kv-sep">:</div>
                   <div class="kv-val font-monospace">{{ appDetails.businessPanNumber || 'Not provided' }}</div>
                 </div>
@@ -204,6 +197,13 @@ import { ApplicationDetails } from '../../models/application-details.model';
                   <div class="kv-label">GSTIN Number</div>
                   <div class="kv-sep">:</div>
                   <div class="kv-val font-monospace">{{ appDetails.gstinNumber || 'Not provided' }}</div>
+                </div>
+
+                <!-- Registered Business Address -->
+                <div class="kv-row align-items-start">
+                  <div class="kv-label">Registered Business Address</div>
+                  <div class="kv-sep">:</div>
+                  <div class="kv-val multiline-val">{{ formattedAddress }}</div>
                 </div>
 
                 <!-- Business Contact Email -->
@@ -609,6 +609,10 @@ export class ApplicationDetailsComponent implements OnInit {
   constructor(private authService: AuthService, private router: Router) {}
 
   ngOnInit(): void {
+    const cached = this.authService.getPendingApplicationDetails();
+    if (cached) {
+      this.appDetails = cached;
+    }
     this.loadDetails();
   }
 
@@ -622,42 +626,8 @@ export class ApplicationDetailsComponent implements OnInit {
         this.loading = false;
       },
       error: (err) => {
-        // Fallback to locally stored user if available
-        const currentUser = this.authService.currentUserValue;
-        if (currentUser) {
-          const orgName = currentUser.legalOrganizationName || currentUser.fullName || 'Not provided';
-          const appType = currentUser.role === 'ROLE_BUS_OPERATOR'
-            ? 'New Bus Service Registration'
-            : (currentUser.role === 'ROLE_HOTEL_MANAGER' ? 'New Hotel Partner Registration' : 'Partner Registration');
-
-          this.appDetails = {
-            id: currentUser.id,
-            organizationName: orgName,
-            legalOrganizationName: currentUser.legalOrganizationName || '',
-            applicationType: appType,
-            role: currentUser.role,
-            submittedOn: currentUser.createdAt || '',
-            applicationStatus: currentUser.verificationStatus || 'UNDER_REVIEW',
-            accountStatus: currentUser.status || 'PENDING',
-            verified: !!currentUser.verified,
-            firstName: currentUser.firstName || '',
-            lastName: currentUser.lastName || '',
-            email: currentUser.email || '',
-            phone: currentUser.phone || '',
-            representativeDesignation: currentUser.representativeDesignation || '',
-            businessStructure: currentUser.businessStructure || '',
-            licensePermitNumber: currentUser.licensePermitNumber || '',
-            businessPanNumber: currentUser.businessPanNumber || currentUser.businessPan || '',
-            gstinNumber: currentUser.gstinNumber || currentUser.gstin || '',
-            registeredAddress: currentUser.registeredAddress || '',
-            businessContactEmail: currentUser.businessContactEmail || '',
-            businessContactPhone: currentUser.businessContactPhone || ''
-          };
-          this.loading = false;
-        } else {
-          this.loading = false;
-          this.error = 'Unable to load application details. Please sign in or check your connection.';
-        }
+        this.loading = false;
+        this.error = err.error?.message || 'Unable to load application details. Please check your connection or sign in again.';
       }
     });
   }

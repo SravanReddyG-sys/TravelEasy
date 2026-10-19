@@ -71,6 +71,10 @@ class MockLoginComponent {
         this.redirectedTo = '/account-rejected';
         return;
       }
+      if (errObj.status === 'UNDER_REVIEW' || errObj.status === 'PENDING') {
+        this.redirectedTo = '/account-pending';
+        return;
+      }
     }
 
     // Categorize HTTP status and display clean, user-friendly messages
@@ -209,6 +213,14 @@ async function runTests() {
   // 403 Rejected Redirect
   compOther.handleLoginError({ status: 403, error: { status: 'REJECTED' } });
   assert(compOther.redirectedTo === '/account-rejected', '403 REJECTED redirects to /account-rejected');
+
+  // 403 Under Review Redirect
+  compOther.handleLoginError({ status: 403, error: { status: 'UNDER_REVIEW' } });
+  assert(compOther.redirectedTo === '/account-pending', '403 UNDER_REVIEW redirects to /account-pending');
+
+  // 403 Deactivated message
+  compOther.handleLoginError({ status: 403, error: { status: 'DEACTIVATED', message: 'Your account has been deactivated. Please contact support.' } });
+  assert(compOther.errorMessage === 'Your account has been deactivated. Please contact support.', '403 DEACTIVATED displays contact support message');
 
   // 429 Rate Limit
   compOther.handleLoginError({ status: 429, error: null });

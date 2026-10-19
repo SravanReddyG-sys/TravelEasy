@@ -712,6 +712,16 @@ export class LoginComponent {
             this.router.navigate(['/account-rejected']);
             return;
           }
+          if (errObj.status === 'UNDER_REVIEW' || errObj.status === 'PENDING') {
+            if (errObj.applicationToken) {
+              this.authService.setPendingApplicationToken(errObj.applicationToken);
+            }
+            if (errObj.applicationDetails) {
+              this.authService.setPendingApplicationDetails(errObj.applicationDetails);
+            }
+            this.router.navigate(['/account-pending']);
+            return;
+          }
         }
 
         // Categorize HTTP status and display clean, user-friendly messages
