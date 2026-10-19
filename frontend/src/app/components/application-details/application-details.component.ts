@@ -242,9 +242,10 @@ import { ApplicationDetails } from '../../models/application-details.model';
     }
 
     .app-details-page {
-      min-height: 100vh;
+      flex: 1 0 auto;
+      min-height: calc(100vh - 140px);
       background: linear-gradient(180deg, #e4f2fe 0%, #edf5fc 40%, #f4f9fd 100%);
-      padding: 32px 40px;
+      padding: 96px 40px 48px;
       display: flex;
       justify-content: center;
       align-items: center;

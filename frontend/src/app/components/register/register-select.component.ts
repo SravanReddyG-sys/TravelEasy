@@ -178,14 +178,15 @@ import { RouterModule } from '@angular/router';
     /* ================= PAGE CONTAINER & BACKGROUNDS ================= */
     .te-select-page {
       position: relative;
-      min-height: 100vh;
+      flex: 1 0 auto;
+      min-height: calc(100vh - 140px);
       width: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: flex-start;
       overflow-x: hidden;
-      padding: 38px 20px 32px;
+      padding: 88px 20px 32px;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     }
 

@@ -8,7 +8,7 @@ import { AuthService } from '../../services/auth.service';
   standalone: true,
   imports: [CommonModule, RouterModule],
   template: `
-    <div class="container py-5">
+    <div class="container py-5" style="padding-top: 96px !important;">
       <div class="row justify-content-center">
         <div class="col-md-8 col-lg-6 text-center">
           <div class="card p-5 shadow-lg border-0 rounded-4">

@@ -16,6 +16,7 @@ import { AuthService } from '../../services/auth.service';
       <div class="te-login-container">
         <!-- ================= LEFT: BRANDING & HIGHLIGHTS ================= -->
         <div class="te-login-left">
+          <div ></div>
           <!-- Top Logo -->
           <a class="te-brand" routerLink="/home">
             <span class="te-brand-icon">

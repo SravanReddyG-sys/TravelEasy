@@ -205,12 +205,13 @@ import { ApplicationDetails } from '../../models/application-details.model';
     }
 
     .pending-page-wrapper {
-      min-height: 100vh;
+      flex: 1 0 auto;
+      min-height: calc(100vh - 140px);
       background: linear-gradient(180deg, #e4f2fe 0%, #edf5fc 40%, #f4f9fd 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 40px 16px;
+      padding: 96px 16px 48px;
     }
 
     .pending-container {

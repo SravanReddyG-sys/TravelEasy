@@ -559,7 +559,8 @@ import { AuthService } from '../../services/auth.service';
 
     /* Page container with exact background image */
     .wizard-page {
-      min-height: 100vh;
+      flex: 1 0 auto;
+      min-height: calc(100vh - 140px);
       background-image: url('/assets/images/hotel-partner-registration-background.png');
       background-size: cover;
       background-position: center bottom;
@@ -567,6 +568,7 @@ import { AuthService } from '../../services/auth.service';
       display: flex;
       align-items: center;
       position: relative;
+      padding-top: 86px;
     }
 
     .wizard-container {
