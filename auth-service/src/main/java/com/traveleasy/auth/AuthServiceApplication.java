@@ -9,11 +9,45 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.io.BufferedReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 @SpringBootApplication
 public class AuthServiceApplication {
 
     public static void main(String[] args) {
+        loadDotEnv();
         SpringApplication.run(AuthServiceApplication.class, args);
+    }
+
+    private static void loadDotEnv() {
+        String[] possiblePaths = {".env", "../.env", "../../.env"};
+        for (String p : possiblePaths) {
+            Path path = Paths.get(p);
+            if (Files.exists(path)) {
+                try (BufferedReader reader = Files.newBufferedReader(path)) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        line = line.trim();
+                        if (line.isEmpty() || line.startsWith("#")) {
+                            continue;
+                        }
+                        int eqIdx = line.indexOf('=');
+                        if (eqIdx > 0) {
+                            String key = line.substring(0, eqIdx).trim();
+                            String value = line.substring(eqIdx + 1).trim();
+                            if (System.getProperty(key) == null && System.getenv(key) == null) {
+                                System.setProperty(key, value);
+                            }
+                        }
+                    }
+                    break;
+                } catch (Exception ignored) {
+                }
+            }
+        }
     }
 
     @Bean
@@ -67,6 +101,21 @@ public class AuthServiceApplication {
                         .password(passwordEncoder.encode("customer123"))
                         .fullName("John Doe")
                         .phone("+1234567890")
+                        .role(Role.ROLE_CUSTOMER)
+                        .verified(true)
+                        .status("ACTIVE")
+                        .build());
+            }
+
+            // Seed Resend Testing User
+            if (!userRepository.existsByEmail("sravanreddyg3@gmail.com")) {
+                userRepository.save(User.builder()
+                        .email("sravanreddyg3@gmail.com")
+                        .firstName("Sravan")
+                        .lastName("Reddy")
+                        .fullName("Sravan Reddy")
+                        .password(passwordEncoder.encode("Password123!"))
+                        .phone("+919876543299")
                         .role(Role.ROLE_CUSTOMER)
                         .verified(true)
                         .status("ACTIVE")

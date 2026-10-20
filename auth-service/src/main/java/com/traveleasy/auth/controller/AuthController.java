@@ -5,8 +5,12 @@ import com.traveleasy.auth.model.Role;
 import com.traveleasy.auth.model.User;
 import com.traveleasy.auth.repository.UserRepository;
 import com.traveleasy.auth.security.JwtUtil;
+import com.traveleasy.auth.service.EmailService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,6 +29,10 @@ public class AuthController {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final EmailService emailService;
+
+    @Value("${app.frontend.url:http://localhost:4200}")
+    private String appFrontendUrl;
 
     @PostMapping("/register/traveller")
     public ResponseEntity<?> registerTraveller(@Valid @RequestBody TravellerRegisterRequest request) {
@@ -407,16 +415,23 @@ public class AuthController {
         if (user != null) {
             String token = UUID.randomUUID().toString();
             user.setResetPasswordToken(token);
-            user.setResetPasswordTokenExpiry(LocalDateTime.now().plusHours(1));
+            user.setResetPasswordTokenExpiry(LocalDateTime.now().plusMinutes(15));
             userRepository.save(user);
 
-            return ResponseEntity.ok(Map.of(
-                "message", "Password reset instructions have been generated.",
-                "resetToken", token
-            ));
+            String baseUrl = (appFrontendUrl != null && !appFrontendUrl.isBlank())
+                    ? appFrontendUrl.replaceAll("/+$", "")
+                    : "http://localhost:4200";
+            String resetUrl = baseUrl + "/reset-password?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8);
+
+            try {
+                emailService.sendPasswordResetEmail(user, resetUrl);
+            } catch (Exception ignored) {
+            }
         }
 
-        return ResponseEntity.ok(Map.of("message", "If your email is registered, you will receive password reset instructions."));
+        return ResponseEntity.ok(Map.of(
+            "message", "We'll send password-reset instructions to your email address if an account exists."
+        ));
     }
 
     @PostMapping("/reset-password")

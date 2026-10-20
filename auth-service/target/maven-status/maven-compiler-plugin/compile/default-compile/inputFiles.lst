@@ -5,7 +5,11 @@ C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Proje
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\controller\AuthController.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\BusOperatorRegisterRequest.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\TravellerRegisterRequest.java
+C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\service\PasswordResetEmailTemplate.java
+C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\service\EmailService.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\ResetPasswordRequest.java
+C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\service\ResendEmailService.java
+C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\service\EmailAssetProvider.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\ForgotPasswordRequest.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\model\Role.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\AuthResponse.java

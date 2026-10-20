@@ -25,30 +25,57 @@ import { AuthService } from '../../services/auth.service';
               <p class="text-muted small">Enter your registered email address and we'll send reset instructions.</p>
             </div>
 
-            <div *ngIf="successMessage" class="alert alert-success py-2 small mb-4">
-              <i class="fa-solid fa-circle-check me-1"></i> {{ successMessage }}
-              <div *ngIf="resetToken" class="mt-2 p-2 bg-light rounded text-break font-monospace small">
-                <strong>Reset Token:</strong> {{ resetToken }}<br>
-                <a [routerLink]="['/reset-password']" [queryParams]="{token: resetToken}" class="btn btn-sm btn-primary mt-2">Proceed to Reset Password</a>
+            <!-- Success Confirmation State (Generic to prevent account enumeration) -->
+            <div *ngIf="successMessage" class="alert alert-success p-3 rounded-3 mb-4">
+              <div class="d-flex align-items-start">
+                <i class="fa-solid fa-circle-check fs-5 text-success me-2 mt-1"></i>
+                <div>
+                  <div class="fw-bold mb-1">Check Your Email</div>
+                  <div class="small leading-normal">{{ successMessage }}</div>
+                  <div class="small text-muted mt-2">
+                    For your security, the reset link expires in <strong>15 minutes</strong> and can be used only once.
+                  </div>
+                </div>
+              </div>
+              <div class="mt-3 pt-2 border-top border-success-subtle d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-success" (click)="resetForm()">
+                  Send to another email
+                </button>
+                <a routerLink="/login" class="btn btn-sm btn-success">
+                  Return to Login
+                </a>
               </div>
             </div>
 
-            <div *ngIf="errorMessage" class="alert alert-danger py-2 small mb-4">
-              <i class="fa-solid fa-circle-exclamation me-1"></i> {{ errorMessage }}
+            <!-- Error Banner -->
+            <div *ngIf="errorMessage" class="alert alert-danger py-2.5 small mb-4 d-flex align-items-center">
+              <i class="fa-solid fa-circle-exclamation me-2 fs-6"></i>
+              <span>{{ errorMessage }}</span>
             </div>
 
+            <!-- Request Form -->
             <form *ngIf="!successMessage" (ngSubmit)="onSubmit()">
               <div class="mb-4">
-                <label class="form-label fw-semibold text-secondary small">Email Address</label>
+                <label class="form-label fw-semibold text-secondary small" for="forgotEmail">Email Address</label>
                 <div class="input-group">
                   <span class="input-group-text bg-light text-muted border-end-0"><i class="fa-regular fa-envelope"></i></span>
-                  <input type="email" class="form-control border-start-0" [(ngModel)]="email" name="email" required placeholder="you@example.com">
+                  <input
+                    id="forgotEmail"
+                    type="email"
+                    class="form-control border-start-0"
+                    [(ngModel)]="email"
+                    (input)="clearError()"
+                    name="email"
+                    required
+                    placeholder="you@example.com"
+                    autocomplete="email"
+                  >
                 </div>
               </div>
 
               <button type="submit" class="btn btn-primary w-100 py-2.5 fw-bold rounded-3 shadow-sm" [disabled]="loading">
                 <span *ngIf="loading" class="spinner-border spinner-border-sm me-2"></span>
-                Send Reset Token
+                <span>{{ loading ? 'Sending Instructions...' : 'Send Reset Instructions' }}</span>
               </button>
             </form>
           </div>
@@ -62,13 +89,30 @@ export class ForgotPasswordComponent {
   loading = false;
   successMessage = '';
   errorMessage = '';
-  resetToken = '';
 
   constructor(private authService: AuthService) {}
 
+  clearError() {
+    if (this.errorMessage) {
+      this.errorMessage = '';
+    }
+  }
+
+  resetForm() {
+    this.email = '';
+    this.successMessage = '';
+    this.errorMessage = '';
+  }
+
   onSubmit() {
-    if (!this.email) {
+    const trimmedEmail = this.email ? this.email.trim().toLowerCase() : '';
+    if (!trimmedEmail) {
       this.errorMessage = 'Please enter your email address.';
+      return;
+    }
+
+    if (!trimmedEmail.includes('@') || !trimmedEmail.includes('.')) {
+      this.errorMessage = 'Please enter a valid email address.';
       return;
     }
 
@@ -76,17 +120,14 @@ export class ForgotPasswordComponent {
     this.errorMessage = '';
     this.successMessage = '';
 
-    this.authService.forgotPassword(this.email).subscribe({
+    this.authService.forgotPassword(trimmedEmail).subscribe({
       next: (res) => {
         this.loading = false;
-        this.successMessage = res.message || 'Password reset request generated.';
-        if (res.resetToken) {
-          this.resetToken = res.resetToken;
-        }
+        this.successMessage = res.message || "We'll send password-reset instructions to your email address if an account exists.";
       },
       error: (err) => {
         this.loading = false;
-        this.errorMessage = err.error?.message || err.message || 'Request failed. Please try again.';
+        this.errorMessage = err.error?.message || err.message || 'Unable to process your request. Please check your connection and try again.';
       }
     });
   }

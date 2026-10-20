@@ -6,6 +6,7 @@ import com.traveleasy.auth.model.Role;
 import com.traveleasy.auth.model.User;
 import com.traveleasy.auth.repository.UserRepository;
 import com.traveleasy.auth.security.JwtUtil;
+import com.traveleasy.auth.service.EmailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +44,9 @@ public class AuthControllerTest {
 
     @MockBean
     private JwtUtil jwtUtil;
+
+    @MockBean
+    private EmailService emailService;
 
     @BeforeEach
     void setUp() {
