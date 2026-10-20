@@ -561,8 +561,7 @@ import { AuthService } from '../../services/auth.service';
 
     /* Page container with exact background image */
     .wizard-page {
-      flex: 1 0 auto;
-      min-height: calc(100vh - 140px);
+      min-height: 100vh;
       background-image: url('/assets/images/bus-operator-registration-background.png');
       background-size: cover;
       background-position: center bottom;
@@ -570,7 +569,6 @@ import { AuthService } from '../../services/auth.service';
       display: flex;
       align-items: center;
       position: relative;
-      padding-top: 86px;
     }
 
     .wizard-container {

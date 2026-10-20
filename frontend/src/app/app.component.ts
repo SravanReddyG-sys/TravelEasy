@@ -12,8 +12,8 @@ import { filter } from 'rxjs/operators';
   imports: [CommonModule, RouterOutlet, NavbarComponent, HeaderComponent, FooterComponent],
   template: `
     <div class="d-flex flex-column min-vh-100 position-relative">
-      <!-- Standard Travel Easy Header on all public-facing pages -->
-      <app-header *ngIf="isPublicPage" [transparent]="true"></app-header>
+      <!-- Standard Travel Easy Header on public-facing pages (excluding dedicated auth/registration wizard pages) -->
+      <app-header *ngIf="showPublicHeaderFooter" [transparent]="true"></app-header>
 
       <!-- Role Console Navbar on authenticated dashboards -->
       <app-navbar *ngIf="isDashboardPage"></app-navbar>
@@ -22,8 +22,8 @@ import { filter } from 'rxjs/operators';
         <router-outlet></router-outlet>
       </main>
 
-      <!-- Standard Travel Easy Footer on all public-facing pages -->
-      <app-footer *ngIf="isPublicPage"></app-footer>
+      <!-- Standard Travel Easy Footer on public-facing pages (excluding dedicated auth/registration wizard pages) -->
+      <app-footer *ngIf="showPublicHeaderFooter"></app-footer>
 
       <!-- Role Console Footer on authenticated dashboards -->
       <footer *ngIf="isDashboardPage" class="bg-dark text-white py-4 mt-auto border-top border-secondary">
@@ -39,6 +39,7 @@ export class AppComponent {
   isHomePage = true;
   isDashboardPage = false;
   isPublicPage = true;
+  showPublicHeaderFooter = true;
 
   constructor(private router: Router) {
     this.updateLayout(this.router.url);
@@ -56,5 +57,13 @@ export class AppComponent {
     this.isDashboardPage = path === '/customer' || path === '/bus-operator' || path === '/hotel-manager' || path === '/admin';
     this.isPublicPage = !this.isDashboardPage;
     this.isHomePage = path === '' || path === '/home';
+
+    const excludedHeaderFooterPages = [
+      '/login',
+      '/register/traveller',
+      '/register/bus-operator',
+      '/register/hotel-partner'
+    ];
+    this.showPublicHeaderFooter = this.isPublicPage && !excludedHeaderFooterPages.includes(path);
   }
 }

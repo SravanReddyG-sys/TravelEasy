@@ -250,8 +250,7 @@ import { AuthService } from '../../services/auth.service';
     /* ================= PAGE CONTAINER ================= */
     .te-reg-page {
       display: flex;
-      flex: 1 0 auto;
-      min-height: calc(100vh - 140px);
+      min-height: 100vh;
       width: 100%;
       background-color: #f1f6fd;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -275,7 +274,7 @@ import { AuthService } from '../../services/auth.service';
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      padding: 92px 52px 44px;
+      padding: 44px 52px;
       overflow: hidden;
       flex-shrink: 0;
     }
@@ -402,7 +401,7 @@ import { AuthService } from '../../services/auth.service';
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 92px 36px 36px;
+      padding: 36px 36px;
       background-color: #f1f6fd;
       position: relative;
       z-index: 2;
@@ -739,10 +738,10 @@ import { AuthService } from '../../services/auth.service';
     /* ================= RESPONSIVE ADAPTATIONS ================= */
     @media (max-width: 1080px) {
       .te-left-panel {
-        padding: 86px 36px 36px;
+        padding: 36px 36px;
       }
       .te-right-panel {
-        padding: 86px 28px 28px;
+        padding: 36px 28px;
       }
       .te-hero-title {
         font-size: 38px;
@@ -759,11 +758,11 @@ import { AuthService } from '../../services/auth.service';
       .te-left-panel {
         width: 100%;
         min-height: 300px;
-        padding: 80px 24px 32px;
+        padding: 32px 24px;
       }
       .te-right-panel {
         width: 100%;
-        padding: 32px 16px;
+        padding: 24px 16px;
       }
       .te-reg-card {
         max-width: 520px;

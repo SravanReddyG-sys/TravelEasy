@@ -73,27 +73,31 @@ assert(fs.existsSync(appCompPath), 'AppComponent file exists');
 const appCompSrc = fs.readFileSync(appCompPath, 'utf8');
 
 assert(appCompSrc.includes('HeaderComponent') && appCompSrc.includes('FooterComponent'), 'AppComponent imports HeaderComponent and FooterComponent');
-assert(appCompSrc.includes('<app-header *ngIf="isPublicPage" [transparent]="true"></app-header>'), 'AppComponent renders app-header with transparent mode on public pages');
-assert(appCompSrc.includes('<app-footer *ngIf="isPublicPage"></app-footer>'), 'AppComponent renders app-footer on all public pages');
+assert(appCompSrc.includes('<app-header *ngIf="showPublicHeaderFooter" [transparent]="true"></app-header>'), 'AppComponent renders app-header when showPublicHeaderFooter is true');
+assert(appCompSrc.includes('<app-footer *ngIf="showPublicHeaderFooter"></app-footer>'), 'AppComponent renders app-footer when showPublicHeaderFooter is true');
 assert(appCompSrc.includes('<app-navbar *ngIf="isDashboardPage"></app-navbar>'), 'AppComponent preserves app-navbar for authenticated dashboard consoles');
 assert(appCompSrc.includes('isDashboardPage') && appCompSrc.includes('/customer') && appCompSrc.includes('/bus-operator') && appCompSrc.includes('/hotel-manager') && appCompSrc.includes('/admin'), 'Dashboards correctly identified to prevent forcing Home header onto role consoles');
+assert(appCompSrc.includes('/login') && appCompSrc.includes('/register/traveller') && appCompSrc.includes('/register/bus-operator') && appCompSrc.includes('/register/hotel-partner'), 'AppComponent excludes header and footer from login and registration wizard pages');
 
 // --- Test 4: Route Coverage Verification ---
 console.log('\n--- Test 4: Public vs Dashboard Route Coverage ---');
-const publicRoutes = [
+const headerFooterPublicRoutes = [
   '/',
   '/home',
-  '/login',
   '/register',
-  '/register/traveller',
-  '/register/bus-operator',
-  '/register/hotel-partner',
   '/forgot-password',
   '/reset-password',
   '/account-pending',
   '/application-details',
   '/account-rejected',
   '/account-suspended'
+];
+
+const excludedPublicRoutes = [
+  '/login',
+  '/register/traveller',
+  '/register/bus-operator',
+  '/register/hotel-partner'
 ];
 
 const dashboardRoutes = [
@@ -109,19 +113,34 @@ function evaluateRoute(url) {
   const isDashboardPage = path === '/customer' || path === '/bus-operator' || path === '/hotel-manager' || path === '/admin';
   const isPublicPage = !isDashboardPage;
   const isHomePage = path === '' || path === '/home';
-  return { isDashboardPage, isPublicPage, isHomePage };
+  const excludedHeaderFooterPages = [
+    '/login',
+    '/register/traveller',
+    '/register/bus-operator',
+    '/register/hotel-partner'
+  ];
+  const showPublicHeaderFooter = isPublicPage && !excludedHeaderFooterPages.includes(path);
+  return { isDashboardPage, isPublicPage, isHomePage, showPublicHeaderFooter };
 }
 
-publicRoutes.forEach(r => {
+headerFooterPublicRoutes.forEach(r => {
   const state = evaluateRoute(r);
-  assert(state.isPublicPage === true, `Route ${r} classified as PUBLIC PAGE (shows Travel Easy Header & Footer)`);
+  assert(state.isPublicPage === true, `Route ${r} classified as PUBLIC PAGE`);
+  assert(state.showPublicHeaderFooter === true, `Route ${r} SHOWS Travel Easy Header & Footer`);
+  assert(state.isDashboardPage === false, `Route ${r} is NOT treated as dashboard`);
+});
+
+excludedPublicRoutes.forEach(r => {
+  const state = evaluateRoute(r);
+  assert(state.isPublicPage === true, `Route ${r} is a public route`);
+  assert(state.showPublicHeaderFooter === false, `Route ${r} EXCLUDES Travel Easy Header & Footer`);
   assert(state.isDashboardPage === false, `Route ${r} is NOT treated as dashboard`);
 });
 
 dashboardRoutes.forEach(r => {
   const state = evaluateRoute(r);
   assert(state.isDashboardPage === true, `Route ${r} classified as DASHBOARD (preserves role console navigation)`);
-  assert(state.isPublicPage === false, `Route ${r} does NOT receive public Home header/footer`);
+  assert(state.showPublicHeaderFooter === false, `Route ${r} does NOT receive public Home header/footer`);
 });
 
 // Verify transparent header configuration
