@@ -611,62 +611,77 @@ export interface Destination {
 
           <!-- #################### TAB 1: BUS BOOKING #################### -->
           <div *ngIf="activeTab === 'bus'">
-            <!-- Page Title and Subtitle -->
-            <div class="mb-4">
-              <h3 class="fw-bold text-navy mb-1">Book Buses</h3>
-              <p class="text-secondary small mb-0">Find and book your bus tickets for a safe and comfortable journey</p>
-            </div>
-
-            <!-- Bus Search Banner -->
+            <!-- Bus Search Scenic Banner -->
             <div class="bus-search-banner mb-4 shadow-sm">
-              <div class="bus-search-form-wrap">
-                <form (ngSubmit)="onSearchBuses()">
-                  <div class="row g-2 align-items-center">
-                    
-                    <!-- From -->
-                    <div class="col-lg-3 col-md-5">
-                      <div class="bus-input-group">
-                        <label><i class="fa-solid fa-location-dot text-primary me-1"></i>From</label>
-                        <input type="text" [(ngModel)]="busOrigin" name="busOrigin" placeholder="Enter origin city" required>
+              <div class="bus-banner-content">
+                <!-- Page Title and Subtitle -->
+                <div class="bus-banner-header mb-3">
+                  <h3 class="bus-banner-title mb-1">Book Buses</h3>
+                  <p class="bus-banner-subtitle mb-0">Find and book your bus tickets for a safe and comfortable journey</p>
+                </div>
+
+                <!-- White Search Form Panel -->
+                <div class="bus-search-card">
+                  <form (ngSubmit)="onSearchBuses()">
+                    <div class="bus-search-row">
+                      
+                      <!-- From -->
+                      <div class="bus-control-item bus-control-from">
+                        <div class="bus-input-box">
+                          <label for="busOriginInput"><i class="fa-solid fa-location-dot text-primary me-1"></i>From</label>
+                          <div class="bus-input-inner">
+                            <input id="busOriginInput" type="text" [(ngModel)]="busOrigin" name="busOrigin" placeholder="Enter origin city" required>
+                            <button type="button" *ngIf="busOrigin" (click)="clearBusOrigin()" class="btn-clear-field" title="Clear origin" aria-label="Clear origin">
+                              <i class="fa-solid fa-xmark"></i>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <!-- Swap Origin & Destination -->
+                      <div class="bus-control-swap">
+                        <button type="button" class="btn-swap-cities" (click)="swapBusCities()" title="Swap Origin and Destination" aria-label="Swap cities">
+                          <i class="fa-solid fa-arrow-right-arrow-left"></i>
+                        </button>
+                      </div>
+
+                      <!-- To -->
+                      <div class="bus-control-item bus-control-to">
+                        <div class="bus-input-box">
+                          <label for="busDestinationInput"><i class="fa-solid fa-location-dot text-danger me-1"></i>To</label>
+                          <div class="bus-input-inner">
+                            <input id="busDestinationInput" type="text" [(ngModel)]="busDestination" name="busDestination" placeholder="Enter destination city" required>
+                            <button type="button" *ngIf="busDestination" (click)="clearBusDestination()" class="btn-clear-field" title="Clear destination" aria-label="Clear destination">
+                              <i class="fa-solid fa-xmark"></i>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Journey Date -->
+                      <div class="bus-control-item bus-control-date">
+                        <div class="bus-input-box">
+                          <label for="busDateInput"><i class="fa-solid fa-calendar-days text-primary me-1"></i>Journey Date</label>
+                          <div class="bus-input-inner">
+                            <input id="busDateInput" type="date" [(ngModel)]="busDate" name="busDate" required>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Search Button -->
+                      <div class="bus-control-action">
+                        <button type="submit" class="btn-search-buses" [disabled]="isSearchingBuses">
+                          <i *ngIf="!isSearchingBuses" class="fa-solid fa-magnifying-glass"></i>
+                          <span *ngIf="isSearchingBuses" class="spinner-border spinner-border-sm me-1"></span>
+                          <span>{{ isSearchingBuses ? 'Searching...' : 'Search Buses' }}</span>
+                        </button>
                       </div>
                     </div>
-                    
-                    <!-- Swap Origin & Destination -->
-                    <div class="col-auto d-flex justify-content-center">
-                      <button type="button" class="btn-swap-cities" (click)="swapBusCities()" title="Swap Origin and Destination" aria-label="Swap cities">
-                        <i class="fa-solid fa-arrow-right-arrow-left"></i>
-                      </button>
-                    </div>
-
-                    <!-- To -->
-                    <div class="col-lg-3 col-md-5">
-                      <div class="bus-input-group">
-                        <label><i class="fa-solid fa-location-pin text-danger me-1"></i>To</label>
-                        <input type="text" [(ngModel)]="busDestination" name="busDestination" placeholder="Enter destination city" required>
-                      </div>
-                    </div>
-
-                    <!-- Journey Date -->
-                    <div class="col-lg-3 col-md-6">
-                      <div class="bus-input-group">
-                        <label><i class="fa-solid fa-calendar-days text-primary me-1"></i>Journey Date</label>
-                        <input type="date" [(ngModel)]="busDate" name="busDate" required>
-                      </div>
-                    </div>
-
-                    <!-- Search Button -->
-                    <div class="col-lg-2 col-md-6 d-grid">
-                      <button type="submit" class="btn-search-buses" [disabled]="isSearchingBuses">
-                        <i *ngIf="!isSearchingBuses" class="fa-solid fa-magnifying-glass"></i>
-                        <span *ngIf="isSearchingBuses" class="spinner-border spinner-border-sm me-1"></span>
-                        <span>{{ isSearchingBuses ? 'Searching...' : 'Search Buses' }}</span>
-                      </button>
-                    </div>
-                  </div>
-                </form>
+                  </form>
+                </div>
 
                 <!-- Validation Error Message -->
-                <div *ngIf="busSearchError" class="alert alert-danger py-2 px-3 mt-3 mb-0 rounded-3 small">
+                <div *ngIf="busSearchError" class="alert alert-danger py-2 px-3 mt-3 mb-0 rounded-3 small bus-search-error-alert">
                   <i class="fa-solid fa-circle-exclamation me-1"></i> {{ busSearchError }}
                 </div>
               </div>
@@ -2506,91 +2521,243 @@ export interface Destination {
       z-index: 1040;
     }
 
-    /* ==================== BOOK BUSES APPROVED DESIGN STYLES ==================== */
+    /* ==================== BOOK BUSES APPROVED SCENIC SEARCH PANEL ==================== */
     .bus-search-banner {
-      background: linear-gradient(115deg, #F0F6FE 0%, #E8F2FD 50%, #DCEDFD 100%);
+      background-color: #F0F6FE;
+      background-image: 
+        linear-gradient(90deg, rgba(240, 246, 254, 0.96) 0%, rgba(240, 246, 254, 0.90) 35%, rgba(240, 246, 254, 0.35) 65%, rgba(240, 246, 254, 0) 80%),
+        url('/assets/images/scenic-search-panel.png');
+      background-position: right center;
+      background-size: cover;
+      background-repeat: no-repeat;
       border: 1px solid #D4E5F9;
       border-radius: 20px;
       position: relative;
       overflow: hidden;
-      padding: 24px 28px;
+      padding: 24px 30px;
+      min-height: 180px;
     }
-    .bus-search-form-wrap {
+    .bus-banner-content {
       position: relative;
       z-index: 2;
     }
-    .bus-input-group {
-      background: #FFFFFF;
-      border: 1px solid var(--border-subtle);
-      border-radius: 12px;
-      padding: 6px 14px;
-      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    .bus-banner-header {
+      margin-bottom: 14px;
     }
-    .bus-input-group:focus-within {
-      border-color: var(--primary-blue);
+    .bus-banner-title {
+      color: #0F172A;
+      font-size: 1.45rem;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+    }
+    .bus-banner-subtitle {
+      color: #64748B;
+      font-size: 0.88rem;
+      font-weight: 500;
+    }
+    .bus-search-card {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 14px;
+      padding: 8px 10px;
+      box-shadow: 0 4px 18px rgba(15, 23, 42, 0.07);
+      max-width: 860px;
+    }
+    .bus-search-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+    }
+    .bus-control-item {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .bus-control-swap {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .bus-control-action {
+      flex: 0 0 auto;
+    }
+    .bus-input-box {
+      background: #F8FAFC;
+      border: 1px solid #E2EAF4;
+      border-radius: 10px;
+      padding: 6px 12px;
+      height: 52px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+    }
+    .bus-input-box:focus-within {
+      background: #FFFFFF;
+      border-color: #0875E1;
       box-shadow: 0 0 0 3px rgba(8, 117, 225, 0.12);
     }
-    .bus-input-group label {
-      font-size: 0.72rem;
+    .bus-input-box label {
+      font-size: 0.70rem;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       font-weight: 700;
       color: #64748B;
       margin-bottom: 2px;
-      display: block;
+      display: flex;
+      align-items: center;
+      user-select: none;
+      cursor: pointer;
     }
-    .bus-input-group input {
+    .bus-input-inner {
+      display: flex;
+      align-items: center;
+      position: relative;
+    }
+    .bus-input-inner input {
       border: none;
       padding: 0;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
       font-weight: 600;
-      color: var(--dark-navy);
+      color: #0F172A;
       background: transparent;
       width: 100%;
+      line-height: 1.2;
     }
-    .bus-input-group input:focus {
+    .bus-input-inner input:focus {
       outline: none;
       box-shadow: none;
     }
-    .btn-swap-cities {
-      width: 38px;
-      height: 38px;
-      border-radius: 50%;
-      background: #FFFFFF;
-      border: 1px solid #D4E5F9;
-      color: var(--primary-blue);
+    .bus-input-inner input[type="date"] {
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .btn-clear-field {
+      background: transparent;
+      border: none;
+      color: #94A3B8;
+      padding: 0 2px;
+      cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
+      font-size: 0.75rem;
+      line-height: 1;
+      transition: color 0.15s ease;
+    }
+    .btn-clear-field:hover {
+      color: #334155;
+    }
+    .btn-swap-cities {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #FFFFFF;
+      border: 1px solid #D4E5F9;
+      color: #0875E1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.82rem;
       transition: all 0.2s ease;
       box-shadow: 0 2px 6px rgba(8, 117, 225, 0.08);
       cursor: pointer;
+      padding: 0;
     }
     .btn-swap-cities:hover {
-      background-color: var(--primary-blue);
+      background-color: #0875E1;
       color: #FFFFFF;
       transform: rotate(180deg);
     }
     .btn-search-buses {
-      background-color: var(--primary-blue);
+      background-color: #0875E1;
       color: #FFFFFF;
       font-weight: 700;
-      font-size: 0.95rem;
-      border-radius: 12px;
-      padding: 12px 24px;
+      font-size: 0.92rem;
+      border-radius: 10px;
+      padding: 0 22px;
       border: none;
       height: 52px;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
+      white-space: nowrap;
       transition: all 0.2s ease;
       box-shadow: 0 4px 14px rgba(8, 117, 225, 0.25);
+      cursor: pointer;
     }
-    .btn-search-buses:hover {
-      background-color: #065CB5;
-      transform: translateY(-1px);
+    .btn-search-buses:hover:not(:disabled) {
+      background-color: #0662be;
       box-shadow: 0 6px 18px rgba(8, 117, 225, 0.35);
+      transform: translateY(-1px);
+    }
+    .btn-search-buses:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+    .bus-search-error-alert {
+      max-width: 860px;
+    }
+
+    @media (max-width: 991.98px) {
+      .bus-search-banner {
+        padding: 20px;
+      }
+      .bus-search-card {
+        max-width: 100%;
+      }
+      .bus-search-row {
+        flex-wrap: wrap;
+      }
+      .bus-control-item.bus-control-from {
+        flex: 1 1 calc(50% - 30px);
+      }
+      .bus-control-swap {
+        flex: 0 0 auto;
+      }
+      .bus-control-item.bus-control-to {
+        flex: 1 1 calc(50% - 30px);
+      }
+      .bus-control-item.bus-control-date {
+        flex: 1 1 calc(60% - 10px);
+      }
+      .bus-control-action {
+        flex: 1 1 calc(40% - 10px);
+      }
+      .btn-search-buses {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 767.98px) {
+      .bus-search-banner {
+        padding: 16px;
+      }
+      .bus-banner-title {
+        font-size: 1.25rem;
+      }
+      .bus-banner-subtitle {
+        font-size: 0.82rem;
+      }
+      .bus-search-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+      }
+      .bus-control-item,
+      .bus-control-action {
+        width: 100%;
+        flex: 1 1 auto;
+      }
+      .bus-control-swap {
+        align-self: center;
+        margin: 2px 0;
+      }
+      .btn-search-buses {
+        width: 100%;
+      }
     }
     /* Filter Panel */
     .bus-filter-card {
@@ -3456,6 +3623,14 @@ export class CustomerDashboardComponent implements OnInit {
     const temp = this.busOrigin;
     this.busOrigin = this.busDestination;
     this.busDestination = temp;
+  }
+
+  clearBusOrigin() {
+    this.busOrigin = '';
+  }
+
+  clearBusDestination() {
+    this.busDestination = '';
   }
 
   searchQuickRoute(origin: string, dest: string) {
