@@ -14,6 +14,10 @@ export class BusService {
     return this.http.post(this.apiUrl, busData);
   }
 
+  getAllBuses(): Observable<any[]> {
+    return this.http.get<any[]>(this.apiUrl);
+  }
+
   getBusesByOperator(operatorId: number): Observable<any[]> {
     return this.http.get<any[]>(`${this.apiUrl}/operator/${operatorId}`);
   }
