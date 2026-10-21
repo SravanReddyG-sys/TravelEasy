@@ -1,5 +1,6 @@
 com\traveleasy\booking\BookingServiceApplication.class
-com\traveleasy\booking\model\Booking$BookingBuilder.class
 com\traveleasy\booking\model\Booking.class
+com\traveleasy\booking\model\Booking$BookingBuilder.class
 com\traveleasy\booking\repository\BookingRepository.class
+com\traveleasy\booking\service\BookingSecurityService.class
 com\traveleasy\booking\controller\BookingController.class

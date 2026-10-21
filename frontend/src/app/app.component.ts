@@ -54,8 +54,9 @@ export class AppComponent {
 
   private updateLayout(url: string) {
     const path = url.split('?')[0].split('#')[0].replace(/\/+$/, '');
-    this.isDashboardPage = path === '/customer' || path === '/bus-operator' || path === '/hotel-manager' || path === '/admin';
-    this.isPublicPage = !this.isDashboardPage;
+    const isCustomerPage = path === '/customer' || path.startsWith('/customer/');
+    this.isDashboardPage = !isCustomerPage && (path === '/bus-operator' || path === '/hotel-manager' || path === '/admin');
+    this.isPublicPage = !isCustomerPage && !this.isDashboardPage;
     this.isHomePage = path === '' || path === '/home';
 
     const excludedHeaderFooterPages = [

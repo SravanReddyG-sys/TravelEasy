@@ -126,6 +126,25 @@ services:
     networks:
       - traveleasy-network
 
+  traveller-service:
+    build: ./traveller-service
+    container_name: traveleasy-traveller-service
+    restart: always
+    ports:
+      - "8088:8088"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysqldb:3306/traveleasy_traveller_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - BOOKING_SERVICE_URL=http://booking-service:8084
+      - BUS_SERVICE_URL=http://bus-service:8082
+      - HOTEL_SERVICE_URL=http://hotel-service:8083
+    depends_on:
+      - mysqldb
+      - booking-service
+    networks:
+      - traveleasy-network
+
   api-gateway:
     build: ./api-gateway
     container_name: traveleasy-api-gateway
@@ -140,6 +159,7 @@ services:
       - PAYMENT_SERVICE_URL=http://payment-service:8085
       - NOTIFICATION_SERVICE_URL=http://notification-service:8086
       - REVIEW_SERVICE_URL=http://review-service:8087
+      - TRAVELLER_SERVICE_URL=http://traveller-service:8088
     depends_on:
       - auth-service
       - bus-service
@@ -148,6 +168,7 @@ services:
       - payment-service
       - notification-service
       - review-service
+      - traveller-service
     networks:
       - traveleasy-network
 

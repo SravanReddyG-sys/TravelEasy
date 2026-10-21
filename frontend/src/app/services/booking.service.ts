@@ -18,6 +18,14 @@ export class BookingService {
     return this.http.get<any[]>(`${this.apiUrl}/bookings/customer/${customerId}`);
   }
 
+  getBookingById(id: number): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/bookings/${id}`);
+  }
+
+  getBookingByRef(bookingRef: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/bookings/ref/${bookingRef}`);
+  }
+
   getProviderBookings(providerId: number): Observable<any[]> {
     return this.http.get<any[]>(`${this.apiUrl}/bookings/provider/${providerId}`);
   }

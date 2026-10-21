@@ -33,4 +33,8 @@ export class BusService {
   bookSeats(scheduleId: number, seatNumbers: string[]): Observable<any> {
     return this.http.put(`${this.apiUrl}/schedules/${scheduleId}/book-seats`, seatNumbers);
   }
+
+  releaseSeats(scheduleId: number, seatNumbers: string[]): Observable<any> {
+    return this.http.put(`${this.apiUrl}/schedules/${scheduleId}/release-seats`, seatNumbers);
+  }
 }

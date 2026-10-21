@@ -18,10 +18,26 @@ import java.util.UUID;
 public class BookingController {
 
     private final BookingRepository bookingRepository;
+    private final com.traveleasy.booking.service.BookingSecurityService securityService;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @PostMapping
-    public ResponseEntity<Booking> createBooking(@RequestBody Booking booking) {
+    public ResponseEntity<?> createBooking(@RequestBody Booking booking,
+                                           @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7).trim();
+            if (securityService.validateToken(token)) {
+                Long callerUserId = securityService.extractUserId(token);
+                String callerEmail = securityService.extractEmail(token);
+                if (callerUserId != null) {
+                    booking.setCustomerId(callerUserId);
+                }
+                if (callerEmail != null && (booking.getCustomerEmail() == null || booking.getCustomerEmail().isEmpty())) {
+                    booking.setCustomerEmail(callerEmail);
+                }
+            }
+        }
+
         if (booking.getBookingRef() == null) {
             booking.setBookingRef("BKG-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
         }
@@ -33,7 +49,23 @@ public class BookingController {
     }
 
     @GetMapping("/customer/{customerId}")
-    public ResponseEntity<List<Booking>> getCustomerBookings(@PathVariable Long customerId) {
+    public ResponseEntity<?> getCustomerBookings(@PathVariable Long customerId,
+                                                @RequestHeader(value = "Authorization", required = false) String authHeader,
+                                                @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7).trim();
+            if (!securityService.validateToken(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Invalid or expired token"));
+            }
+            Long callerUserId = securityService.extractUserId(token);
+            String callerRole = securityService.extractRole(token);
+            boolean isAdmin = "ROLE_ADMIN".equalsIgnoreCase(callerRole);
+            boolean isInternal = "traveller-service".equalsIgnoreCase(internalService);
+
+            if (!isAdmin && !isInternal && callerUserId != null && !callerUserId.equals(customerId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Access denied to customer bookings"));
+            }
+        }
         return ResponseEntity.ok(bookingRepository.findByCustomerIdOrderByBookingDateDesc(customerId));
     }
 
