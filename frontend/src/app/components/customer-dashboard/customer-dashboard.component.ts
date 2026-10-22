@@ -8,271 +8,73 @@ import { HotelService } from '../../services/hotel.service';
 import { BookingService } from '../../services/booking.service';
 import { TravellerService } from '../../services/traveller.service';
 import { User } from '../../models/user.model';
+import { Destination, DestinationAttraction } from '../../models/destination.model';
 
-export interface DestinationAttraction {
-  name: string;
-  category: string;
-  image: string;
-}
+import { TravellerHeaderComponent } from '../../shared/components/traveller-header/traveller-header.component';
+import { TravellerSidebarComponent } from '../../shared/components/traveller-sidebar/traveller-sidebar.component';
+import { BusSearchPanelComponent } from '../../features/traveller/bus-booking/components/bus-search-panel/bus-search-panel.component';
+import { BusFilterPanelComponent } from '../../features/traveller/bus-booking/components/bus-filter-panel/bus-filter-panel.component';
+import { BusResultsListComponent } from '../../features/traveller/bus-booking/components/bus-results-list/bus-results-list.component';
+import { DestinationDetailsComponent } from '../../features/traveller/destination-details/destination-details.component';
+import { HotelSearchPanelComponent } from '../../features/traveller/hotel-booking/components/hotel-search-panel/hotel-search-panel.component';
+import { HotelResultCardComponent } from '../../features/traveller/hotel-booking/components/hotel-result-card/hotel-result-card.component';
+import { MyBookingsListComponent } from '../../features/traveller/bookings/components/my-bookings-list/my-bookings-list.component';
+import { BookingDetailsModalComponent } from '../../features/traveller/bookings/components/booking-details-modal/booking-details-modal.component';
 
-export interface Destination {
-  id: string;
-  name: string;
-  tags: string;
-  category: string;
-  description: string;
-  image: string;
-  heroImage: string;
-  bestTime: string;
-  travelOptions: string;
-  attractions: DestinationAttraction[];
-}
+export { Destination, DestinationAttraction };
 
 @Component({
   selector: 'app-customer-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterModule,
+    TravellerHeaderComponent,
+    TravellerSidebarComponent,
+    BusSearchPanelComponent,
+    BusFilterPanelComponent,
+    BusResultsListComponent,
+    DestinationDetailsComponent,
+    HotelSearchPanelComponent,
+    HotelResultCardComponent,
+    MyBookingsListComponent,
+    BookingDetailsModalComponent
+  ],
   template: `
     <div class="dashboard-wrapper d-flex flex-column min-vh-100">
       
       <!-- ==================== TOP HEADER ==================== -->
-      <header class="top-header sticky-top d-flex align-items-center justify-content-between px-4 bg-white border-bottom">
-        <!-- Brand Logo (Matches Home Page) -->
-        <a class="te-brand" (click)="switchTab('dashboard')" role="button" title="Go to Dashboard">
-          <span class="te-brand-icon">
-            <i class="fa-solid fa-paper-plane"></i>
-          </span>
-          <span class="te-brand-text">Travel <span class="te-brand-blue">Easy</span></span>
-        </a>
-
-        <!-- Global Search Input with Auto-Suggestions -->
-        <div class="header-search-box position-relative">
-          <div class="search-input-pill d-flex align-items-center px-3 py-2">
-            <i class="fa-solid fa-magnifying-glass text-muted me-2"></i>
-            <input 
-              type="text" 
-              class="form-control border-0 bg-transparent p-0 shadow-none search-input" 
-              placeholder="Search destinations, hotels, buses..."
-              [(ngModel)]="searchQuery"
-              (input)="onSearchInput()"
-              (focus)="showSearchSuggestions = searchQuery.trim().length > 0"
-              (keydown.enter)="executeGlobalSearch()"
-            >
-            <button *ngIf="searchQuery" class="btn btn-link btn-sm text-muted p-0 ms-1 border-0" (click)="clearSearch()">
-              <i class="fa-solid fa-xmark"></i>
-            </button>
-          </div>
-
-          <!-- Suggestions Dropdown -->
-          <div *ngIf="showSearchSuggestions && filteredSuggestions.length > 0" class="search-suggestions-dropdown position-absolute bg-white shadow-lg rounded-3 border mt-1 w-100 py-2">
-            <div class="px-3 py-1 text-muted small fw-semibold text-uppercase">Suggestions</div>
-            <div 
-              *ngFor="let s of filteredSuggestions" 
-              class="suggestion-item px-3 py-2 d-flex align-items-center justify-content-between cursor-pointer"
-              (click)="selectSuggestion(s)"
-            >
-              <div class="d-flex align-items-center gap-2">
-                <i [class]="s.icon" class="text-primary fs-6"></i>
-                <div>
-                  <div class="fw-semibold text-dark small">{{ s.title }}</div>
-                  <small class="text-muted">{{ s.subtitle }}</small>
-                </div>
-              </div>
-              <span class="badge bg-light text-secondary border small">{{ s.type }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right Header Actions (Notifications & User Pill) -->
-        <div class="d-flex align-items-center gap-3">
-          <!-- Notification Bell -->
-          <div class="position-relative">
-            <button class="btn btn-light rounded-circle notification-btn position-relative" (click)="toggleNotifications()" title="Notifications">
-              <i class="fa-solid fa-bell text-secondary"></i>
-              <span *ngIf="unreadNotificationsCount > 0" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                {{ unreadNotificationsCount }}
-              </span>
-            </button>
-
-            <!-- Notifications Dropdown -->
-            <div *ngIf="showNotifications" class="notifications-dropdown position-absolute end-0 mt-2 bg-white shadow-lg rounded-4 border p-3">
-              <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
-                <span class="fw-bold text-dark">Notifications</span>
-                <button *ngIf="unreadNotificationsCount > 0" class="btn btn-link btn-sm text-primary p-0 text-decoration-none" (click)="markNotificationsRead()">Mark all as read</button>
-              </div>
-              <div *ngIf="notificationList.length > 0; else emptyNotifications" class="notifications-list">
-                <div *ngFor="let n of notificationList" class="notification-item p-2 rounded-3 mb-1" [class.bg-light]="!n.read">
-                  <div class="d-flex gap-2">
-                    <i [class]="n.icon" class="mt-1" [class.text-success]="n.type === 'SUCCESS'" [class.text-primary]="n.type === 'INFO'" [class.text-warning]="n.type === 'ALERT'"></i>
-                    <div>
-                      <div class="fw-semibold text-dark small">{{ n.title }}</div>
-                      <div class="text-muted smaller">{{ n.message }}</div>
-                      <div class="text-muted smaller opacity-75 mt-1">{{ n.time }}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <ng-template #emptyNotifications>
-                <div class="text-center py-3 text-muted small">
-                  <i class="fa-regular fa-bell-slash fs-4 mb-2 opacity-50 d-block"></i>
-                  No new notifications
-                </div>
-              </ng-template>
-            </div>
-          </div>
-
-          <!-- User Pill with Dropdown -->
-          <div class="position-relative">
-            <div class="user-pill d-flex align-items-center gap-2 py-1 px-2 rounded-pill border cursor-pointer bg-white" (click)="toggleUserMenu()">
-              <div class="user-avatar-circle d-flex align-items-center justify-content-center">
-                <span>{{ getUserInitials() }}</span>
-              </div>
-              <div class="user-meta d-none d-sm-block text-start">
-                <div class="fw-bold text-dark lh-1 small">{{ currentUser?.fullName || 'Traveller' }}</div>
-                <small class="text-muted smaller">Traveller</small>
-              </div>
-              <i class="fa-solid fa-chevron-down text-muted smaller ms-1"></i>
-            </div>
-
-            <!-- Profile Menu Dropdown -->
-            <div *ngIf="showUserMenu" class="user-menu-dropdown position-absolute end-0 mt-2 bg-white shadow-lg rounded-4 border py-2">
-              <div class="px-3 py-2 border-bottom">
-                <div class="fw-bold text-dark">{{ currentUser?.fullName || 'Traveller' }}</div>
-                <div class="text-muted small">{{ currentUser?.email }}</div>
-              </div>
-              <button class="dropdown-item py-2 px-3 d-flex align-items-center gap-2 text-dark" (click)="switchTab('profile'); showUserMenu = false;">
-                <i class="fa-regular fa-user text-primary"></i> My Profile
-              </button>
-              <button class="dropdown-item py-2 px-3 d-flex align-items-center gap-2 text-dark" (click)="switchTab('settings'); showUserMenu = false;">
-                <i class="fa-solid fa-gear text-secondary"></i> Travel Settings
-              </button>
-              <button class="dropdown-item py-2 px-3 d-flex align-items-center gap-2 text-dark" (click)="switchTab('support'); showUserMenu = false;">
-                <i class="fa-solid fa-headset text-success"></i> Support & Help
-              </button>
-              <div class="dropdown-divider"></div>
-              <button class="dropdown-item py-2 px-3 d-flex align-items-center gap-2 text-danger" (click)="logout()">
-                <i class="fa-solid fa-arrow-right-from-bracket"></i> Sign Out
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <app-traveller-header
+        [currentUser]="currentUser"
+        [(searchQuery)]="searchQuery"
+        [showSearchSuggestions]="showSearchSuggestions"
+        [filteredSuggestions]="filteredSuggestions"
+        [notificationList]="notificationList"
+        [unreadNotificationsCount]="unreadNotificationsCount"
+        [showNotifications]="showNotifications"
+        [showUserMenu]="showUserMenu"
+        (navigateTab)="switchTab($event)"
+        (searchInput)="onSearchInput()"
+        (searchSubmit)="executeGlobalSearch()"
+        (selectSuggestion)="selectSuggestion($event)"
+        (clearSearch)="clearSearch()"
+        (toggleNotifications)="toggleNotifications()"
+        (markNotificationsRead)="markNotificationsRead()"
+        (toggleUserMenu)="toggleUserMenu()"
+        (logout)="logout()"
+      ></app-traveller-header>
 
       <!-- ==================== MAIN BODY: SIDEBAR + CONTENT ==================== -->
       <div class="dashboard-body d-flex flex-grow-1">
         
         <!-- ==================== LEFT SIDEBAR ==================== -->
-        <aside class="left-sidebar bg-white border-end d-flex flex-column py-3" [class.collapsed]="isSidebarCollapsed">
-          <!-- Sidebar Toggle Button -->
-          <div class="d-flex align-items-center mb-3 px-3" [class.justify-content-center]="isSidebarCollapsed" [class.justify-content-between]="!isSidebarCollapsed">
-            <span *ngIf="!isSidebarCollapsed" class="fw-bold text-navy small text-uppercase tracking-wider">Navigation</span>
-            <button class="btn btn-sm btn-light border-0 sidebar-toggle-btn rounded-circle text-muted" 
-                    (click)="toggleSidebar()" 
-                    [title]="isSidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'"
-                    [attr.aria-label]="isSidebarCollapsed ? 'Expand navigation rail' : 'Collapse navigation rail'">
-              <i class="fa-solid" [class.fa-angles-right]="isSidebarCollapsed" [class.fa-angles-left]="!isSidebarCollapsed"></i>
-            </button>
-          </div>
-
-          <ul class="nav flex-column gap-1 px-2">
-            <li class="nav-item">
-              <a 
-                class="nav-link sidebar-link rounded-3" 
-                [class.active]="activeTab === 'dashboard' || activeTab === 'destination-details'" 
-                (click)="switchTab('dashboard')"
-                [title]="'Dashboard'"
-                [attr.aria-label]="'Dashboard'"
-              >
-                <i class="fa-solid fa-house" [class.me-3]="!isSidebarCollapsed"></i>
-                <span *ngIf="!isSidebarCollapsed">Dashboard</span>
-              </a>
-            </li>
-            <li class="nav-item">
-              <a 
-                class="nav-link sidebar-link rounded-3" 
-                [class.active]="activeTab === 'bus'" 
-                (click)="switchTab('bus')"
-                [title]="'Book Buses'"
-                [attr.aria-label]="'Book Buses'"
-              >
-                <i class="fa-solid fa-bus" [class.me-3]="!isSidebarCollapsed"></i>
-                <span *ngIf="!isSidebarCollapsed">Book Buses</span>
-              </a>
-            </li>
-            <li class="nav-item">
-              <a 
-                class="nav-link sidebar-link rounded-3" 
-                [class.active]="activeTab === 'hotel'" 
-                (click)="switchTab('hotel')"
-                [title]="'Book Hotels'"
-                [attr.aria-label]="'Book Hotels'"
-              >
-                <i class="fa-solid fa-hotel" [class.me-3]="!isSidebarCollapsed"></i>
-                <span *ngIf="!isSidebarCollapsed">Book Hotels</span>
-              </a>
-            </li>
-            <li class="nav-item">
-              <a 
-                class="nav-link sidebar-link rounded-3" 
-                [class.active]="activeTab === 'my-bookings'" 
-                (click)="switchTab('my-bookings')"
-                [title]="'My Bookings'"
-                [attr.aria-label]="'My Bookings'"
-              >
-                <i class="fa-solid fa-calendar-days" [class.me-3]="!isSidebarCollapsed"></i>
-                <span *ngIf="!isSidebarCollapsed">My Bookings</span>
-              </a>
-            </li>
-            <li class="nav-item">
-              <a 
-                class="nav-link sidebar-link rounded-3" 
-                [class.active]="activeTab === 'favourites'" 
-                (click)="switchTab('favourites')"
-                [title]="'Saved'"
-                [attr.aria-label]="'Saved'"
-              >
-                <i class="fa-regular fa-heart" [class.me-3]="!isSidebarCollapsed"></i>
-                <span *ngIf="!isSidebarCollapsed">Saved</span>
-              </a>
-            </li>
-            <li class="nav-item">
-              <a 
-                class="nav-link sidebar-link rounded-3" 
-                [class.active]="activeTab === 'profile'" 
-                (click)="switchTab('profile')"
-                [title]="'Profile'"
-                [attr.aria-label]="'Profile'"
-              >
-                <i class="fa-regular fa-user" [class.me-3]="!isSidebarCollapsed"></i>
-                <span *ngIf="!isSidebarCollapsed">Profile</span>
-              </a>
-            </li>
-            <li class="nav-item">
-              <a 
-                class="nav-link sidebar-link rounded-3" 
-                [class.active]="activeTab === 'settings'" 
-                (click)="switchTab('settings')"
-                [title]="'Settings'"
-                [attr.aria-label]="'Settings'"
-              >
-                <i class="fa-solid fa-gear" [class.me-3]="!isSidebarCollapsed"></i>
-                <span *ngIf="!isSidebarCollapsed">Settings</span>
-              </a>
-            </li>
-            <li class="nav-item">
-              <a 
-                class="nav-link sidebar-link rounded-3" 
-                [class.active]="activeTab === 'support'" 
-                (click)="switchTab('support')"
-                [title]="'Support'"
-                [attr.aria-label]="'Support'"
-              >
-                <i class="fa-solid fa-headphones" [class.me-3]="!isSidebarCollapsed"></i>
-                <span *ngIf="!isSidebarCollapsed">Support</span>
-              </a>
-            </li>
-          </ul>
-        </aside>
+        <app-traveller-sidebar
+          [activeTab]="activeTab"
+          [isCollapsed]="isSidebarCollapsed"
+          (switchTab)="switchTab($event)"
+          (toggleCollapse)="toggleSidebar()"
+        ></app-traveller-sidebar>
 
         <!-- ==================== MAIN CONTENT AREA ==================== -->
         <main class="main-content flex-grow-1 p-4" style="background-color: #F5F9FE;">
@@ -476,216 +278,31 @@ export interface Destination {
 
           <!-- #################### TAB: DESTINATION DETAILS #################### -->
           <div *ngIf="activeTab === 'destination-details' && selectedDestination">
-            <!-- Back Button -->
-            <button class="btn btn-link text-decoration-none text-muted mb-3 p-0 fw-semibold d-inline-flex align-items-center gap-2" (click)="switchTab('dashboard')">
-              <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
-            </button>
-
-            <!-- Destination Hero Banner -->
-            <div class="dest-details-hero position-relative rounded-4 overflow-hidden mb-4">
-              <img [src]="selectedDestination.heroImage" [alt]="selectedDestination.name" class="w-100 h-100 object-fit-cover position-absolute top-0 start-0">
-              <div class="dest-hero-overlay position-relative p-4 p-md-5 d-flex flex-column justify-content-between h-100">
-                <div class="d-flex justify-content-between align-items-start">
-                  <div>
-                    <h1 class="display-5 fw-bold text-white mb-2">{{ selectedDestination.name }}</h1>
-                    <div class="dest-tags text-white-50 fw-semibold mb-3 fs-5">{{ selectedDestination.category }}</div>
-                    <p class="dest-description text-white opacity-90 max-w-600 mb-0">
-                      {{ selectedDestination.description }}
-                    </p>
-                  </div>
-                  <!-- Save Destination Heart -->
-                  <button 
-                    class="btn-fav-large rounded-circle bg-white border-0 shadow d-flex align-items-center justify-content-center"
-                    (click)="toggleDestinationFavourite($event, selectedDestination)"
-                  >
-                    <i [class]="isDestinationFavourited(selectedDestination.name) ? 'fa-solid fa-heart text-danger fs-5' : 'fa-regular fa-heart text-secondary fs-5'"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Destination Sub-Tabs -->
-            <div class="dest-subtabs-nav d-flex gap-2 mb-4 overflow-x-auto pb-2">
-              <button 
-                *ngFor="let t of ['Overview', 'Top Attractions', 'Travel Options', 'Best Time', 'Photos']"
-                class="btn rounded-pill px-4 py-2 fw-semibold text-nowrap"
-                [class.btn-primary]="selectedDestTab === t"
-                [class.btn-light]="selectedDestTab !== t"
-                (click)="selectedDestTab = t"
-              >
-                {{ t }}
-              </button>
-            </div>
-
-            <!-- Tab Content: Overview / Top Attractions -->
-            <div class="row g-4" *ngIf="selectedDestTab === 'Overview' || selectedDestTab === 'Top Attractions'">
-              <!-- Left Column: Top Attractions Cards -->
-              <div class="col-lg-8">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                  <h4 class="fw-bold text-navy mb-0">Top Attractions</h4>
-                  <span class="text-muted small">Highlights in {{ selectedDestination.name }}</span>
-                </div>
-
-                <div class="row row-cols-1 row-cols-sm-2 g-3">
-                  <div *ngFor="let att of selectedDestination.attractions" class="col">
-                    <div class="attraction-card bg-white rounded-4 border overflow-hidden shadow-sm h-100">
-                      <div class="position-relative">
-                        <img [src]="att.image" [alt]="att.name" class="w-100 object-fit-cover" style="height: 140px;">
-                      </div>
-                      <div class="p-3">
-                        <h6 class="fw-bold text-navy mb-1">{{ att.name }}</h6>
-                        <span class="badge bg-light text-secondary border small">{{ att.category }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Right Column: Plan Your Trip Action Card -->
-              <div class="col-lg-4">
-                <div class="plan-trip-card bg-white rounded-4 p-4 border shadow-sm sticky-top" style="top: 90px;">
-                  <h5 class="fw-bold text-navy mb-4">Plan Your Trip to {{ selectedDestination.name }}</h5>
-
-                  <!-- Find Buses Action -->
-                  <div class="plan-action-box d-flex align-items-center justify-content-between p-3 rounded-4 border mb-3 cursor-pointer" (click)="findBusesToDestination(selectedDestination.name)">
-                    <div class="d-flex align-items-center gap-3">
-                      <div class="action-icon-squircle bg-primary text-white d-flex align-items-center justify-content-center">
-                        <i class="fa-solid fa-bus fs-5"></i>
-                      </div>
-                      <div>
-                        <div class="fw-bold text-navy">Find Buses</div>
-                        <small class="text-muted">Search buses to {{ selectedDestination.name }}</small>
-                      </div>
-                    </div>
-                    <i class="fa-solid fa-chevron-right text-muted"></i>
-                  </div>
-
-                  <!-- Find Hotels Action -->
-                  <div class="plan-action-box d-flex align-items-center justify-content-between p-3 rounded-4 border cursor-pointer" (click)="findHotelsInDestination(selectedDestination.name)">
-                    <div class="d-flex align-items-center gap-3">
-                      <div class="action-icon-squircle bg-indigo text-white d-flex align-items-center justify-content-center">
-                        <i class="fa-solid fa-hotel fs-5"></i>
-                      </div>
-                      <div>
-                        <div class="fw-bold text-navy">Find Hotels</div>
-                        <small class="text-muted">Search hotels in {{ selectedDestination.name }}</small>
-                      </div>
-                    </div>
-                    <i class="fa-solid fa-chevron-right text-muted"></i>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Tab Content: Travel Options -->
-            <div *ngIf="selectedDestTab === 'Travel Options'" class="card p-4 rounded-4 border bg-white shadow-sm">
-              <h5 class="fw-bold text-navy mb-3"><i class="fa-solid fa-route text-primary me-2"></i>How to Reach {{ selectedDestination.name }}</h5>
-              <p class="text-muted">{{ selectedDestination.travelOptions }}</p>
-              <div class="d-flex gap-3 mt-3">
-                <button class="btn btn-primary rounded-pill px-4 fw-bold" (click)="findBusesToDestination(selectedDestination.name)">
-                  <i class="fa-solid fa-bus me-2"></i>Check Bus Schedules
-                </button>
-                <button class="btn btn-outline-primary rounded-pill px-4 fw-bold" (click)="findHotelsInDestination(selectedDestination.name)">
-                  <i class="fa-solid fa-hotel me-2"></i>Explore Nearby Hotels
-                </button>
-              </div>
-            </div>
-
-            <!-- Tab Content: Best Time -->
-            <div *ngIf="selectedDestTab === 'Best Time'" class="card p-4 rounded-4 border bg-white shadow-sm">
-              <h5 class="fw-bold text-navy mb-3"><i class="fa-solid fa-cloud-sun text-warning me-2"></i>Best Time to Visit</h5>
-              <p class="lead text-dark fw-semibold">{{ selectedDestination.bestTime }}</p>
-              <p class="text-muted">Enjoy pleasant weather, outdoor excursions, sightseeing, and local cultural festivals during these peak months.</p>
-            </div>
-
-            <!-- Tab Content: Photos -->
-            <div *ngIf="selectedDestTab === 'Photos'" class="row g-3">
-              <div class="col-md-6">
-                <img [src]="selectedDestination.heroImage" class="w-100 rounded-4 shadow-sm object-fit-cover" style="height: 300px;" alt="Photo 1">
-              </div>
-              <div *ngFor="let att of selectedDestination.attractions" class="col-md-3">
-                <img [src]="att.image" class="w-100 rounded-4 shadow-sm object-fit-cover" style="height: 300px;" [alt]="att.name">
-              </div>
-            </div>
+            <app-destination-details
+              [destination]="selectedDestination"
+              [isFavourited]="isDestinationFavourited(selectedDestination.name)"
+              (back)="switchTab('dashboard')"
+              (toggleFavourite)="toggleDestinationFavourite($event, selectedDestination)"
+              (findBuses)="findBusesToDestination($event)"
+              (findHotels)="findHotelsInDestination($event)"
+            ></app-destination-details>
           </div>
 
           <!-- #################### TAB 1: BUS BOOKING #################### -->
           <div *ngIf="activeTab === 'bus'">
             <!-- Bus Search Scenic Banner -->
-            <div class="bus-search-banner mb-4 shadow-sm">
-              <div class="bus-banner-content">
-                <!-- Page Title and Subtitle -->
-                <div class="bus-banner-header mb-3">
-                  <h3 class="bus-banner-title mb-1">Book Buses</h3>
-                  <p class="bus-banner-subtitle mb-0">Find and book your bus tickets for a safe and comfortable journey</p>
-                </div>
-
-                <!-- White Search Form Panel -->
-                <div class="bus-search-card">
-                  <form (ngSubmit)="onSearchBuses()">
-                    <div class="bus-search-row">
-                      
-                      <!-- From -->
-                      <div class="bus-control-item bus-control-from">
-                        <div class="bus-input-box">
-                          <label for="busOriginInput"><i class="fa-solid fa-location-dot text-primary me-1"></i>From</label>
-                          <div class="bus-input-inner">
-                            <input id="busOriginInput" type="text" [(ngModel)]="busOrigin" name="busOrigin" placeholder="Enter origin city" required>
-                            <button type="button" *ngIf="busOrigin" (click)="clearBusOrigin()" class="btn-clear-field" title="Clear origin" aria-label="Clear origin">
-                              <i class="fa-solid fa-xmark"></i>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <!-- Swap Origin & Destination -->
-                      <div class="bus-control-swap">
-                        <button type="button" class="btn-swap-cities" (click)="swapBusCities()" title="Swap Origin and Destination" aria-label="Swap cities">
-                          <i class="fa-solid fa-arrow-right-arrow-left"></i>
-                        </button>
-                      </div>
-
-                      <!-- To -->
-                      <div class="bus-control-item bus-control-to">
-                        <div class="bus-input-box">
-                          <label for="busDestinationInput"><i class="fa-solid fa-location-dot text-danger me-1"></i>To</label>
-                          <div class="bus-input-inner">
-                            <input id="busDestinationInput" type="text" [(ngModel)]="busDestination" name="busDestination" placeholder="Enter destination city" required>
-                            <button type="button" *ngIf="busDestination" (click)="clearBusDestination()" class="btn-clear-field" title="Clear destination" aria-label="Clear destination">
-                              <i class="fa-solid fa-xmark"></i>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- Journey Date -->
-                      <div class="bus-control-item bus-control-date">
-                        <div class="bus-input-box">
-                          <label for="busDateInput"><i class="fa-solid fa-calendar-days text-primary me-1"></i>Journey Date</label>
-                          <div class="bus-input-inner">
-                            <input id="busDateInput" type="date" [(ngModel)]="busDate" name="busDate" required>
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- Search Button -->
-                      <div class="bus-control-action">
-                        <button type="submit" class="btn-search-buses" [disabled]="isSearchingBuses">
-                          <i *ngIf="!isSearchingBuses" class="fa-solid fa-magnifying-glass"></i>
-                          <span *ngIf="isSearchingBuses" class="spinner-border spinner-border-sm me-1"></span>
-                          <span>{{ isSearchingBuses ? 'Searching...' : 'Search Buses' }}</span>
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                </div>
-
-                <!-- Validation Error Message -->
-                <div *ngIf="busSearchError" class="alert alert-danger py-2 px-3 mt-3 mb-0 rounded-3 small bus-search-error-alert">
-                  <i class="fa-solid fa-circle-exclamation me-1"></i> {{ busSearchError }}
-                </div>
-              </div>
-            </div>
+            <app-bus-search-panel
+              [origin]="busOrigin"
+              [destination]="busDestination"
+              [journeyDate]="busDate"
+              [isSearching]="isSearchingBuses"
+              [searchError]="busSearchError"
+              (originChange)="busOrigin = $event"
+              (destinationChange)="busDestination = $event"
+              (journeyDateChange)="busDate = $event"
+              (swapCities)="swapBusCities()"
+              (search)="onSearchBuses()"
+            ></app-bus-search-panel>
 
             <!-- Loading Spinner State -->
             <div *ngIf="isSearchingBuses" class="text-center py-5">
@@ -723,435 +340,83 @@ export interface Destination {
                 
                 <!-- ================= LEFT COLUMN: FILTERS PANEL ================= -->
                 <div class="col-xl-3 col-lg-4">
-                  <div class="bus-filter-card sticky-top" style="top: 1rem; z-index: 10;">
-                    
-                    <!-- Filters Header -->
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                      <h6 class="fw-bold text-navy mb-0">
-                        <i class="fa-solid fa-sliders text-primary me-2"></i>Filters
-                      </h6>
-                      <button *ngIf="hasActiveBusFilters" 
-                              class="btn btn-link btn-sm text-primary p-0 text-decoration-none fw-semibold small" 
-                              (click)="clearAllBusFilters()">
-                        Clear All
-                      </button>
-                    </div>
-
-                    <!-- A. Bus Type -->
-                    <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleFilterSection('busType')">
-                      <span class="filter-section-title mb-0">Bus Type</span>
-                      <i class="fa-solid smaller text-muted" [class.fa-chevron-up]="filterSectionsOpen['busType']" [class.fa-chevron-down]="!filterSectionsOpen['busType']"></i>
-                    </div>
-                    <div *ngIf="filterSectionsOpen['busType']" class="mt-2">
-                      <label class="filter-checkbox-label">
-                        <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="filterBusTypeAC" (change)="applyFilters()"> AC</span>
-                        <span class="filter-count-badge">{{ countBusTypeAC }}</span>
-                      </label>
-                      <label class="filter-checkbox-label">
-                        <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="filterBusTypeNonAC" (change)="applyFilters()"> Non-AC</span>
-                        <span class="filter-count-badge">{{ countBusTypeNonAC }}</span>
-                      </label>
-                    </div>
-
-                    <div class="filter-divider"></div>
-
-                    <!-- B. Seat Type -->
-                    <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleFilterSection('seatType')">
-                      <span class="filter-section-title mb-0">Seat Type</span>
-                      <i class="fa-solid smaller text-muted" [class.fa-chevron-up]="filterSectionsOpen['seatType']" [class.fa-chevron-down]="!filterSectionsOpen['seatType']"></i>
-                    </div>
-                    <div *ngIf="filterSectionsOpen['seatType']" class="mt-2">
-                      <label class="filter-checkbox-label">
-                        <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="filterSeatTypeSeater" (change)="applyFilters()"> Seater</span>
-                        <span class="filter-count-badge">{{ countSeatTypeSeater }}</span>
-                      </label>
-                      <label class="filter-checkbox-label">
-                        <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="filterSeatTypeSleeper" (change)="applyFilters()"> Sleeper</span>
-                        <span class="filter-count-badge">{{ countSeatTypeSleeper }}</span>
-                      </label>
-                    </div>
-
-                    <div class="filter-divider"></div>
-
-                    <!-- C. Single Seat Only -->
-                    <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleFilterSection('singleSeat')">
-                      <div class="d-flex align-items-center gap-1">
-                        <span class="filter-section-title mb-0">Single Seat</span>
-                        <i class="fa-solid fa-circle-info text-muted smaller" title="Show buses with single seats or single berth layout"></i>
-                      </div>
-                      <i class="fa-solid smaller text-muted" [class.fa-chevron-up]="filterSectionsOpen['singleSeat']" [class.fa-chevron-down]="!filterSectionsOpen['singleSeat']"></i>
-                    </div>
-                    <div *ngIf="filterSectionsOpen['singleSeat']" class="mt-2">
-                      <label class="filter-checkbox-label">
-                        <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="filterSingleSeatOnly" (change)="applyFilters()"> Single Seat Only</span>
-                      </label>
-                    </div>
-
-                    <div class="filter-divider"></div>
-
-                    <!-- D. Departure Time -->
-                    <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleFilterSection('depTime')">
-                      <span class="filter-section-title mb-0">
-                        Departure Time <span class="text-muted fw-normal smaller text-capitalize">({{ busOrigin }})</span>
-                      </span>
-                      <i class="fa-solid smaller text-muted" [class.fa-chevron-up]="filterSectionsOpen['depTime']" [class.fa-chevron-down]="!filterSectionsOpen['depTime']"></i>
-                    </div>
-                    <div *ngIf="filterSectionsOpen['depTime']" class="mt-2">
-                      <label class="filter-checkbox-label">
-                        <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="depBands.before6am" (change)="applyFilters()"> Before 6:00 AM</span>
-                        <span class="filter-count-badge">{{ countDepBefore6am }}</span>
-                      </label>
-                      <label class="filter-checkbox-label">
-                        <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="depBands.from6to12" (change)="applyFilters()"> 6:00 AM – 12:00 PM</span>
-                        <span class="filter-count-badge">{{ countDep6to12 }}</span>
-                      </label>
-                      <label class="filter-checkbox-label">
-                        <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="depBands.from12to18" (change)="applyFilters()"> 12:00 PM – 6:00 PM</span>
-                        <span class="filter-count-badge">{{ countDep12to18 }}</span>
-                      </label>
-                      <label class="filter-checkbox-label">
-                        <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="depBands.after6pm" (change)="applyFilters()"> After 6:00 PM</span>
-                        <span class="filter-count-badge">{{ countDepAfter6pm }}</span>
-                      </label>
-                    </div>
-
-                    <div class="filter-divider"></div>
-
-                    <!-- E. Arrival Time -->
-                    <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleFilterSection('arrTime')">
-                      <span class="filter-section-title mb-0">
-                        Arrival Time <span class="text-muted fw-normal smaller text-capitalize">({{ busDestination }})</span>
-                      </span>
-                      <i class="fa-solid smaller text-muted" [class.fa-chevron-up]="filterSectionsOpen['arrTime']" [class.fa-chevron-down]="!filterSectionsOpen['arrTime']"></i>
-                    </div>
-                    <div *ngIf="filterSectionsOpen['arrTime']" class="mt-2">
-                      <label class="filter-checkbox-label">
-                        <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="arrBands.before6am" (change)="applyFilters()"> Before 6:00 AM</span>
-                        <span class="filter-count-badge">{{ countArrBefore6am }}</span>
-                      </label>
-                      <label class="filter-checkbox-label">
-                        <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="arrBands.from6to12" (change)="applyFilters()"> 6:00 AM – 12:00 PM</span>
-                        <span class="filter-count-badge">{{ countArr6to12 }}</span>
-                      </label>
-                      <label class="filter-checkbox-label">
-                        <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="arrBands.from12to18" (change)="applyFilters()"> 12:00 PM – 6:00 PM</span>
-                        <span class="filter-count-badge">{{ countArr12to18 }}</span>
-                      </label>
-                      <label class="filter-checkbox-label">
-                        <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="arrBands.after6pm" (change)="applyFilters()"> After 6:00 PM</span>
-                        <span class="filter-count-badge">{{ countArrAfter6pm }}</span>
-                      </label>
-                    </div>
-
-                    <div class="filter-divider"></div>
-
-                    <!-- F. Pickup Points -->
-                    <div *ngIf="availablePickupPoints.length > 0">
-                      <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleFilterSection('boarding')">
-                        <span class="filter-section-title mb-0">Boarding Points</span>
-                        <i class="fa-solid smaller text-muted" [class.fa-chevron-up]="filterSectionsOpen['boarding']" [class.fa-chevron-down]="!filterSectionsOpen['boarding']"></i>
-                      </div>
-                      <div *ngIf="filterSectionsOpen['boarding']" class="mt-2">
-                        <input type="text" class="form-control filter-search-input" placeholder="Search pick-up points..." [(ngModel)]="pickupSearchQuery">
-                        <div class="filter-points-list mb-2">
-                          <label *ngFor="let p of displayedPickupPoints" class="filter-checkbox-label">
-                            <span class="text-truncate" style="max-width: 170px;">
-                              <input type="checkbox" class="form-check-input me-2" [checked]="selectedPickupPoints.includes(p.name)" (change)="togglePickupPoint(p.name)">
-                              {{ p.name }}
-                            </span>
-                            <span class="filter-count-badge">{{ p.count }}</span>
-                          </label>
-                        </div>
-                        <button *ngIf="availablePickupPoints.length > 5" class="btn btn-link btn-sm text-primary p-0 text-decoration-none smaller fw-semibold mb-2" (click)="showAllPickupPoints = !showAllPickupPoints">
-                          {{ showAllPickupPoints ? 'Show Less' : '+ Show ' + (availablePickupPoints.length - 5) + ' More' }}
-                        </button>
-                      </div>
-                      <div class="filter-divider"></div>
-                    </div>
-
-                    <!-- G. Dropping Points -->
-                    <div *ngIf="availableDroppingPoints.length > 0">
-                      <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleFilterSection('dropping')">
-                        <span class="filter-section-title mb-0">Dropping Points</span>
-                        <i class="fa-solid smaller text-muted" [class.fa-chevron-up]="filterSectionsOpen['dropping']" [class.fa-chevron-down]="!filterSectionsOpen['dropping']"></i>
-                      </div>
-                      <div *ngIf="filterSectionsOpen['dropping']" class="mt-2">
-                        <input type="text" class="form-control filter-search-input" placeholder="Search dropping points..." [(ngModel)]="droppingSearchQuery">
-                        <div class="filter-points-list mb-2">
-                          <label *ngFor="let p of displayedDroppingPoints" class="filter-checkbox-label">
-                            <span class="text-truncate" style="max-width: 170px;">
-                              <input type="checkbox" class="form-check-input me-2" [checked]="selectedDroppingPoints.includes(p.name)" (change)="toggleDroppingPoint(p.name)">
-                              {{ p.name }}
-                            </span>
-                            <span class="filter-count-badge">{{ p.count }}</span>
-                          </label>
-                        </div>
-                        <button *ngIf="availableDroppingPoints.length > 5" class="btn btn-link btn-sm text-primary p-0 text-decoration-none smaller fw-semibold mb-2" (click)="showAllDroppingPoints = !showAllDroppingPoints">
-                          {{ showAllDroppingPoints ? 'Show Less' : '+ Show ' + (availableDroppingPoints.length - 5) + ' More' }}
-                        </button>
-                      </div>
-                      <div class="filter-divider"></div>
-                    </div>
-
-                    <!-- H. Amenities -->
-                    <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleFilterSection('amenities')">
-                      <span class="filter-section-title mb-0">Amenities</span>
-                      <i class="fa-solid smaller text-muted" [class.fa-chevron-up]="filterSectionsOpen['amenities']" [class.fa-chevron-down]="!filterSectionsOpen['amenities']"></i>
-                    </div>
-                    <div *ngIf="filterSectionsOpen['amenities']" class="mt-2">
-                      <label *ngFor="let am of amenityDefinitions" class="filter-checkbox-label">
-                        <span>
-                          <input type="checkbox" class="form-check-input me-2" [checked]="selectedAmenities.includes(am.name)" (change)="toggleAmenity(am.name)">
-                          <i [class]="am.icon + ' me-1 text-muted smaller'"></i>
-                          {{ am.name }}
-                        </span>
-                        <span class="filter-count-badge">{{ getAmenityCount(am.name) }}</span>
-                      </label>
-                    </div>
-
-                    <div class="filter-divider"></div>
-
-                    <!-- I. Price Range -->
-                    <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleFilterSection('price')">
-                      <div class="d-flex justify-content-between align-items-center flex-grow-1 me-2">
-                        <span class="filter-section-title mb-0">Price Range</span>
-                        <span class="text-primary fw-bold smaller">₹{{ filterMinPrice }} – ₹{{ filterMaxPrice }}</span>
-                      </div>
-                      <i class="fa-solid smaller text-muted" [class.fa-chevron-up]="filterSectionsOpen['price']" [class.fa-chevron-down]="!filterSectionsOpen['price']"></i>
-                    </div>
-                    <div *ngIf="filterSectionsOpen['price']" class="mt-2">
-                      <div class="d-flex align-items-center gap-2 mb-2">
-                        <input type="range" class="form-range" [min]="defaultMinPrice" [max]="defaultMaxPrice" step="50" [(ngModel)]="filterMaxPrice" (input)="applyFilters()">
-                      </div>
-                      <div class="d-flex justify-content-between smaller text-muted">
-                        <span>₹{{ defaultMinPrice }}</span>
-                        <span>₹{{ defaultMaxPrice }}</span>
-                      </div>
-                    </div>
-
-                  </div>
+                  <app-bus-filter-panel
+                    [filterBusTypeAC]="filterBusTypeAC"
+                    [filterBusTypeNonAC]="filterBusTypeNonAC"
+                    [filterSeatTypeSeater]="filterSeatTypeSeater"
+                    [filterSeatTypeSleeper]="filterSeatTypeSleeper"
+                    [filterSingleSeatOnly]="filterSingleSeatOnly"
+                    [depBands]="depBands"
+                    [arrBands]="arrBands"
+                    [countBusTypeAC]="countBusTypeAC"
+                    [countBusTypeNonAC]="countBusTypeNonAC"
+                    [countSeatTypeSeater]="countSeatTypeSeater"
+                    [countSeatTypeSleeper]="countSeatTypeSleeper"
+                    [countDepBefore6am]="countDepBefore6am"
+                    [countDep6to12]="countDep6to12"
+                    [countDep12to18]="countDep12to18"
+                    [countDepAfter6pm]="countDepAfter6pm"
+                    [countArrBefore6am]="countArrBefore6am"
+                    [countArr6to12]="countArr6to12"
+                    [countArr12to18]="countArr12to18"
+                    [countArrAfter6pm]="countArrAfter6pm"
+                    [availablePickupPoints]="availablePickupPoints"
+                    [displayedPickupPoints]="displayedPickupPoints"
+                    [selectedPickupPoints]="selectedPickupPoints"
+                    [showAllPickupPoints]="showAllPickupPoints"
+                    [pickupSearchQuery]="pickupSearchQuery"
+                    [availableDroppingPoints]="availableDroppingPoints"
+                    [displayedDroppingPoints]="displayedDroppingPoints"
+                    [selectedDroppingPoints]="selectedDroppingPoints"
+                    [showAllDroppingPoints]="showAllDroppingPoints"
+                    [droppingSearchQuery]="droppingSearchQuery"
+                    [amenityDefinitions]="amenityDefinitions"
+                    [selectedAmenities]="selectedAmenities"
+                    [filterMinPrice]="filterMinPrice"
+                    [filterMaxPrice]="filterMaxPrice"
+                    [defaultMinPrice]="defaultMinPrice"
+                    [defaultMaxPrice]="defaultMaxPrice"
+                    [hasActiveFilters]="hasActiveBusFilters"
+                    [filterSectionsOpen]="filterSectionsOpen"
+                    [amenityCounts]="amenityCounts"
+                    (filterChange)="onFilterStateChanged($event)"
+                    (priceChange)="onFilterPriceChanged($event)"
+                    (clearAll)="clearAllBusFilters()"
+                    (togglePickupPoint)="togglePickupPoint($event)"
+                    (toggleDroppingPoint)="toggleDroppingPoint($event)"
+                    (toggleAmenity)="toggleAmenity($event)"
+                    (toggleSection)="toggleFilterSection($event)"
+                  ></app-bus-filter-panel>
                 </div>
 
                 <!-- ================= RIGHT COLUMN: BUS RESULTS ================= -->
                 <div class="col-xl-9 col-lg-8">
-                  
-                  <!-- Results Header: Count, Route, Date & Sort By -->
-                  <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-                    <div>
-                      <div class="fw-bold text-navy fs-6">
-                        Showing {{ totalFilteredBuses === 0 ? 0 : (busCurrentPage - 1) * busPageSize + 1 }}–{{ Math.min(busCurrentPage * busPageSize, totalFilteredBuses) }} of {{ totalFilteredBuses }} buses
-                      </div>
-                      <div class="text-muted smaller">
-                        {{ busOrigin }} to {{ busDestination }} • {{ formattedBusDate }}
-                      </div>
-                    </div>
-
-                    <!-- Sort By Control -->
-                    <div class="d-flex align-items-center gap-2">
-                      <label class="text-muted smaller fw-semibold text-nowrap mb-0">Sort by:</label>
-                      <select class="form-select form-select-sm rounded-pill w-auto fw-semibold text-navy bg-white" [(ngModel)]="busSortBy" (change)="applyFilters()">
-                        <option value="depEarliest">Departure: Earliest First</option>
-                        <option value="depLatest">Departure: Latest First</option>
-                        <option value="fareLow">Price: Low to High</option>
-                        <option value="fareHigh">Price: High to Low</option>
-                        <option value="durationShort">Duration: Shortest First</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <!-- Filtered Empty State -->
-                  <div *ngIf="pagedBusList.length === 0" class="empty-state-card bg-white rounded-4 border p-5 text-center shadow-sm">
-                    <div class="empty-icon-wrap mx-auto mb-3">
-                      <i class="fa-solid fa-filter-circle-xmark text-warning fs-2"></i>
-                    </div>
-                    <h5 class="fw-bold text-navy mb-2">No buses match your selected filters</h5>
-                    <p class="text-secondary small mb-4">
-                      None of the {{ busResults.length }} available buses match all your current filter criteria.
-                    </p>
-                    <button class="btn btn-primary rounded-pill px-4 fw-bold" (click)="clearAllBusFilters()">
-                      <i class="fa-solid fa-rotate-left me-1"></i> Clear All Filters
-                    </button>
-                  </div>
-
-                  <!-- Bus Cards List -->
-                  <div *ngFor="let b of pagedBusList" class="bus-card mb-3 shadow-sm">
-                    <div class="row align-items-center g-3">
-                      
-                      <!-- Col 1: Bus & Operator Details -->
-                      <div class="col-xl-4 col-lg-4 col-md-5">
-                        <div class="d-flex align-items-start gap-3">
-                          <img [src]="getBusThumbnail(b)" class="bus-card-thumb shadow-sm" alt="Bus photo" (error)="onBusImgError($event)">
-                          <div class="flex-grow-1">
-                            <div class="d-flex align-items-center justify-content-between">
-                              <span class="bus-operator-name">{{ b.operatorName }}</span>
-                              <button class="btn btn-link p-0 border-0 ms-2" (click)="saveBusToFavourites(b)" [title]="isBusSaved(b.id) ? 'Saved' : 'Save to Favourites'">
-                                <i [class]="isBusSaved(b.id) ? 'fa-solid fa-heart text-danger' : 'fa-regular fa-heart text-muted'"></i>
-                              </button>
-                            </div>
-                            
-                            <div class="d-flex align-items-center gap-2 mt-1">
-                              <span class="badge bg-warning bg-opacity-25 text-dark fw-bold smaller py-1 px-2 rounded-2">
-                                ★ {{ getBusRating(b).rating }}
-                              </span>
-                              <span class="text-muted smaller">({{ getBusRating(b).reviews }} reviews)</span>
-                            </div>
-
-                            <div class="mt-2">
-                              <span class="bus-type-tag">{{ b.busType }}</span>
-                            </div>
-
-                            <!-- Amenities Row (Icon + Text) -->
-                            <div class="d-flex flex-wrap gap-1 mt-2">
-                              <span *ngFor="let amen of getBusAmenities(b).slice(0, 3)" class="amenity-tag" [title]="amen">
-                                <i [class]="getAmenityIcon(amen) + ' me-1 text-primary'"></i>
-                                <span>{{ amen }}</span>
-                              </span>
-                              <span *ngIf="getBusAmenities(b).length > 3" class="amenity-tag text-muted fw-semibold" [title]="getBusAmenities(b).slice(3).join(', ')">
-                                +{{ getBusAmenities(b).length - 3 }} more
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- Col 2: Departure, Duration & Arrival Timeline -->
-                      <div class="col-xl-5 col-lg-5 col-md-4 text-center">
-                        <div class="d-flex justify-content-between align-items-center px-2">
-                          
-                          <!-- Departure -->
-                          <div class="text-start">
-                            <div class="timeline-time">{{ formatTime12(b.departureTime) }}</div>
-                            <div class="timeline-city text-truncate" style="max-width: 90px;" [title]="b.origin">{{ b.origin }}</div>
-                          </div>
-
-                          <!-- Duration line -->
-                          <div class="timeline-track-wrap flex-grow-1">
-                            <div class="timeline-duration">{{ getJourneyDuration(b).durationText }}</div>
-                            <div class="timeline-line"></div>
-                            <div class="text-muted smaller">Direct</div>
-                          </div>
-
-                          <!-- Arrival -->
-                          <div class="text-end">
-                            <div class="timeline-time">
-                              {{ formatTime12(b.arrivalTime) }}
-                              <span *ngIf="getJourneyDuration(b).isNextDay" class="badge-next-day" title="Arrives on the next day">Next Day</span>
-                            </div>
-                            <div class="timeline-city text-truncate" style="max-width: 90px;" [title]="b.destination">{{ b.destination }}</div>
-                          </div>
-
-                        </div>
-                      </div>
-
-                      <!-- Col 3: Price & Seat Selection CTA -->
-                      <div class="col-xl-3 col-lg-3 col-md-3 text-end d-flex flex-column align-items-end justify-content-between">
-                        <div class="mb-2">
-                          <span class="badge-seats-available">
-                            <i class="fa-solid fa-chair me-1"></i>{{ b.availableSeats }} Seats Left
-                          </span>
-                        </div>
-                        
-                        <div class="my-1">
-                          <div class="bus-fare-amount">₹{{ b.fare }}</div>
-                          <div class="bus-fare-unit">per seat</div>
-                        </div>
-
-                        <div>
-                          <button class="btn btn-select-seats" (click)="openBusSeatMap(b)">
-                            {{ selectedSchedule?.id === b.id ? 'Close Seats' : 'Select Seats' }}
-                          </button>
-                        </div>
-                      </div>
-
-                    </div>
-
-                    <!-- Seat Selection Accordion Container -->
-                    <div *ngIf="selectedSchedule?.id === b.id" class="mt-4 pt-3 border-top bg-light p-4 rounded-4">
-                      <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h6 class="fw-bold text-navy mb-0">
-                          <i class="fa-solid fa-chair me-2 text-primary"></i>Seat Selection for {{ b.operatorName }} ({{ b.busNumber }})
-                        </h6>
-                        <button class="btn btn-sm btn-link text-muted p-0" (click)="selectedSchedule = null">
-                          <i class="fa-solid fa-xmark fs-6"></i>
-                        </button>
-                      </div>
-
-                      <!-- Loading Seats Spinner -->
-                      <div *ngIf="isLoadingSeats" class="text-center py-4">
-                        <div class="spinner-border spinner-border-sm text-primary me-2"></div>
-                        <span class="text-muted small">Loading real-time seat layout...</span>
-                      </div>
-
-                      <div *ngIf="!isLoadingSeats && seatList.length === 0" class="alert alert-warning small mb-0 rounded-3">
-                        <i class="fa-solid fa-triangle-exclamation me-1"></i> No seat layout details returned for this bus schedule.
-                      </div>
-
-                      <div *ngIf="!isLoadingSeats && seatList.length > 0">
-                        <!-- Legend -->
-                        <div class="d-flex flex-wrap gap-3 mb-3 small">
-                          <span class="d-flex align-items-center"><span class="seat-legend available me-1"></span> Available</span>
-                          <span class="d-flex align-items-center"><span class="seat-legend selected me-1"></span> Selected</span>
-                          <span class="d-flex align-items-center"><span class="seat-legend booked me-1"></span> Booked</span>
-                        </div>
-
-                        <!-- Seat Grid -->
-                        <div class="p-3 bg-white rounded-3 border mb-3">
-                          <div class="small text-muted fw-semibold mb-2 text-uppercase tracking-wider">
-                            <i class="fa-solid fa-steering-wheel me-1"></i> Driver Side (Front)
-                          </div>
-                          <div class="d-flex flex-wrap gap-2">
-                            <div *ngFor="let s of seatList" 
-                                 class="seat-box rounded-2" 
-                                 [class.available]="s.status === 'AVAILABLE'"
-                                 [class.selected]="selectedSeatNumbers.includes(s.seatNumber)"
-                                 [class.booked]="s.status === 'BOOKED'"
-                                 [title]="s.status === 'BOOKED' ? 'Seat ' + s.seatNumber + ' is already booked' : 'Seat ' + s.seatNumber + ' (' + (s.seatType || 'Seat') + ') - ₹' + (s.price || b.fare)"
-                                 (click)="toggleSeat(s)">
-                              {{ s.seatNumber }}
-                            </div>
-                          </div>
-                        </div>
-
-                        <!-- Seat Selection Footer Summary -->
-                        <div *ngIf="selectedSeatNumbers.length > 0" class="d-flex flex-wrap justify-content-between align-items-center bg-white p-3 rounded-4 border shadow-sm">
-                          <div>
-                            <span class="fw-bold text-navy">Selected Seats: </span> 
-                            <span class="badge bg-primary text-white me-2" *ngFor="let sn of selectedSeatNumbers">{{ sn }}</span>
-                            <span class="fw-bold text-success ms-2">Total: ₹{{ selectedSeatNumbers.length * b.fare }}</span>
-                          </div>
-                          <button class="btn btn-success fw-bold rounded-pill px-4" (click)="proceedToBusCheckout(b)">
-                            Proceed to Payment <i class="fa-solid fa-arrow-right ms-1"></i>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                  </div>
-
-                  <!-- Pagination Controls -->
-                  <div *ngIf="totalFilteredBuses > busPageSize" class="d-flex justify-content-between align-items-center mt-4 pt-2">
-                    <div class="text-muted smaller">
-                      Showing page {{ busCurrentPage }} of {{ totalBusPages }}
-                    </div>
-                    
-                    <div class="d-flex align-items-center gap-2">
-                      <button class="pagination-arrow-btn" [disabled]="busCurrentPage === 1" (click)="setBusPage(busCurrentPage - 1)" title="Previous page">
-                        <i class="fa-solid fa-chevron-left smaller"></i>
-                      </button>
-                      
-                      <button *ngFor="let p of getPaginationPages()" 
-                              class="pagination-page-btn" 
-                              [class.active]="busCurrentPage === p"
-                              (click)="setBusPage(p)">
-                        {{ p }}
-                      </button>
-
-                      <button class="pagination-arrow-btn" [disabled]="busCurrentPage === totalBusPages" (click)="setBusPage(busCurrentPage + 1)" title="Next page">
-                        <i class="fa-solid fa-chevron-right smaller"></i>
-                      </button>
-                    </div>
-                  </div>
-
+                  <app-bus-results-list
+                    [buses]="pagedBusList"
+                    [totalFilteredBuses]="totalFilteredBuses"
+                    [origin]="busOrigin"
+                    [destination]="busDestination"
+                    [formattedDate]="formattedBusDate"
+                    [sortBy]="busSortBy"
+                    [currentPage]="busCurrentPage"
+                    [pageSize]="busPageSize"
+                    [selectedSchedule]="selectedSchedule"
+                    [selectedSeatNumbers]="selectedSeatNumbers"
+                    [selectedBoardingPoint]="selectedBoardingPoint"
+                    [selectedDroppingPoint]="selectedDroppingPoint"
+                    [savedBusIds]="savedBusIds"
+                    [seatList]="seatList"
+                    [isLoadingSeats]="isLoadingSeats"
+                    (sortChange)="busSortBy = $event; applyFilters()"
+                    (pageChange)="setBusPage($event)"
+                    (clearFilters)="clearAllBusFilters()"
+                    (toggleSeats)="openBusSeatMap($event)"
+                    (saveToFavourites)="saveBusToFavourites($event)"
+                    (seatToggled)="toggleSeatByNumber($event)"
+                    (boardingPointChanged)="selectedBoardingPoint = $event"
+                    (droppingPointChanged)="selectedDroppingPoint = $event"
+                    (proceedToCheckout)="proceedToBusCheckout($event)"
+                  ></app-bus-results-list>
                 </div>
 
               </div>
@@ -1160,28 +425,15 @@ export interface Destination {
 
           <!-- #################### TAB 2: HOTEL BOOKING #################### -->
           <div *ngIf="activeTab === 'hotel'">
-            <div class="search-form-card bg-white p-4 rounded-4 shadow-sm border mb-4">
-              <h4 class="fw-bold text-navy mb-3"><i class="fa-solid fa-hotel text-primary me-2"></i>Search Hotels</h4>
-              <form (ngSubmit)="onSearchHotels()" class="row g-3 align-items-end">
-                <div class="col-lg-4 col-md-6">
-                  <label class="form-label fw-semibold text-muted small">Destination City</label>
-                  <input type="text" class="form-control rounded-3" [(ngModel)]="hotelCity" name="hotelCity" placeholder="City or Hotel Name">
-                </div>
-                <div class="col-lg-3 col-md-6">
-                  <label class="form-label fw-semibold text-muted small">Check-in</label>
-                  <input type="date" class="form-control rounded-3" [(ngModel)]="checkInDate" name="checkInDate">
-                </div>
-                <div class="col-lg-3 col-md-6">
-                  <label class="form-label fw-semibold text-muted small">Check-out</label>
-                  <input type="date" class="form-control rounded-3" [(ngModel)]="checkOutDate" name="checkOutDate">
-                </div>
-                <div class="col-lg-2 col-md-6">
-                  <button type="submit" class="btn btn-primary w-100 rounded-3 py-2 fw-bold">
-                    <i class="fa-solid fa-magnifying-glass me-1"></i> Search Hotels
-                  </button>
-                </div>
-              </form>
-            </div>
+            <app-hotel-search-panel
+              [city]="hotelCity"
+              [checkIn]="checkInDate"
+              [checkOut]="checkOutDate"
+              (cityChange)="hotelCity = $event"
+              (checkInChange)="checkInDate = $event"
+              (checkOutChange)="checkOutDate = $event"
+              (search)="onSearchHotels()"
+            ></app-hotel-search-panel>
 
             <!-- Hotel Search Results -->
             <div *ngIf="hotelsSearched">
@@ -1206,339 +458,57 @@ export interface Destination {
               </div>
 
               <!-- Hotel Cards List (Strict real data) -->
-              <div *ngFor="let h of hotelResults" class="hotel-result-card bg-white rounded-4 border shadow-sm mb-3 overflow-hidden">
-                <div class="row g-0">
-                  <div class="col-md-4">
-                    <img [src]="h.imageUrl || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=600&q=80'" class="w-100 h-100 object-fit-cover" style="min-height: 200px;" alt="Hotel Photo">
-                  </div>
-                  <div class="col-md-8 p-4 d-flex flex-column justify-content-between">
-                    <div>
-                      <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                          <div class="d-flex align-items-center gap-2">
-                            <h5 class="fw-bold text-navy mb-1">{{ h.name }}</h5>
-                            <button class="btn btn-link p-0 text-danger border-0" (click)="saveHotelToFavourites(h)" title="Save to Favourites">
-                              <i class="fa-regular fa-heart"></i>
-                            </button>
-                          </div>
-                          <div class="small fw-semibold text-dark mb-2">
-                            <span class="text-warning me-1">★</span>{{ h.starRating || 4.5 }} Star
-                            <span class="text-muted mx-2">•</span>
-                            <span class="text-muted">{{ h.address }}, {{ h.city }}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <p class="text-muted small mb-2">{{ h.description }}</p>
-                      <div class="d-flex flex-wrap gap-1 mb-2">
-                        <span *ngFor="let a of getAmenityPills(h.amenities)" class="badge bg-light text-secondary border small">{{ a }}</span>
-                      </div>
-                    </div>
-
-                    <div class="d-flex justify-content-between align-items-end mt-3 pt-3 border-top">
-                      <div>
-                        <div *ngIf="h.pricePerNight" class="fw-bold text-navy fs-4">₹{{ h.pricePerNight }} <small class="text-muted fs-6 fw-normal">per night</small></div>
-                      </div>
-                      <button class="btn btn-primary rounded-pill px-4 fw-bold" (click)="viewHotelRooms(h)">
-                        View Rooms
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Rooms Accordion -->
-                <div *ngIf="selectedHotel?.id === h.id" class="p-4 bg-light border-top">
-                  <h6 class="fw-bold text-navy mb-3"><i class="fa-solid fa-bed me-2 text-primary"></i>Available Room Types for {{ h.name }}</h6>
-                  
-                  <div *ngIf="hotelRoomTypes.length === 0" class="alert alert-warning small mb-0 rounded-3">
-                    <i class="fa-solid fa-triangle-exclamation me-1"></i> No room types are currently listed for this property.
-                  </div>
-
-                  <div *ngIf="hotelRoomTypes.length > 0" class="row g-3">
-                    <div *ngFor="let r of hotelRoomTypes" class="col-md-6">
-                      <div class="room-type-card bg-white p-3 rounded-4 border h-100 d-flex flex-column justify-content-between">
-                        <div>
-                          <h6 class="fw-bold text-navy mb-1">{{ r.roomTypeName }}</h6>
-                          <p class="small text-muted mb-2">Max Occupancy: {{ r.maxOccupancy }} Guests | {{ r.amenities }}</p>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center pt-2 border-top">
-                          <span class="fw-bold text-success fs-5">₹{{ r.pricePerNight }} <small class="fs-6 text-muted">/ night</small></span>
-                          <button class="btn btn-success btn-sm rounded-pill px-3 fw-bold" (click)="proceedToHotelCheckout(h, r)">
-                            Book Room
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div *ngFor="let h of hotelResults">
+                <app-hotel-result-card
+                  [hotel]="h"
+                  [isSelected]="selectedHotel?.id === h.id"
+                  [rooms]="hotelRoomTypes"
+                  [isSaved]="isHotelSaved(h.id)"
+                  (viewRooms)="viewHotelRooms(h)"
+                  (bookRoom)="proceedToHotelCheckout($event.hotel, $event.room)"
+                  (saveToFavourites)="saveHotelToFavourites(h)"
+                ></app-hotel-result-card>
               </div>
             </div>
           </div>
 
           <!-- #################### TAB 3: MY BOOKINGS #################### -->
           <div *ngIf="activeTab === 'my-bookings'">
-            <!-- Page Header Row -->
-            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
-              <div>
-                <h3 class="fw-bold text-navy mb-1">My Bookings</h3>
-                <div class="text-secondary small">View and manage all your trips and reservations</div>
-              </div>
-              <div class="d-flex align-items-center gap-2 position-relative">
-                <button class="btn btn-outline-secondary btn-sm rounded-3 px-3 py-2" (click)="loadMyBookings()" title="Refresh Bookings">
-                  <i class="fa-solid fa-rotate-right" [class.fa-spin]="isLoadingBookings"></i>
-                </button>
-                <button class="btn btn-primary d-flex align-items-center gap-2 px-3 py-2 rounded-3 fw-semibold shadow-sm" (click)="toggleNewBookingMenu()">
-                  <i class="fa-solid fa-plus"></i>
-                  <span>New Booking</span>
-                </button>
-                <!-- New Booking Dropdown -->
-                <div *ngIf="showNewBookingMenu" class="new-booking-dropdown bg-white shadow-lg rounded-3 border py-1">
-                  <button class="dropdown-item py-2 px-3 d-flex align-items-center gap-2 text-dark small" (click)="switchTab('bus'); showNewBookingMenu = false;">
-                    <i class="fa-solid fa-bus text-primary"></i> Book a Bus
-                  </button>
-                  <button class="dropdown-item py-2 px-3 d-flex align-items-center gap-2 text-dark small" (click)="switchTab('hotel'); showNewBookingMenu = false;">
-                    <i class="fa-solid fa-hotel text-success"></i> Book a Hotel
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Category Tabs (Exactly 3 tabs: All, Bus, Hotel) -->
-            <div class="d-flex align-items-center gap-2 mb-4 flex-wrap">
-              <button 
-                class="tab-pill-btn" 
-                [class.active]="bookingCategoryTab === 'ALL'" 
-                (click)="setBookingCategoryTab('ALL')"
-              >
-                All Bookings ({{ allBookingsCount }})
-              </button>
-              <button 
-                class="tab-pill-btn" 
-                [class.active]="bookingCategoryTab === 'BUS'" 
-                (click)="setBookingCategoryTab('BUS')"
-              >
-                Bus Bookings ({{ busBookingsCount }})
-              </button>
-              <button 
-                class="tab-pill-btn" 
-                [class.active]="bookingCategoryTab === 'HOTEL'" 
-                (click)="setBookingCategoryTab('HOTEL')"
-              >
-                Hotel Bookings ({{ hotelBookingsCount }})
-              </button>
-            </div>
-
-            <!-- Search & Filter Toolbar -->
-            <div class="booking-filter-bar d-flex align-items-center gap-3 mb-4 flex-wrap">
-              <!-- Search Input -->
-              <div class="booking-search-box d-flex align-items-center px-3">
-                <i class="fa-solid fa-magnifying-glass text-muted me-2"></i>
-                <input 
-                  type="text" 
-                  class="form-control border-0 bg-transparent p-0 shadow-none small" 
-                  placeholder="Search by booking ID, destination or hotel name..."
-                  [(ngModel)]="bookingSearchQuery"
-                  (input)="bookingCurrentPage = 1"
-                >
-                <button *ngIf="bookingSearchQuery" class="btn btn-link btn-sm text-muted p-0 ms-1 border-0" (click)="bookingSearchQuery = ''; bookingCurrentPage = 1">
-                  <i class="fa-solid fa-xmark"></i>
-                </button>
-              </div>
-
-              <!-- From Date Picker (Left) -->
-              <div class="date-filter-box d-flex align-items-center gap-2" (click)="openDatePicker(fromDateInput)">
-                <i class="fa-regular fa-calendar text-muted"></i>
-                <input 
-                  #fromDateInput
-                  [type]="isFromDateFocused || bookingFromDate ? 'date' : 'text'" 
-                  class="form-control border-0 bg-transparent p-0 shadow-none small date-input-control" 
-                  placeholder="From Date"
-                  title="From Date"
-                  [(ngModel)]="bookingFromDate" 
-                  (focus)="isFromDateFocused = true"
-                  (blur)="isFromDateFocused = false"
-                  (change)="onFromDateChange()"
-                >
-                <button *ngIf="bookingFromDate" class="btn btn-link btn-sm text-muted p-0 border-0 ms-auto" (click)="$event.stopPropagation(); bookingFromDate = ''; onFromDateChange()" title="Clear From Date">
-                  <i class="fa-solid fa-xmark smaller"></i>
-                </button>
-              </div>
-
-              <!-- To Date Picker (Right) -->
-              <div class="date-filter-box d-flex align-items-center gap-2" (click)="openDatePicker(toDateInput)">
-                <input 
-                  #toDateInput
-                  [type]="isToDateFocused || bookingToDate ? 'date' : 'text'" 
-                  class="form-control border-0 bg-transparent p-0 shadow-none small date-input-control" 
-                  placeholder="To Date"
-                  title="To Date"
-                  [min]="bookingFromDate"
-                  [(ngModel)]="bookingToDate" 
-                  (focus)="isToDateFocused = true"
-                  (blur)="isToDateFocused = false"
-                  (change)="onToDateChange()"
-                >
-                <i class="fa-regular fa-calendar text-muted"></i>
-                <button *ngIf="bookingToDate" class="btn btn-link btn-sm text-muted p-0 border-0 ms-auto" (click)="$event.stopPropagation(); bookingToDate = ''; onToDateChange()" title="Clear To Date">
-                  <i class="fa-solid fa-xmark smaller"></i>
-                </button>
-              </div>
-
-              <!-- Status Select -->
-              <div class="d-flex align-items-center gap-2">
-                <select 
-                  class="form-select status-filter-select" 
-                  [(ngModel)]="bookingStatusFilter"
-                  (change)="bookingCurrentPage = 1"
-                >
-                  <option value="ALL">All Statuses</option>
-                  <option value="CONFIRMED">Confirmed</option>
-                  <option value="UPCOMING">Upcoming</option>
-                  <option value="COMPLETED">Completed</option>
-                  <option value="CANCELLED">Cancelled</option>
-                </select>
-              </div>
-
-              <!-- Clear Filters -->
-              <button 
-                *ngIf="hasActiveBookingFilters()" 
-                class="btn btn-link btn-sm text-primary text-decoration-none p-0 d-flex align-items-center gap-1 ms-auto"
-                (click)="clearBookingFilters()"
-              >
-                <i class="fa-solid fa-rotate-left"></i> Clear Filters
-              </button>
-            </div>
-
-            <!-- Loading State -->
-            <div *ngIf="isLoadingBookings" class="card bg-white rounded-4 border p-5 text-center my-4 shadow-sm">
-              <div class="spinner-border text-primary mb-3" role="status"></div>
-              <div class="fw-semibold text-dark">Loading your bookings...</div>
-            </div>
-
-            <!-- Error State -->
-            <div *ngIf="bookingsError && !isLoadingBookings" class="alert alert-danger rounded-4 border-0 p-4 text-center shadow-sm my-4">
-              <i class="fa-solid fa-circle-exclamation fs-3 mb-2 d-block"></i>
-              <div class="fw-bold mb-1">Failed to load bookings</div>
-              <p class="mb-3 small">{{ bookingsError }}</p>
-              <button class="btn btn-primary btn-sm rounded-pill px-4" (click)="loadMyBookings()">Try Again</button>
-            </div>
-
-            <!-- Strict Empty State: User has 0 bookings -->
-            <div *ngIf="!isLoadingBookings && !bookingsError && myBookings.length === 0" class="card bg-white rounded-4 border p-5 text-center my-4 shadow-sm">
-              <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-light text-primary mx-auto mb-3" style="width: 72px; height: 72px;">
-                <i class="fa-solid fa-ticket fs-2 opacity-75"></i>
-              </div>
-              <h5 class="fw-bold text-navy mb-2">No bookings yet</h5>
-              <p class="text-secondary small max-w-600 mx-auto mb-4">
-                You haven't made any bus or hotel bookings yet. Explore routes and destinations to plan your next journey!
-              </p>
-              <div class="d-flex justify-content-center gap-3">
-                <button class="btn btn-primary rounded-pill px-4 fw-semibold" (click)="switchTab('bus')">
-                  <i class="fa-solid fa-bus me-2"></i>Book Buses
-                </button>
-                <button class="btn btn-outline-primary rounded-pill px-4 fw-semibold" (click)="switchTab('hotel')">
-                  <i class="fa-solid fa-hotel me-2"></i>Book Hotels
-                </button>
-              </div>
-            </div>
-
-            <!-- Strict Empty State: Filters yielded 0 results -->
-            <div *ngIf="!isLoadingBookings && !bookingsError && myBookings.length > 0 && filteredBookings.length === 0" class="card bg-white rounded-4 border p-5 text-center my-4 shadow-sm">
-              <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-light text-secondary mx-auto mb-3" style="width: 72px; height: 72px;">
-                <i class="fa-solid fa-filter-circle-xmark fs-2 opacity-75"></i>
-              </div>
-              <h5 class="fw-bold text-navy mb-2">No bookings match your selected filters</h5>
-              <p class="text-secondary small max-w-600 mx-auto mb-4">
-                Try adjusting your search terms, date range, or status filter to find your bookings.
-              </p>
-              <button class="btn btn-outline-primary rounded-pill px-4 fw-semibold" (click)="clearBookingFilters()">
-                <i class="fa-solid fa-rotate-left me-2"></i>Clear All Filters
-              </button>
-            </div>
-
-            <!-- Booking Cards List -->
-            <div *ngIf="!isLoadingBookings && !bookingsError && pagedBookings.length > 0" class="booking-cards-list">
-              <div *ngFor="let b of pagedBookings" class="booking-card-item mb-3">
-                <div class="d-flex align-items-center gap-3 flex-column flex-md-row">
-                  <!-- Thumbnail -->
-                  <img [src]="b.thumbnail" (error)="onImageError($event, 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=400&q=80')" class="booking-card-img" alt="Booking Thumbnail">
-                  
-                  <!-- Content Details -->
-                  <div class="flex-grow-1 w-100">
-                    <div class="mb-1">
-                      <span [class]="b.serviceType === 'BUS' ? 'badge-type-bus' : 'badge-type-hotel'">
-                        {{ b.serviceType === 'BUS' ? 'Bus' : 'Hotel' }}
-                      </span>
-                    </div>
-                    <h5 class="fw-bold text-navy mb-1 cursor-pointer" (click)="openBookingDetails(b)">{{ b.displayTitle }}</h5>
-                    <div class="text-secondary small mb-2">{{ b.displaySubtitle }}</div>
-                    
-                    <!-- Metadata icons row -->
-                    <div class="d-flex align-items-center gap-3 text-secondary smaller flex-wrap">
-                      <span *ngIf="b.dateText">
-                        <i class="fa-regular fa-calendar-days text-muted me-1"></i>{{ b.dateText }}
-                      </span>
-                      <span *ngIf="b.serviceType === 'BUS' && b.timeText">
-                        <i class="fa-regular fa-clock text-muted me-1"></i>{{ b.timeText }}
-                      </span>
-                      <span *ngIf="b.capacityText">
-                        <i class="fa-solid fa-user-group text-muted me-1"></i>{{ b.capacityText }}
-                      </span>
-                      <span>
-                        <i class="fa-solid fa-ticket text-muted me-1"></i>{{ b.bookingRef }}
-                      </span>
-                    </div>
-                  </div>
-
-                  <!-- Price, Status & Actions -->
-                  <div class="d-flex flex-column align-items-md-end justify-content-between gap-3 w-100 w-md-auto text-md-end">
-                    <div class="d-flex align-items-center gap-3 justify-content-between justify-content-md-end w-100">
-                      <span class="badge-status-pill" [ngClass]="b.statusBadgeClass">
-                        {{ b.statusDisplay }}
-                      </span>
-                      <div class="booking-card-price">
-                        ₹{{ b.totalAmount | number }}
-                      </div>
-                      <i class="fa-solid fa-chevron-right text-primary cursor-pointer fs-6 d-none d-md-inline-block" (click)="openBookingDetails(b)" title="View Details"></i>
-                    </div>
-
-                    <div class="d-flex align-items-center gap-2 justify-content-end w-100">
-                      <button class="btn btn-view-details" (click)="openBookingDetails(b)">
-                        View Details
-                      </button>
-                      <button *ngIf="b.isCancellable" class="btn btn-cancel-booking" (click)="promptCancelBooking(b)">
-                        Cancel Booking
-                      </button>
-                      <button *ngIf="b.isCompleted" class="btn btn-outline-primary btn-sm rounded-3 px-3 py-1 fw-semibold" (click)="openReviewModal(b.raw)">
-                        Rate & Review
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Pagination Footer -->
-              <div class="d-flex justify-content-between align-items-center pt-3 pb-4 flex-wrap gap-3">
-                <div class="text-secondary small">
-                  Showing {{ paginationStartItem }} – {{ paginationEndItem }} of {{ filteredBookings.length }} bookings
-                </div>
-                <div class="d-flex align-items-center gap-1">
-                  <button class="pagination-arrow-btn" [disabled]="bookingCurrentPage === 1" (click)="prevBookingPage()" title="Previous Page">
-                    <i class="fa-solid fa-chevron-left smaller"></i>
-                  </button>
-                  <button 
-                    *ngFor="let p of paginationPagesList" 
-                    class="pagination-page-btn" 
-                    [class.active]="bookingCurrentPage === p" 
-                    (click)="setBookingPage(p)"
-                  >
-                    {{ p }}
-                  </button>
-                  <button class="pagination-arrow-btn" [disabled]="bookingCurrentPage === totalBookingPages" (click)="nextBookingPage()" title="Next Page">
-                    <i class="fa-solid fa-chevron-right smaller"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
+            <app-my-bookings-list
+              [categoryTab]="bookingCategoryTab"
+              [allBookingsCount]="allBookingsCount"
+              [busBookingsCount]="busBookingsCount"
+              [hotelBookingsCount]="hotelBookingsCount"
+              [searchQuery]="bookingSearchQuery"
+              [fromDate]="bookingFromDate"
+              [toDate]="bookingToDate"
+              [statusFilter]="bookingStatusFilter"
+              [hasActiveFilters]="hasActiveBookingFilters()"
+              [isLoading]="isLoadingBookings"
+              [errorMessage]="bookingsError"
+              [totalBookingsCount]="myBookings.length"
+              [totalFilteredCount]="filteredBookings.length"
+              [bookings]="pagedBookings"
+              [currentPage]="bookingCurrentPage"
+              [totalPages]="totalBookingPages"
+              [paginationStartItem]="paginationStartItem"
+              [paginationEndItem]="paginationEndItem"
+              [pageNumbers]="paginationPagesList"
+              (categoryTabChange)="setBookingCategoryTab($event)"
+              (searchQueryChange)="bookingSearchQuery = $event; bookingCurrentPage = 1"
+              (fromDateChange)="bookingFromDate = $event; onFromDateChange()"
+              (toDateChange)="bookingToDate = $event; onToDateChange()"
+              (statusFilterChange)="bookingStatusFilter = $event; bookingCurrentPage = 1"
+              (clearFilters)="clearBookingFilters()"
+              (pageChange)="setBookingPage($event)"
+              (openDetails)="openBookingDetails($event)"
+              (cancelBooking)="promptCancelBooking($event)"
+              (rateReview)="openReviewModal($event)"
+              (switchTab)="switchTab($event)"
+              (retryLoad)="loadMyBookings()"
+              (refresh)="loadMyBookings()"
+              (newBooking)="switchTab($event)"
+            ></app-my-bookings-list>
           </div>
 
           <!-- #################### TAB 4: SAVED (FAVOURITES) #################### -->
@@ -1833,131 +803,19 @@ export interface Destination {
         </div>
       </div>
 
-      <!-- ==================== VIEW BOOKING DETAILS MODAL ==================== -->
-      <div *ngIf="showBookingDetailsModal && selectedBookingDetails" class="modal fade show d-block bg-dark bg-opacity-50" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
-          <div class="modal-content rounded-4 border-0 shadow-lg">
-            <div class="modal-header bg-white border-bottom px-4 py-3">
-              <div class="d-flex align-items-center gap-2">
-                <span [class]="selectedBookingDetails.serviceType === 'BUS' ? 'badge-type-bus' : 'badge-type-hotel'">
-                  {{ selectedBookingDetails.serviceType === 'BUS' ? 'Bus' : 'Hotel' }}
-                </span>
-                <h5 class="modal-title fw-bold text-navy mb-0">Booking Details</h5>
-              </div>
-              <button type="button" class="btn-close shadow-none" (click)="closeBookingDetails()"></button>
-            </div>
-            <div class="modal-body p-4">
-              <div class="d-flex justify-content-between align-items-start mb-4 pb-3 border-bottom flex-wrap gap-2">
-                <div>
-                  <h4 class="fw-bold text-navy mb-1">{{ selectedBookingDetails.displayTitle }}</h4>
-                  <div class="text-secondary small mb-2">{{ selectedBookingDetails.displaySubtitle }}</div>
-                  <div class="badge-status-pill" [ngClass]="selectedBookingDetails.statusBadgeClass">
-                    {{ selectedBookingDetails.statusDisplay }}
-                  </div>
-                </div>
-                <div class="text-end">
-                  <div class="text-secondary small">Total Fare Paid</div>
-                  <div class="fs-3 fw-bold text-primary">₹{{ selectedBookingDetails.totalAmount | number }}</div>
-                </div>
-              </div>
-
-              <div class="row g-3 mb-4">
-                <div class="col-sm-6">
-                  <div class="p-3 bg-light rounded-3">
-                    <div class="text-secondary smaller text-uppercase fw-bold mb-1">Booking Reference</div>
-                    <div class="fw-bold text-dark fs-6">{{ selectedBookingDetails.bookingRef }}</div>
-                  </div>
-                </div>
-                <div class="col-sm-6">
-                  <div class="p-3 bg-light rounded-3">
-                    <div class="text-secondary smaller text-uppercase fw-bold mb-1">Date & Schedule</div>
-                    <div class="fw-bold text-dark fs-6">{{ selectedBookingDetails.dateText || 'Standard Booking' }}</div>
-                  </div>
-                </div>
-                <div class="col-sm-6">
-                  <div class="p-3 bg-light rounded-3">
-                    <div class="text-secondary smaller text-uppercase fw-bold mb-1">Capacity / Reserved</div>
-                    <div class="fw-bold text-dark fs-6">{{ selectedBookingDetails.capacityText }}</div>
-                  </div>
-                </div>
-                <div class="col-sm-6">
-                  <div class="p-3 bg-light rounded-3">
-                    <div class="text-secondary smaller text-uppercase fw-bold mb-1">Booked On</div>
-                    <div class="fw-bold text-dark fs-6">{{ selectedBookingDetails.rawBookingDate | date:'medium' }}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="p-3 bg-light rounded-3 mb-2" *ngIf="selectedBookingDetails.detailsJson">
-                <div class="text-secondary smaller text-uppercase fw-bold mb-1">Reservation Specs & Notes</div>
-                <div class="text-dark small">{{ selectedBookingDetails.detailsJson }}</div>
-              </div>
-            </div>
-            <div class="modal-footer bg-light border-top px-4 py-3 d-flex justify-content-between">
-              <div>
-                <button 
-                  *ngIf="selectedBookingDetails.isCancellable" 
-                  class="btn btn-cancel-booking"
-                  (click)="promptCancelBooking(selectedBookingDetails)"
-                >
-                  <i class="fa-solid fa-ban me-1"></i> Cancel Booking
-                </button>
-                <button 
-                  *ngIf="selectedBookingDetails.isCompleted" 
-                  class="btn btn-outline-primary btn-sm rounded-3 px-3 py-1 fw-semibold"
-                  (click)="closeBookingDetails(); openReviewModal(selectedBookingDetails.raw)"
-                >
-                  <i class="fa-solid fa-star me-1"></i> Rate & Review
-                </button>
-              </div>
-              <button type="button" class="btn btn-secondary rounded-3 px-4" (click)="closeBookingDetails()">Close</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ==================== CANCEL BOOKING CONFIRMATION MODAL ==================== -->
-      <div *ngIf="showCancelConfirmModal && bookingToCancel" class="modal fade show d-block bg-dark bg-opacity-50" tabindex="-1">
-        <div class="modal-dialog modal-dialog-centered">
-          <div class="modal-content rounded-4 border-0 shadow-lg">
-            <div class="modal-header border-0 pb-0">
-              <button type="button" class="btn-close shadow-none" [disabled]="isCancellingBooking" (click)="closeCancelConfirmModal()"></button>
-            </div>
-            <div class="modal-body p-4 pt-0 text-center">
-              <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-danger bg-opacity-10 text-danger mx-auto mb-3" style="width: 60px; height: 60px;">
-                <i class="fa-solid fa-triangle-exclamation fs-3"></i>
-              </div>
-              <h5 class="fw-bold text-navy mb-2">Cancel This Booking?</h5>
-              <p class="text-secondary small mb-3">
-                Are you sure you want to cancel booking <strong>{{ bookingToCancel.bookingRef }}</strong> for <strong>{{ bookingToCancel.displayTitle || bookingToCancel.serviceTitle }}</strong>?
-              </p>
-              <div class="alert alert-warning py-2 px-3 rounded-3 text-start smaller text-dark mb-4">
-                <i class="fa-solid fa-circle-info text-warning me-2"></i>
-                This action will release your reserved seats/rooms immediately and set this booking to cancelled. This cannot be undone.
-              </div>
-              <div class="d-flex justify-content-center gap-3">
-                <button 
-                  type="button" 
-                  class="btn btn-light rounded-pill px-4 fw-semibold text-secondary" 
-                  [disabled]="isCancellingBooking"
-                  (click)="closeCancelConfirmModal()"
-                >
-                  Keep Booking
-                </button>
-                <button 
-                  type="button" 
-                  class="btn btn-danger rounded-pill px-4 fw-semibold d-flex align-items-center gap-2" 
-                  [disabled]="isCancellingBooking"
-                  (click)="confirmCancellation()"
-                >
-                  <span *ngIf="isCancellingBooking" class="spinner-border spinner-border-sm"></span>
-                  <span>{{ isCancellingBooking ? 'Cancelling...' : 'Yes, Cancel Booking' }}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- ==================== BOOKING DETAILS & CANCEL MODALS ==================== -->
+      <app-booking-details-modal
+        [showDetailsModal]="showBookingDetailsModal"
+        [booking]="selectedBookingDetails"
+        [showCancelModal]="showCancelConfirmModal"
+        [bookingToCancel]="bookingToCancel"
+        [isCancelling]="isCancellingBooking"
+        (closeDetails)="closeBookingDetails()"
+        (promptCancel)="promptCancelBooking($event)"
+        (closeCancel)="closeCancelConfirmModal()"
+        (confirmCancel)="confirmCancellation()"
+        (rateReview)="closeBookingDetails(); openReviewModal($event)"
+      ></app-booking-details-modal>
 
     </div>
   `,
@@ -1980,151 +838,6 @@ export interface Destination {
     .text-navy { color: var(--dark-navy) !important; }
     .smaller { font-size: 0.78rem; }
     .max-w-600 { max-width: 600px; }
-
-    /* Top Header */
-    .top-header {
-      height: 72px;
-      z-index: 1020;
-    }
-    .te-brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      text-decoration: none;
-      flex-shrink: 0;
-      cursor: pointer;
-    }
-    .te-brand-icon {
-      width: 38px;
-      height: 38px;
-      background: #0d5bd9;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-size: 16px;
-    }
-    .te-brand-text {
-      font-size: 21px;
-      font-weight: 700;
-      color: #0f172a;
-      letter-spacing: -0.3px;
-    }
-    .te-brand-blue {
-      color: #0d5bd9;
-    }
-    .header-search-box {
-      width: 440px;
-      max-width: 100%;
-    }
-    .search-input-pill {
-      background-color: #F8FAFC;
-      border: 1px solid var(--border-subtle);
-      border-radius: 9999px;
-      height: 42px;
-    }
-    .search-input {
-      font-size: 0.88rem;
-      color: var(--dark-navy);
-    }
-    .search-suggestions-dropdown {
-      z-index: 1050;
-      max-height: 320px;
-      overflow-y: auto;
-    }
-    .suggestion-item:hover {
-      background-color: #F1F5F9;
-    }
-    .notification-btn {
-      width: 42px;
-      height: 42px;
-      background-color: #F8FAFC;
-      border: 1px solid var(--border-subtle);
-    }
-    .notifications-dropdown {
-      width: 340px;
-      z-index: 1050;
-    }
-    .user-pill {
-      background-color: #FFFFFF;
-      border: 1px solid var(--border-subtle);
-      padding: 4px 12px 4px 6px;
-      transition: all 0.2s ease;
-    }
-    .user-pill:hover {
-      background-color: #F8FAFC;
-    }
-    .user-avatar-circle {
-      width: 34px;
-      height: 34px;
-      border-radius: 50%;
-      background: #0875E1;
-      color: white;
-      font-weight: 600;
-      font-size: 0.85rem;
-    }
-    .user-menu-dropdown {
-      width: 220px;
-      z-index: 1050;
-    }
-
-    /* Left Sidebar */
-    .left-sidebar {
-      width: 240px;
-      min-width: 240px;
-      border-color: var(--border-subtle) !important;
-      transition: width 0.2s ease, min-width 0.2s ease, padding 0.2s ease;
-    }
-    .left-sidebar.collapsed {
-      width: 72px;
-      min-width: 72px;
-      padding-left: 0.5rem !important;
-      padding-right: 0.5rem !important;
-    }
-    .left-sidebar.collapsed .sidebar-link {
-      justify-content: center;
-      padding: 12px 0;
-    }
-    .left-sidebar.collapsed .sidebar-link i {
-      margin: 0 !important;
-      font-size: 1.25rem;
-    }
-    .sidebar-toggle-btn {
-      width: 32px;
-      height: 32px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background-color 0.15s ease;
-    }
-    .sidebar-toggle-btn:hover {
-      background-color: #E2EAF4;
-      color: var(--primary-blue);
-    }
-    .sidebar-link {
-      color: var(--text-secondary);
-      font-weight: 500;
-      font-size: 0.95rem;
-      padding: 11px 18px;
-      display: flex;
-      align-items: center;
-      transition: all 0.15s ease-in-out;
-      cursor: pointer;
-    }
-    .sidebar-link:hover {
-      background-color: #F1F5F9;
-      color: var(--primary-blue);
-    }
-    .sidebar-link.active {
-      background-color: var(--active-pill);
-      color: var(--primary-blue);
-      font-weight: 600;
-    }
-    .sidebar-link i {
-      width: 20px;
-      font-size: 1.1rem;
-    }
 
     /* Greeting */
     .greeting-title {
@@ -2239,726 +952,6 @@ export interface Destination {
       font-weight: 600;
     }
 
-    /* Destination Details View */
-    .dest-details-hero {
-      height: 260px;
-    }
-    .dest-hero-overlay {
-      background: linear-gradient(90deg, rgba(16, 42, 86, 0.9) 0%, rgba(16, 42, 86, 0.6) 50%, rgba(0, 0, 0, 0.15) 100%);
-    }
-    .btn-fav-large {
-      width: 46px;
-      height: 46px;
-    }
-    .action-icon-squircle {
-      width: 44px;
-      height: 44px;
-      border-radius: 12px;
-    }
-    .bg-indigo { background-color: #6366F1; }
-    .plan-action-box {
-      background-color: #F8FAFC;
-      border-color: var(--border-subtle) !important;
-      transition: all 0.2s ease;
-    }
-    .plan-action-box:hover {
-      background-color: #EFF6FF;
-      border-color: var(--primary-blue) !important;
-    }
-
-    /* Seat Picker */
-    .bus-thumb {
-      width: 72px;
-      height: 52px;
-    }
-    .seat-box {
-      width: 40px;
-      height: 40px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 0.82rem;
-      border: 2px solid #CBD5E1;
-      background-color: #FFFFFF;
-      transition: all 0.15s;
-    }
-    .seat-box.available:hover {
-      border-color: var(--primary-blue);
-      background-color: var(--active-pill);
-    }
-    .seat-box.selected {
-      background-color: #22C55E !important;
-      color: white !important;
-      border-color: #16A34A !important;
-    }
-    .seat-box.booked {
-      background-color: #E2E8F0 !important;
-      color: #94A3B8 !important;
-      cursor: not-allowed !important;
-    }
-    .seat-legend {
-      width: 16px;
-      height: 16px;
-      display: inline-block;
-      border-radius: 4px;
-    }
-    .seat-legend.available { border: 2px solid #CBD5E1; background: white; }
-    .seat-legend.selected { background: #22C55E; }
-    .seat-legend.booked { background: #E2E8F0; }
-
-    /* My Bookings Refined Styles */
-    .tab-pill-btn {
-      padding: 8px 22px;
-      border-radius: 9999px;
-      font-weight: 600;
-      font-size: 0.9rem;
-      border: none;
-      background: #F1F5F9;
-      color: #475569;
-      transition: all 0.2s ease;
-      cursor: pointer;
-    }
-    .tab-pill-btn:hover {
-      background: #E2E8F0;
-      color: #1E293B;
-    }
-    .tab-pill-btn.active {
-      background: #0875E1;
-      color: #FFFFFF;
-      box-shadow: 0 4px 12px rgba(8, 117, 225, 0.25);
-    }
-    .booking-filter-bar {
-      background: #FFFFFF;
-      border: 1px solid var(--border-subtle);
-      border-radius: 14px;
-      padding: 10px 16px;
-    }
-    .booking-search-box {
-      background-color: #F8FAFC;
-      border: 1px solid var(--border-subtle);
-      border-radius: 10px;
-      height: 42px;
-      flex: 1;
-      min-width: 260px;
-    }
-    .date-filter-box {
-      background-color: #F8FAFC;
-      border: 1px solid var(--border-subtle);
-      border-radius: 10px;
-      height: 42px;
-      padding: 0 14px;
-      min-width: 145px;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-    .date-filter-box:hover, .date-filter-box:focus-within {
-      background-color: #FFFFFF;
-      border-color: #CBD5E1;
-    }
-    .date-input-control {
-      font-size: 0.88rem;
-      color: var(--dark-navy);
-      cursor: pointer;
-      width: 110px;
-    }
-    .date-input-control::placeholder {
-      color: #64748B;
-      opacity: 0.9;
-    }
-    .status-filter-select {
-      background-color: #F8FAFC;
-      border: 1px solid var(--border-subtle);
-      border-radius: 10px;
-      height: 42px;
-      font-size: 0.88rem;
-      min-width: 140px;
-    }
-    .booking-card-item {
-      background: #FFFFFF;
-      border: 1px solid var(--border-subtle);
-      border-radius: 16px;
-      padding: 18px 20px;
-      transition: box-shadow 0.2s ease, border-color 0.2s ease;
-    }
-    .booking-card-item:hover {
-      border-color: #CBD5E1;
-      box-shadow: 0 6px 18px rgba(16, 42, 86, 0.05);
-    }
-    .booking-card-img {
-      width: 145px;
-      height: 100px;
-      border-radius: 12px;
-      object-fit: cover;
-      flex-shrink: 0;
-    }
-    .badge-type-bus {
-      background-color: #E0EDFF;
-      color: #0875E1;
-      font-weight: 600;
-      font-size: 0.72rem;
-      padding: 3px 10px;
-      border-radius: 6px;
-      display: inline-block;
-    }
-    .badge-type-hotel {
-      background-color: #EDE9FE;
-      color: #7C3AED;
-      font-weight: 600;
-      font-size: 0.72rem;
-      padding: 3px 10px;
-      border-radius: 6px;
-      display: inline-block;
-    }
-    .badge-status-pill {
-      border-radius: 9999px;
-      padding: 4px 14px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      display: inline-block;
-    }
-    .badge-status-pill.badge-confirmed {
-      background-color: #DCFCE7;
-      color: #15803D;
-    }
-    .badge-status-pill.badge-upcoming {
-      background-color: #FEF3C7;
-      color: #B45309;
-    }
-    .badge-status-pill.badge-completed {
-      background-color: #F1F5F9;
-      color: #475569;
-    }
-    .badge-status-pill.badge-cancelled {
-      background-color: #FEE2E2;
-      color: #DC2626;
-    }
-    .booking-card-price {
-      font-size: 1.35rem;
-      font-weight: 700;
-      color: var(--dark-navy);
-      letter-spacing: -0.5px;
-    }
-    .btn-view-details {
-      background-color: #F0F7FF;
-      color: #0875E1;
-      font-weight: 600;
-      border: 1px solid #D6E8FE;
-      border-radius: 8px;
-      padding: 6px 16px;
-      font-size: 0.85rem;
-      transition: all 0.15s ease;
-    }
-    .btn-view-details:hover {
-      background-color: #E0EDFF;
-      color: #065CB5;
-    }
-    .btn-cancel-booking {
-      background-color: #FFF1F2;
-      color: #E11D48;
-      font-weight: 600;
-      border: 1px solid #FECDD3;
-      border-radius: 8px;
-      padding: 6px 16px;
-      font-size: 0.85rem;
-      transition: all 0.15s ease;
-    }
-    .btn-cancel-booking:hover {
-      background-color: #FFE4E6;
-      color: #BE123C;
-    }
-    .pagination-arrow-btn {
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
-      background: #FFFFFF;
-      border: 1px solid var(--border-subtle);
-      color: #64748B;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.15s ease;
-      cursor: pointer;
-    }
-    .pagination-arrow-btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-    .pagination-arrow-btn:not(:disabled):hover {
-      background: #F1F5F9;
-      color: var(--dark-navy);
-    }
-    .pagination-page-btn {
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
-      background: #FFFFFF;
-      border: 1px solid var(--border-subtle);
-      color: #64748B;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.15s ease;
-      cursor: pointer;
-    }
-    .pagination-page-btn.active {
-      background: #0875E1;
-      color: #FFFFFF;
-      border-color: #0875E1;
-    }
-    .pagination-page-btn:not(.active):hover {
-      background: #F1F5F9;
-      color: var(--dark-navy);
-    }
-    .new-booking-dropdown {
-      position: absolute;
-      right: 0;
-      top: 100%;
-      margin-top: 6px;
-      width: 180px;
-      z-index: 1040;
-    }
-
-    /* ==================== BOOK BUSES APPROVED SCENIC SEARCH PANEL ==================== */
-    .bus-search-banner {
-      background-color: #F0F6FE;
-      background-image: 
-        linear-gradient(90deg, rgba(240, 246, 254, 0.96) 0%, rgba(240, 246, 254, 0.90) 35%, rgba(240, 246, 254, 0.35) 65%, rgba(240, 246, 254, 0) 80%),
-        url('/assets/images/scenic-search-panel.png');
-      background-position: right center;
-      background-size: cover;
-      background-repeat: no-repeat;
-      border: 1px solid #D4E5F9;
-      border-radius: 20px;
-      position: relative;
-      overflow: hidden;
-      padding: 24px 30px;
-      min-height: 180px;
-    }
-    .bus-banner-content {
-      position: relative;
-      z-index: 2;
-    }
-    .bus-banner-header {
-      margin-bottom: 14px;
-    }
-    .bus-banner-title {
-      color: #0F172A;
-      font-size: 1.45rem;
-      font-weight: 800;
-      letter-spacing: -0.3px;
-    }
-    .bus-banner-subtitle {
-      color: #64748B;
-      font-size: 0.88rem;
-      font-weight: 500;
-    }
-    .bus-search-card {
-      background: #FFFFFF;
-      border: 1px solid #E2E8F0;
-      border-radius: 14px;
-      padding: 8px 10px;
-      box-shadow: 0 4px 18px rgba(15, 23, 42, 0.07);
-      max-width: 860px;
-    }
-    .bus-search-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      width: 100%;
-    }
-    .bus-control-item {
-      flex: 1 1 0;
-      min-width: 0;
-    }
-    .bus-control-swap {
-      flex: 0 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .bus-control-action {
-      flex: 0 0 auto;
-    }
-    .bus-input-box {
-      background: #F8FAFC;
-      border: 1px solid #E2EAF4;
-      border-radius: 10px;
-      padding: 6px 12px;
-      height: 52px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
-    }
-    .bus-input-box:focus-within {
-      background: #FFFFFF;
-      border-color: #0875E1;
-      box-shadow: 0 0 0 3px rgba(8, 117, 225, 0.12);
-    }
-    .bus-input-box label {
-      font-size: 0.70rem;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      font-weight: 700;
-      color: #64748B;
-      margin-bottom: 2px;
-      display: flex;
-      align-items: center;
-      user-select: none;
-      cursor: pointer;
-    }
-    .bus-input-inner {
-      display: flex;
-      align-items: center;
-      position: relative;
-    }
-    .bus-input-inner input {
-      border: none;
-      padding: 0;
-      font-size: 0.92rem;
-      font-weight: 600;
-      color: #0F172A;
-      background: transparent;
-      width: 100%;
-      line-height: 1.2;
-    }
-    .bus-input-inner input:focus {
-      outline: none;
-      box-shadow: none;
-    }
-    .bus-input-inner input[type="date"] {
-      font-family: inherit;
-      cursor: pointer;
-    }
-    .btn-clear-field {
-      background: transparent;
-      border: none;
-      color: #94A3B8;
-      padding: 0 2px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.75rem;
-      line-height: 1;
-      transition: color 0.15s ease;
-    }
-    .btn-clear-field:hover {
-      color: #334155;
-    }
-    .btn-swap-cities {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      background: #FFFFFF;
-      border: 1px solid #D4E5F9;
-      color: #0875E1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.82rem;
-      transition: all 0.2s ease;
-      box-shadow: 0 2px 6px rgba(8, 117, 225, 0.08);
-      cursor: pointer;
-      padding: 0;
-    }
-    .btn-swap-cities:hover {
-      background-color: #0875E1;
-      color: #FFFFFF;
-      transform: rotate(180deg);
-    }
-    .btn-search-buses {
-      background-color: #0875E1;
-      color: #FFFFFF;
-      font-weight: 700;
-      font-size: 0.92rem;
-      border-radius: 10px;
-      padding: 0 22px;
-      border: none;
-      height: 52px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      white-space: nowrap;
-      transition: all 0.2s ease;
-      box-shadow: 0 4px 14px rgba(8, 117, 225, 0.25);
-      cursor: pointer;
-    }
-    .btn-search-buses:hover:not(:disabled) {
-      background-color: #0662be;
-      box-shadow: 0 6px 18px rgba(8, 117, 225, 0.35);
-      transform: translateY(-1px);
-    }
-    .btn-search-buses:disabled {
-      opacity: 0.7;
-      cursor: not-allowed;
-    }
-    .bus-search-error-alert {
-      max-width: 860px;
-    }
-
-    @media (max-width: 991.98px) {
-      .bus-search-banner {
-        padding: 20px;
-      }
-      .bus-search-card {
-        max-width: 100%;
-      }
-      .bus-search-row {
-        flex-wrap: wrap;
-      }
-      .bus-control-item.bus-control-from {
-        flex: 1 1 calc(50% - 30px);
-      }
-      .bus-control-swap {
-        flex: 0 0 auto;
-      }
-      .bus-control-item.bus-control-to {
-        flex: 1 1 calc(50% - 30px);
-      }
-      .bus-control-item.bus-control-date {
-        flex: 1 1 calc(60% - 10px);
-      }
-      .bus-control-action {
-        flex: 1 1 calc(40% - 10px);
-      }
-      .btn-search-buses {
-        width: 100%;
-      }
-    }
-
-    @media (max-width: 767.98px) {
-      .bus-search-banner {
-        padding: 16px;
-      }
-      .bus-banner-title {
-        font-size: 1.25rem;
-      }
-      .bus-banner-subtitle {
-        font-size: 0.82rem;
-      }
-      .bus-search-row {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-      }
-      .bus-control-item,
-      .bus-control-action {
-        width: 100%;
-        flex: 1 1 auto;
-      }
-      .bus-control-swap {
-        align-self: center;
-        margin: 2px 0;
-      }
-      .btn-search-buses {
-        width: 100%;
-      }
-    }
-    /* Filter Panel */
-    .bus-filter-card {
-      background: #FFFFFF;
-      border: 1px solid var(--border-subtle);
-      border-radius: 16px;
-      padding: 18px;
-    }
-    .filter-section-header {
-      cursor: pointer;
-      user-select: none;
-      padding: 3px 0;
-      transition: color 0.15s ease;
-    }
-    .filter-section-header:hover .filter-section-title {
-      color: var(--primary-blue);
-    }
-    .filter-section-title {
-      font-size: 0.82rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--dark-navy);
-      margin-bottom: 0px;
-    }
-    .filter-checkbox-label {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 0.88rem;
-      color: #334155;
-      cursor: pointer;
-      margin-bottom: 8px;
-      user-select: none;
-    }
-    .filter-checkbox-label:hover {
-      color: var(--primary-blue);
-    }
-    .filter-count-badge {
-      font-size: 0.75rem;
-      color: #94A3B8;
-      background: #F1F5F9;
-      padding: 2px 7px;
-      border-radius: 6px;
-      font-weight: 600;
-    }
-    .filter-divider {
-      border-top: 1px solid #F1F5F9;
-      margin: 14px 0;
-    }
-    .filter-search-input {
-      background-color: #F8FAFC;
-      border: 1px solid var(--border-subtle);
-      border-radius: 8px;
-      font-size: 0.82rem;
-      padding: 6px 10px;
-      margin-bottom: 8px;
-    }
-    .filter-points-list {
-      max-height: 180px;
-      overflow-y: auto;
-    }
-    /* Bus Result Card */
-    .bus-card {
-      background: #FFFFFF;
-      border: 1px solid var(--border-subtle);
-      border-radius: 16px;
-      padding: 20px 24px;
-      transition: all 0.2s ease;
-      position: relative;
-    }
-    .bus-card:hover {
-      border-color: #CBD5E1;
-      box-shadow: 0 6px 20px rgba(16, 42, 86, 0.06);
-    }
-    .bus-card-thumb {
-      width: 90px;
-      height: 72px;
-      border-radius: 10px;
-      object-fit: cover;
-      flex-shrink: 0;
-    }
-    .bus-operator-name {
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: var(--dark-navy);
-    }
-    .bus-type-tag {
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: #64748B;
-      background: #F8FAFC;
-      border: 1px solid #E2E8F0;
-      border-radius: 6px;
-      padding: 2px 8px;
-      display: inline-block;
-    }
-    .amenity-tag {
-      font-size: 0.74rem;
-      font-weight: 500;
-      color: #334155;
-      background: #F8FAFC;
-      border: 1px solid #E2E8F0;
-      border-radius: 6px;
-      padding: 2px 8px;
-      display: inline-flex;
-      align-items: center;
-      white-space: nowrap;
-    }
-    .amenity-tag i {
-      font-size: 0.7rem;
-    }
-    /* Timeline */
-    .timeline-time {
-      font-size: 1.25rem;
-      font-weight: 700;
-      color: var(--dark-navy);
-      letter-spacing: -0.3px;
-    }
-    .timeline-city {
-      font-size: 0.82rem;
-      color: #64748B;
-      font-weight: 500;
-    }
-    .timeline-track-wrap {
-      min-width: 120px;
-      text-align: center;
-      padding: 0 12px;
-    }
-    .timeline-duration {
-      font-size: 0.75rem;
-      color: #64748B;
-      font-weight: 600;
-      margin-bottom: 2px;
-    }
-    .timeline-line {
-      position: relative;
-      height: 2px;
-      background: #CBD5E1;
-      width: 100%;
-      margin: 6px 0;
-    }
-    .timeline-line::after {
-      content: '';
-      position: absolute;
-      right: 0;
-      top: -3px;
-      width: 8px;
-      height: 8px;
-      border-top: 2px solid #64748B;
-      border-right: 2px solid #64748B;
-      transform: rotate(45deg);
-    }
-    .badge-next-day {
-      background: #FEF3C7;
-      color: #B45309;
-      font-size: 0.68rem;
-      font-weight: 700;
-      padding: 2px 6px;
-      border-radius: 4px;
-      margin-left: 6px;
-      vertical-align: middle;
-    }
-    /* Right side price & button */
-    .badge-seats-available {
-      background-color: #DCFCE7;
-      color: #15803D;
-      font-size: 0.78rem;
-      font-weight: 700;
-      padding: 4px 12px;
-      border-radius: 9999px;
-      display: inline-block;
-    }
-    .bus-fare-amount {
-      font-size: 1.45rem;
-      font-weight: 800;
-      color: var(--dark-navy);
-      letter-spacing: -0.5px;
-      line-height: 1.1;
-    }
-    .bus-fare-unit {
-      font-size: 0.75rem;
-      color: #64748B;
-      font-weight: 500;
-    }
-    .btn-select-seats {
-      background-color: var(--primary-blue);
-      color: #FFFFFF;
-      font-weight: 700;
-      font-size: 0.88rem;
-      border-radius: 9999px;
-      padding: 8px 22px;
-      border: none;
-      transition: all 0.2s ease;
-      box-shadow: 0 3px 10px rgba(8, 117, 225, 0.2);
-    }
-    .btn-select-seats:hover {
-      background-color: #065CB5;
-      transform: translateY(-1px);
-      box-shadow: 0 5px 14px rgba(8, 117, 225, 0.3);
-    }
     .empty-state-card {
       border-color: var(--border-subtle) !important;
     }
@@ -3869,6 +1862,43 @@ export class CustomerDashboardComponent implements OnInit {
 
   isBusSaved(scheduleId: number): boolean {
     return this.favouritesList.some(f => f.itemType === 'BUS' && f.itemId === scheduleId);
+  }
+
+  isHotelSaved(id: number): boolean {
+    return this.favouritesList.some(f => f.itemType === 'HOTEL' && f.itemId === id);
+  }
+
+  get savedBusIds(): number[] {
+    return this.favouritesList
+      .filter(f => f.itemType === 'BUS' || f.itemType === 'ROUTE')
+      .map(f => f.itemId);
+  }
+
+  onFilterStateChanged(state: any) {
+    if (state.filterBusTypeAC !== undefined) this.filterBusTypeAC = state.filterBusTypeAC;
+    if (state.filterBusTypeNonAC !== undefined) this.filterBusTypeNonAC = state.filterBusTypeNonAC;
+    if (state.filterSeatTypeSeater !== undefined) this.filterSeatTypeSeater = state.filterSeatTypeSeater;
+    if (state.filterSeatTypeSleeper !== undefined) this.filterSeatTypeSleeper = state.filterSeatTypeSleeper;
+    if (state.filterSingleSeatOnly !== undefined) this.filterSingleSeatOnly = state.filterSingleSeatOnly;
+    if (state.depBands) this.depBands = state.depBands;
+    if (state.arrBands) this.arrBands = state.arrBands;
+    if (state.pickupSearchQuery !== undefined) this.pickupSearchQuery = state.pickupSearchQuery;
+    if (state.droppingSearchQuery !== undefined) this.droppingSearchQuery = state.droppingSearchQuery;
+    this.applyFilters();
+  }
+
+  onFilterPriceChanged(maxPrice: number) {
+    this.filterMaxPrice = maxPrice;
+    this.applyFilters();
+  }
+
+  toggleSeatByNumber(seatNumber: string) {
+    const idx = this.selectedSeatNumbers.indexOf(seatNumber);
+    if (idx >= 0) {
+      this.selectedSeatNumbers.splice(idx, 1);
+    } else {
+      this.selectedSeatNumbers.push(seatNumber);
+    }
   }
 
   get availablePickupPoints(): { name: string; count: number }[] {
