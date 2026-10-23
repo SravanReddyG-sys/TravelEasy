@@ -3162,7 +3162,7 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
     const customerName = this.currentUser?.fullName || (this.passengers[0]?.name) || 'Traveller';
     const customerEmail = this.contactEmail || this.currentUser?.email || 'traveller@traveleasy.com';
 
-    // Step 1: Pre-booking inventory hold in BUS
+    // Step 1: Pre-booking inventory hold in BUS (Authoritative 15-minute hold)
     this.busService.bookSeats(this.schedule.id, this.selectedSeats).subscribe({
       next: () => {
         // Step 2: Create Booking in BKG
@@ -3180,35 +3180,80 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
 
         this.bookingService.createBooking(bookingPayload).subscribe({
           next: (booking: any) => {
-            // Step 3: Process Payment in PAY
-            this.bookingService.processPayment({
+            // Step 3: Create Server-side Razorpay Order in PAY
+            this.bookingService.createPaymentOrder({
               bookingRef: booking.bookingRef,
-              customerId: customerId,
               amount: this.calculatedTotalAmount,
-              paymentMethod: 'GATEWAY'
+              customerId: customerId,
+              customerName: customerName,
+              customerEmail: customerEmail,
+              customerPhone: this.contactPhone || '+91 98765 43210',
+              paymentMethod: 'RAZORPAY'
             }).subscribe({
-              next: () => {
-                // Step 4: Confirm Booking in BKG
-                this.bookingService.confirmBooking(booking.id).subscribe({
-                  next: () => {
+              next: (orderRes: any) => {
+                // Step 4: Launch Razorpay Hosted / Standard Checkout Modal
+                if (typeof (window as any).Razorpay === 'function') {
+                  const options = {
+                    key: orderRes.keyId,
+                    amount: orderRes.amountInPaise,
+                    currency: orderRes.currency || 'INR',
+                    name: 'Travel Easy',
+                    description: bookingPayload.serviceTitle,
+                    order_id: orderRes.orderId,
+                    prefill: {
+                      name: customerName,
+                      email: customerEmail,
+                      contact: this.contactPhone || '+91 98765 43210'
+                    },
+                    theme: {
+                      color: '#0875E1'
+                    },
+                    handler: (response: any) => {
+                      // Step 5: Server-side HMAC Signature Verification
+                      this.bookingService.verifyPaymentSignature({
+                        bookingRef: booking.bookingRef,
+                        razorpayOrderId: response.razorpay_order_id,
+                        razorpayPaymentId: response.razorpay_payment_id,
+                        razorpaySignature: response.razorpay_signature
+                      }).subscribe({
+                        next: (verifyRes: any) => {
+                          this.isProcessingPayment = false;
+                          this.paymentSuccess = true;
+                          this.confirmedBookingRef = booking.bookingRef;
+                          this.confirmedTransactionRef = verifyRes.transaction?.transactionRef || response.razorpay_payment_id;
+                          this.bookingConfirmed.emit({
+                            booking,
+                            passengers: this.passengers,
+                            seats: this.selectedSeats,
+                            schedule: this.schedule
+                          });
+                        },
+                        error: (verifyErr: any) => {
+                          this.compensatePaymentFailure(booking.id, verifyErr.error?.message || 'Payment signature verification failed.');
+                        }
+                      });
+                    },
+                    modal: {
+                      ondismiss: () => {
+                        this.isProcessingPayment = false;
+                        // User dismissed modal without paying; server holds seats for 15-min window
+                      }
+                    }
+                  };
+
+                  const rzp = new (window as any).Razorpay(options);
+                  rzp.on('payment.failed', (failRes: any) => {
                     this.isProcessingPayment = false;
-                    this.paymentSuccess = true;
-                    this.confirmedBookingRef = booking.bookingRef;
-                    this.confirmedTransactionRef = `TXN-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
-                    this.bookingConfirmed.emit({
-                      booking,
-                      passengers: this.passengers,
-                      seats: this.selectedSeats,
-                      schedule: this.schedule
-                    });
-                  },
-                  error: () => {
-                    this.compensatePaymentFailure(booking.id);
-                  }
-                });
+                    this.paymentError = failRes.error?.description || 'Payment failed or was declined by bank.';
+                  });
+                  rzp.open();
+                } else {
+                  this.isProcessingPayment = false;
+                  this.paymentError = 'Razorpay checkout script failed to load. Please check your internet or ad-blocker settings.';
+                }
               },
-              error: () => {
-                this.compensatePaymentFailure(booking.id);
+              error: (err: any) => {
+                this.compensatePaymentFailure(booking.id, err.error?.message || 'Failed to initiate payment gateway order.');
               }
             });
           },
@@ -3226,10 +3271,10 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
     });
   }
 
-  private compensatePaymentFailure(bookingId: number) {
+  private compensatePaymentFailure(bookingId: number, customMessage?: string) {
     this.isProcessingPayment = false;
     this.busService.releaseSeats(this.schedule.id, this.selectedSeats).subscribe();
     this.bookingService.cancelBooking(bookingId).subscribe();
-    this.paymentError = 'Payment authorization failed. Your temporary seat hold has been released. Please try again.';
+    this.paymentError = customMessage || 'Payment authorization failed. Your temporary seat hold has been released. Please try again.';
   }
 }

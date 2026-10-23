@@ -25,6 +25,9 @@ public class Seat {
     @Builder.Default
     private String status = "AVAILABLE"; // AVAILABLE, BOOKED, LOCKED
 
+    private java.time.LocalDateTime holdExpiresAt;
+    private String holdBookingRef;
+
     private String deck; // "LOWER", "UPPER", "SINGLE"
 
     @Column(name = "seat_row")

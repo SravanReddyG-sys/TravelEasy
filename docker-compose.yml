@@ -91,6 +91,10 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysqldb:3306/traveleasy_payment_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET:-}
+      - BOOKING_SERVICE_URL=http://booking-service:8084
     depends_on:
       - mysqldb
     networks:

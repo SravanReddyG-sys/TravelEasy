@@ -24,8 +24,39 @@ public class PaymentTransaction {
     private String bookingRef;
     private Long customerId;
     private Double amount;
-    private String paymentMethod; // CARD, UPI, NET_BANKING, WALLET
-    private String status; // SUCCESS, FAILED, REFUNDED
+    
+    @Builder.Default
+    private String currency = "INR";
+    
+    private String paymentMethod; // CARD, UPI, NET_BANKING, WALLET, GATEWAY
+    private String status; // CREATED, INITIATED, SUCCESS, FAILED, REFUND_INITIATED, REFUNDED
+
+    // Razorpay Integration Attributes
+    @Column(length = 100)
+    private String razorpayOrderId;
+
+    @Column(length = 100)
+    private String razorpayPaymentId;
+
+    @Column(length = 255)
+    private String razorpaySignature;
+
+    // Refund Attributes
+    @Column(length = 100)
+    private String refundId;
+
+    @Column(length = 50)
+    private String refundStatus;
+
+    private Double refundAmount;
+    private LocalDateTime refundedAt;
+
+    // Error Auditing
+    @Column(length = 100)
+    private String errorCode;
+
+    @Column(length = 500)
+    private String errorDescription;
 
     @Builder.Default
     private LocalDateTime timestamp = LocalDateTime.now();

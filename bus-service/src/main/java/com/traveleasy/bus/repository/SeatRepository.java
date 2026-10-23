@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface SeatRepository extends JpaRepository<Seat, Long> {
     List<Seat> findByScheduleId(Long scheduleId);
     Optional<Seat> findByScheduleIdAndSeatNumber(Long scheduleId, String seatNumber);
+    List<Seat> findByStatusInAndHoldExpiresAtBefore(List<String> statuses, java.time.LocalDateTime expiryThreshold);
+    List<Seat> findByHoldBookingRef(String holdBookingRef);
 }

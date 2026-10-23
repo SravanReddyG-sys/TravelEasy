@@ -10,16 +10,23 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
+@EnableScheduling
 @SpringBootApplication
 public class BusServiceApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(BusServiceApplication.class, args);
+    }
+
+    @Bean
+    public org.springframework.web.client.RestTemplate restTemplate() {
+        return new org.springframework.web.client.RestTemplate();
     }
 
     @Bean

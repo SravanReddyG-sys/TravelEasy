@@ -29,6 +29,9 @@ public class BusController {
     private final SeatRepository seatRepository;
     private final SeatLayoutService seatLayoutService;
 
+    @org.springframework.beans.factory.annotation.Value("${seat.hold.duration.minutes:15}")
+    private int seatHoldDurationMinutes;
+
     // ==================== TEMPLATE CATALOGUE ENDPOINTS ====================
 
     @GetMapping("/templates")
@@ -159,7 +162,11 @@ public class BusController {
     // ==================== SEAT BOOKING & RELEASE ====================
 
     @PutMapping("/schedules/{scheduleId}/book-seats")
-    public ResponseEntity<?> bookSeats(@PathVariable Long scheduleId, @RequestBody List<String> seatNumbers) {
+    public ResponseEntity<?> bookSeats(
+            @PathVariable Long scheduleId,
+            @RequestBody List<String> seatNumbers,
+            @RequestParam(required = false) String bookingRef,
+            @RequestParam(required = false) Integer holdMinutes) {
         BusSchedule schedule = scheduleRepository.findById(scheduleId).orElse(null);
         if (schedule == null) {
             return ResponseEntity.badRequest().body(Map.of("message", "Schedule not found"));
@@ -168,6 +175,9 @@ public class BusController {
         if (seatNumbers == null || seatNumbers.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("message", "No seats provided for booking"));
         }
+
+        int duration = (holdMinutes != null && holdMinutes > 0) ? holdMinutes : seatHoldDurationMinutes;
+        java.time.LocalDateTime holdExpiry = java.time.LocalDateTime.now().plusMinutes(duration);
 
         List<Seat> bookedSeatsList = new ArrayList<>();
         for (String seatNum : seatNumbers) {
@@ -178,10 +188,19 @@ public class BusController {
             if (!Boolean.TRUE.equals(seat.getIsBookable())) {
                 return ResponseEntity.badRequest().body(Map.of("message", "Seat " + seatNum + " is a non-bookable physical space"));
             }
-            if (!"AVAILABLE".equalsIgnoreCase(seat.getStatus())) {
+
+            // Check if held by an expired reservation (safe to reclaim)
+            boolean isExpiredHold = seat.getHoldExpiresAt() != null && seat.getHoldExpiresAt().isBefore(java.time.LocalDateTime.now());
+
+            if (!"AVAILABLE".equalsIgnoreCase(seat.getStatus()) && !isExpiredHold) {
                 return ResponseEntity.badRequest().body(Map.of("message", "Seat " + seatNum + " is not available (Status: " + seat.getStatus() + ")"));
             }
-            seat.setStatus("BOOKED");
+
+            seat.setStatus("LOCKED");
+            seat.setHoldExpiresAt(holdExpiry);
+            if (bookingRef != null && !bookingRef.isBlank()) {
+                seat.setHoldBookingRef(bookingRef);
+            }
             bookedSeatsList.add(seat);
         }
 
@@ -190,10 +209,31 @@ public class BusController {
         scheduleRepository.save(schedule);
 
         return ResponseEntity.ok(Map.of(
-                "message", "Seats booked successfully",
+                "message", "Seats locked and held successfully for " + duration + " minutes",
                 "schedule", schedule,
-                "bookedSeats", seatNumbers
+                "bookedSeats", seatNumbers,
+                "holdExpiresAt", holdExpiry.toString()
         ));
+    }
+
+    @PutMapping("/schedules/{scheduleId}/confirm-seats")
+    public ResponseEntity<?> confirmSeats(@PathVariable Long scheduleId, @RequestBody List<String> seatNumbers) {
+        BusSchedule schedule = scheduleRepository.findById(scheduleId).orElse(null);
+        if (schedule == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Schedule not found"));
+        }
+
+        for (String seatNum : seatNumbers) {
+            Optional<Seat> optSeat = seatRepository.findByScheduleIdAndSeatNumber(scheduleId, seatNum);
+            if (optSeat.isPresent()) {
+                Seat seat = optSeat.get();
+                seat.setStatus("BOOKED");
+                seat.setHoldExpiresAt(null);
+                seatRepository.save(seat);
+            }
+        }
+
+        return ResponseEntity.ok(Map.of("message", "Seats permanently confirmed"));
     }
 
     @PutMapping("/schedules/{scheduleId}/release-seats")
@@ -214,6 +254,8 @@ public class BusController {
                 Seat seat = optSeat.get();
                 if ("BOOKED".equalsIgnoreCase(seat.getStatus()) || "LOCKED".equalsIgnoreCase(seat.getStatus())) {
                     seat.setStatus("AVAILABLE");
+                    seat.setHoldExpiresAt(null);
+                    seat.setHoldBookingRef(null);
                     seatRepository.save(seat);
                     releasedCount++;
                 }
