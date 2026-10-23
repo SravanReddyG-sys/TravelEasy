@@ -449,6 +449,8 @@ export { Destination, DestinationAttraction };
                 (boardingPointChanged)="selectedBoardingPoint = $event"
                 (droppingPointChanged)="selectedDroppingPoint = $event"
                 (proceedToPayment)="onSeatPickerProceedToPayment($event)"
+                (bookingConfirmed)="onSeatPickerBookingConfirmed($event)"
+                (viewMyBookings)="switchTab('my-bookings')"
               ></app-bus-seat-picker>
             </div>
 
@@ -2229,6 +2231,10 @@ export class CustomerDashboardComponent implements OnInit {
         this.isLoadingSeats = false;
       }
     });
+  }
+
+  onSeatPickerBookingConfirmed(event: any) {
+    this.loadMyBookings();
   }
 
   onSeatPickerProceedToPayment(payload: any) {
