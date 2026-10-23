@@ -193,16 +193,16 @@ public class SeatLayoutService {
         int order = 1;
         // Lower Deck (6 rows x 3 berths = 18 berths)
         for (int r = 1; r <= 6; r++) {
-            t.getPositions().add(createPos(t, "L" + r + "A", "L-R" + r + "-C0", TYPE_SLEEPER, DECK_LOWER, r, 0, "LEFT", true, true, order++));
-            t.getPositions().add(createPos(t, "L" + r + "B", "L-R" + r + "-C2", TYPE_SLEEPER, DECK_LOWER, r, 2, "RIGHT", false, true, order++));
-            t.getPositions().add(createPos(t, "L" + r + "C", "L-R" + r + "-C3", TYPE_SLEEPER, DECK_LOWER, r, 3, "RIGHT", true, true, order++));
+            t.getPositions().add(createPos(t, "L" + r + "A", "L-R" + r + "-C0", TYPE_SLEEPER, DECK_LOWER, r, 0, "LEFT", true, true, 2, 1, order++));
+            t.getPositions().add(createPos(t, "L" + r + "B", "L-R" + r + "-C2", TYPE_SLEEPER, DECK_LOWER, r, 2, "RIGHT", false, true, 2, 1, order++));
+            t.getPositions().add(createPos(t, "L" + r + "C", "L-R" + r + "-C3", TYPE_SLEEPER, DECK_LOWER, r, 3, "RIGHT", true, true, 2, 1, order++));
         }
 
         // Upper Deck (6 rows x 3 berths = 18 berths)
         for (int r = 1; r <= 6; r++) {
-            t.getPositions().add(createPos(t, "U" + r + "A", "U-R" + r + "-C0", TYPE_SLEEPER, DECK_UPPER, r, 0, "LEFT", true, true, order++));
-            t.getPositions().add(createPos(t, "U" + r + "B", "U-R" + r + "-C2", TYPE_SLEEPER, DECK_UPPER, r, 2, "RIGHT", false, true, order++));
-            t.getPositions().add(createPos(t, "U" + r + "C", "U-R" + r + "-C3", TYPE_SLEEPER, DECK_UPPER, r, 3, "RIGHT", true, true, order++));
+            t.getPositions().add(createPos(t, "U" + r + "A", "U-R" + r + "-C0", TYPE_SLEEPER, DECK_UPPER, r, 0, "LEFT", true, true, 2, 1, order++));
+            t.getPositions().add(createPos(t, "U" + r + "B", "U-R" + r + "-C2", TYPE_SLEEPER, DECK_UPPER, r, 2, "RIGHT", false, true, 2, 1, order++));
+            t.getPositions().add(createPos(t, "U" + r + "C", "U-R" + r + "-C3", TYPE_SLEEPER, DECK_UPPER, r, 3, "RIGHT", true, true, 2, 1, order++));
         }
         return t;
     }

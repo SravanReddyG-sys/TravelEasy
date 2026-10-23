@@ -28,9 +28,6 @@ export interface PassengerInfo {
             </button>
             <div class="d-flex align-items-baseline gap-2">
               <h5 class="fw-bold text-navy mb-0 page-title">Select Your Seats</h5>
-              <span class="text-secondary smaller page-subtitle d-none d-md-inline">
-                • Choose your preferred seats and boarding/dropping points
-              </span>
             </div>
           </div>
 
@@ -68,63 +65,84 @@ export interface PassengerInfo {
       </div>
 
       <!-- ================= SELECTED BUS & JOURNEY SUMMARY CARD ================= -->
-      <!-- Explicit Rule: Do NOT display seat count or boarding/dropping points here -->
-      <div class="bus-journey-summary-card bg-white rounded-3 border p-2 px-3 shadow-xs mb-2">
-        <div class="row align-items-center g-2">
+      <!-- Approved 4-section layout matching reference mockup: Image | Operator | Journey Details | Duration -->
+      <div class="selected-bus-summary-card bg-white rounded-3 mb-2">
+        <div class="summary-card-inner">
           
-          <!-- Bus & Operator info -->
-          <div class="col-xl-4 col-lg-4 col-md-12">
-            <div class="d-flex align-items-center gap-2">
-              <img [src]="busThumbnail" class="bus-summary-thumb shadow-xs" alt="Bus photo" (error)="onThumbError($event)">
-              <div class="min-w-0">
-                <div class="d-flex align-items-center gap-2">
-                  <h6 class="fw-bold text-navy mb-0 operator-name text-truncate">{{ displayOperatorName }}</h6>
-                  <span class="badge-ac-facility" [class.badge-non-ac]="isNonAc">
-                    {{ displayFacilityType }}
-                  </span>
-                </div>
-                <div class="bus-model-text text-muted text-micro text-truncate mt-0">
-                  {{ displayBusModel }} • {{ displayConfigurationText }}
-                </div>
-              </div>
-            </div>
+          <!-- Section 1: Bus Image (17-19%) -->
+          <div class="summary-section-image">
+            <img [src]="busThumbnail" class="summary-bus-img" alt="Bus photo" (error)="onThumbError($event)">
           </div>
 
-          <!-- Journey Timeline Track -->
-          <div class="col-xl-8 col-lg-8 col-md-12">
-            <div class="d-flex justify-content-between align-items-center px-lg-2">
-              
-              <!-- Departure -->
-              <div class="text-start">
-                <div class="timeline-time">{{ formatTime12(departureTime) }}</div>
-                <div class="timeline-city fw-bold text-navy smaller">{{ displayOrigin }}</div>
-                <div class="timeline-date text-muted text-micro">{{ departureDateFormatted }}</div>
-              </div>
+          <!-- Section 2: Operator & Bus Information (26-29%) -->
+          <div class="summary-section-operator">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <span class="operator-heading text-truncate" [title]="displayOperatorName">{{ displayOperatorName }}</span>
+              <span class="badge-ac-status" [class.badge-non-ac]="isNonAc">
+                {{ displayFacilityType }}
+              </span>
+            </div>
+            <div class="bus-info-line text-truncate" [title]="displayBusModel">{{ displayBusModel }}</div>
+            <div class="bus-info-line text-truncate" [title]="displayConfigurationText">{{ displayConfigurationText }}</div>
+          </div>
 
-              <!-- Route Duration Track with Bus Icon -->
-              <div class="timeline-track-wrap flex-grow-1 text-center px-3">
-                <div class="duration-badge-pill">
-                  <i class="fa-regular fa-clock me-1"></i>{{ durationText }}
-                </div>
-                <div class="timeline-line-graphic position-relative my-1">
-                  <div class="timeline-line-bg"></div>
-                  <div class="timeline-bus-icon-wrap">
-                    <i class="fa-solid fa-bus text-primary" style="font-size: 0.75rem;"></i>
-                  </div>
-                </div>
-                <div class="text-muted text-micro">Direct Journey</div>
-              </div>
+          <!-- Vertical Divider 1 -->
+          <div class="summary-vertical-divider d-none d-lg-block"></div>
 
-              <!-- Arrival -->
-              <div class="text-end">
-                <div class="timeline-time">
-                  {{ formatTime12(arrivalTime) }}
-                  <span *ngIf="isOvernight" class="badge-overnight" title="Arrives on the next calendar day">+1 Day</span>
-                </div>
-                <div class="timeline-city fw-bold text-navy smaller">{{ displayDestination }}</div>
-                <div class="timeline-date text-muted text-micro">{{ arrivalDateFormatted }}</div>
+          <!-- Section 3: Source to Destination Journey Details (40-42%) -->
+          <div class="summary-section-journey">
+            
+            <!-- Source Endpoint -->
+            <div class="journey-endpoint text-start">
+              <div class="endpoint-location-row d-flex align-items-center gap-1 mb-1">
+                <svg class="endpoint-pin-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                  <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+                <span class="endpoint-city-name text-truncate" [title]="displayOrigin">{{ displayOrigin }}</span>
               </div>
+              <div class="endpoint-time-val">{{ departureTimeFormatted }}</div>
+              <div class="endpoint-date-val">{{ departureDateFormatted }}</div>
+            </div>
 
+            <!-- Connector Graphic -->
+            <div class="journey-connector-track d-flex align-items-center flex-grow-1 mx-2 mx-xl-3">
+              <span class="connector-end-dot"></span>
+              <div class="connector-dotted-segment"></div>
+              <div class="connector-bus-icon-wrap">
+                <i class="fa-solid fa-bus text-primary"></i>
+              </div>
+              <div class="connector-dotted-segment"></div>
+              <span class="connector-end-dot"></span>
+            </div>
+
+            <!-- Destination Endpoint -->
+            <div class="journey-endpoint text-start">
+              <div class="endpoint-location-row d-flex align-items-center gap-1 mb-1">
+                <svg class="endpoint-pin-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                  <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+                <span class="endpoint-city-name text-truncate" [title]="displayDestination">{{ displayDestination }}</span>
+              </div>
+              <div class="endpoint-time-val">{{ arrivalTimeFormatted }}</div>
+              <div class="endpoint-date-val">{{ arrivalDateFormatted }}</div>
+            </div>
+
+          </div>
+
+          <!-- Vertical Divider 2 -->
+          <div class="summary-vertical-divider d-none d-lg-block"></div>
+
+          <!-- Section 4: Journey Duration (13-15%) -->
+          <div class="summary-section-duration d-flex align-items-center gap-2">
+            <svg class="duration-clock-svg flex-shrink-0" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <div class="duration-text-group">
+              <div class="duration-meta-label">Duration</div>
+              <div class="duration-time-val">{{ durationText }}</div>
             </div>
           </div>
 
@@ -210,29 +228,15 @@ export interface PassengerInfo {
                       <div *ngIf="deck.deck === 'UPPER' && isDoubleDeck" style="width: 18px; height: 18px;"></div>
                     </div>
 
-                    <!-- Seat Matrix Rows -->
-                    <div class="seats-grid-table">
-                      <div *ngFor="let rowNum of getDeckRowNumbers(deck)" class="seat-row-track d-flex align-items-center justify-content-between">
-                        
-                        <!-- Left Side Seats -->
-                        <div class="d-flex gap-1">
-                          <ng-container *ngFor="let p of getRowSeats(deck, rowNum, 'LEFT')">
-                            <ng-container *ngTemplateOutlet="seatTemplate; context: { pos: p }"></ng-container>
-                          </ng-container>
-                          <div *ngIf="getRowSeats(deck, rowNum, 'LEFT').length === 0" class="seat-empty-spacer"></div>
-                        </div>
-
-                        <!-- Clean Aisle Corridor (Blank corridor, no border) -->
-                        <div class="bus-aisle-corridor"></div>
-
-                        <!-- Right Side Seats -->
-                        <div class="d-flex gap-1">
-                          <ng-container *ngFor="let p of getRowSeats(deck, rowNum, 'RIGHT')">
-                            <ng-container *ngTemplateOutlet="seatTemplate; context: { pos: p }"></ng-container>
-                          </ng-container>
-                          <div *ngIf="getRowSeats(deck, rowNum, 'RIGHT').length === 0" class="seat-empty-spacer"></div>
-                        </div>
-
+                    <!-- Unified Bus Deck CSS Grid -->
+                    <div class="bus-deck-grid" 
+                         [style.gridTemplateColumns]="getDeckGridTemplateColumns(deck)"
+                         [style.gridTemplateRows]="'repeat(' + getDeckTotalGridRows(deck) + ', var(--row-unit-h))'">
+                      <div *ngFor="let pos of deck.positions" 
+                           class="grid-seat-slot d-flex align-items-center justify-content-center"
+                           [style.gridColumn]="getGridColumn(deck, pos)"
+                           [style.gridRow]="getGridRow(deck, pos)">
+                        <ng-container *ngTemplateOutlet="seatTemplate; context: { pos: pos }"></ng-container>
                       </div>
                     </div>
 
@@ -744,6 +748,16 @@ export interface PassengerInfo {
       --dark-navy: #102A56;
       --light-blue-bg: #F5F9FE;
       --card-border: #E2E8F0;
+
+      /* Shared Layout Tokens for Bus Deck Renderer */
+      --seat-w: 26px;
+      --row-unit-h: 31px;
+      --aisle-w: 20px;
+      --col-gap: 5px;
+      --row-gap: 2px;
+      --bus-padding: 6px 12px 10px 12px;
+      --decks-gap: 20px;
+
       display: block;
     }
 
@@ -823,96 +837,242 @@ export interface PassengerInfo {
       background: #10B981;
     }
 
-    /* Bus Summary Card */
-    .bus-summary-thumb {
-      width: 44px;
-      height: 44px;
-      border-radius: 8px;
-      object-fit: cover;
+    /* ================= SELECTED BUS SUMMARY CARD ================= */
+    .selected-bus-summary-card {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 10px;
+      padding: 12px 20px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+    .summary-card-inner {
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+    
+    /* Section 1: Bus Image (17-19%) */
+    .summary-section-image {
+      flex: 0 0 18%;
+      max-width: 18%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-right: 14px;
+    }
+    .summary-bus-img {
+      max-width: 100%;
+      height: auto;
+      max-height: 72px;
+      object-fit: contain;
+      display: block;
+    }
+
+    /* Section 2: Operator & Bus Info (26-29%) */
+    .summary-section-operator {
+      flex: 0 0 27%;
+      max-width: 27%;
+      min-width: 0;
+      padding-right: 8px;
+    }
+    .operator-heading {
+      font-size: 1.18rem;
+      font-weight: 700;
+      color: #0F172A;
+      line-height: 1.2;
+      display: inline-block;
+    }
+    .badge-ac-status {
+      background-color: #10B981;
+      color: #FFFFFF;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      vertical-align: middle;
+      line-height: 1.2;
       flex-shrink: 0;
     }
-    .operator-name {
-      font-size: 0.95rem;
-      letter-spacing: -0.2px;
+    .badge-ac-status.badge-non-ac {
+      background-color: #64748B;
     }
-    .badge-ac-facility {
-      background: #ECFDF5;
-      color: #059669;
-      border: 1px solid #A7F3D0;
-      font-size: 0.65rem;
-      font-weight: 700;
-      padding: 2px 6px;
-      border-radius: 12px;
-    }
-    .badge-non-ac {
-      background: #F1F5F9;
+    .bus-info-line {
+      font-size: 0.88rem;
       color: #64748B;
-      border-color: #CBD5E1;
+      font-weight: 400;
+      line-height: 1.35;
+      margin-top: 1px;
     }
-    .timeline-time {
-      font-size: 1.05rem;
-      font-weight: 800;
-      color: var(--dark-navy);
-      line-height: 1.1;
+
+    /* Vertical Dividers */
+    .summary-vertical-divider {
+      width: 1px;
+      height: 56px;
+      background-color: #E2E8F0;
+      flex-shrink: 0;
+      margin: 0 16px;
+      align-self: center;
     }
-    .timeline-city {
-      font-size: 0.78rem;
-      line-height: 1.1;
+
+    /* Section 3: Journey Details (40-42%) */
+    .summary-section-journey {
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-width: 0;
+      padding: 0 4px;
     }
-    .duration-badge-pill {
-      display: inline-block;
-      font-size: 0.65rem;
+    .journey-endpoint {
+      min-width: 90px;
+      flex-shrink: 0;
+    }
+    .endpoint-location-row {
+      line-height: 1.2;
+    }
+    .endpoint-pin-icon {
+      flex-shrink: 0;
+    }
+    .endpoint-city-name {
+      font-size: 0.90rem;
       font-weight: 600;
-      color: #475569;
-      background: #F8FAFC;
-      border: 1px solid #E2E8F0;
-      padding: 1px 8px;
-      border-radius: 10px;
+      color: #0F172A;
     }
-    .timeline-line-graphic {
-      height: 10px;
+    .endpoint-time-val {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #0F172A;
+      line-height: 1.15;
+      margin: 2px 0;
+    }
+    .endpoint-date-val {
+      font-size: 0.82rem;
+      color: #64748B;
+      font-weight: 400;
+      line-height: 1.2;
+    }
+
+    /* Connector Graphic */
+    .journey-connector-track {
+      min-width: 80px;
+    }
+    .connector-end-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background-color: #94A3B8;
+      flex-shrink: 0;
+    }
+    .connector-dotted-segment {
+      flex: 1;
+      height: 0;
+      border-top: 2px dotted #CBD5E1;
+      margin: 0 6px;
+    }
+    .connector-bus-icon-wrap {
+      padding: 0 4px;
+      color: #0284C7;
+      font-size: 1.05rem;
+      flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: center;
     }
-    .timeline-line-bg {
-      position: absolute;
-      width: 100%;
-      height: 2px;
-      background: #CBD5E1;
+
+    /* Section 4: Journey Duration (13-15%) */
+    .summary-section-duration {
+      flex: 0 0 14%;
+      max-width: 14%;
+      min-width: 0;
+      padding-left: 4px;
     }
-    .timeline-bus-icon-wrap {
-      position: relative;
-      background: #FFFFFF;
-      padding: 0 4px;
-      font-size: 0.75rem;
+    .duration-clock-svg {
+      flex-shrink: 0;
     }
-    .badge-overnight {
-      font-size: 0.60rem;
-      background: #FEF3C7;
-      color: #92400E;
-      padding: 1px 4px;
-      border-radius: 4px;
+    .duration-text-group {
+      min-width: 0;
+    }
+    .duration-meta-label {
+      font-size: 0.80rem;
+      color: #64748B;
+      font-weight: 500;
+      line-height: 1.1;
+    }
+    .duration-time-val {
+      font-size: 1.15rem;
       font-weight: 700;
-      margin-left: 2px;
-      vertical-align: middle;
+      color: #0F172A;
+      line-height: 1.2;
+      margin-top: 2px;
+      white-space: nowrap;
     }
 
-    /* Bus Outline & Deck Container matching Screenshot 1 */
+    /* Responsive Adaptation */
+    @media (max-width: 991px) {
+      .summary-card-inner {
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .summary-section-image {
+        flex: 0 0 20%;
+        max-width: 20%;
+      }
+      .summary-section-operator {
+        flex: 1 1 70%;
+        max-width: 70%;
+      }
+      .summary-vertical-divider {
+        display: none;
+      }
+      .summary-section-journey {
+        flex: 1 1 65%;
+      }
+      .summary-section-duration {
+        flex: 0 0 30%;
+        max-width: 30%;
+        justify-content: flex-end;
+      }
+    }
+    @media (max-width: 576px) {
+      .summary-card-inner {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .summary-section-image {
+        flex: 0 0 100%;
+        max-width: 100%;
+        justify-content: flex-start;
+      }
+      .summary-section-operator {
+        flex: 0 0 100%;
+        max-width: 100%;
+      }
+      .summary-section-journey {
+        width: 100%;
+      }
+      .summary-section-duration {
+        flex: 0 0 100%;
+        max-width: 100%;
+        justify-content: flex-start;
+      }
+    }
+
+    /* Bus Outline & Deck Container */
     .decks-container {
       display: flex;
       flex-direction: row;
       justify-content: center;
-      align-items: stretch; /* Guarantees equal height/length for both Upper and Lower decks */
-      gap: 16px;
+      align-items: stretch;
+      gap: var(--decks-gap);
       width: 100%;
     }
     .deck-column {
       display: flex;
       flex-direction: column;
-      flex: 1 1 0;
-      min-width: 180px;
-      max-width: 260px;
+      align-items: center;
+      flex: 0 0 auto;
     }
     .deck-title-header {
       color: #555555;
@@ -925,25 +1085,41 @@ export interface PassengerInfo {
       background: #FFFFFF;
       border: 1px solid #DCDCDC;
       border-radius: 14px;
-      flex: 1 1 auto;
       display: flex;
       flex-direction: column;
       justify-content: flex-start;
-      padding: 4px 8px 6px 8px;
+      align-items: center;
+      padding: var(--bus-padding);
       box-shadow: none;
+      width: fit-content;
+      margin: 0 auto;
     }
     .deck-top-cab {
       height: 16px;
+      width: 100%;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding-right: 4px;
     }
     .steering-wheel-svg {
       stroke: #9E9E9E;
     }
-    .bus-aisle-corridor {
-      width: 16px;
-      height: 100%;
+
+    /* Unified Bus Deck CSS Grid */
+    .bus-deck-grid {
+      display: grid;
+      column-gap: var(--col-gap);
+      row-gap: var(--row-gap);
+      justify-content: center;
+      align-content: start;
     }
-    .seat-row-track {
-      margin-bottom: 2px;
+    .grid-seat-slot {
+      width: var(--seat-w);
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     /* Seat / Berth Cells */
@@ -955,18 +1131,14 @@ export interface PassengerInfo {
       border: none;
       box-shadow: none;
       padding: 0;
+      width: 100%;
+      height: 100%;
     }
     .seat-cell-item.seater {
-      width: 26px;
-      min-height: 33px;
+      height: 100%;
     }
     .seat-cell-item.sleeper {
-      width: 26px;
-      min-height: 56px;
-    }
-    .seat-empty-spacer {
-      width: 26px;
-      height: 33px;
+      height: 100%;
     }
     .seat-svg {
       display: block;
@@ -1190,28 +1362,26 @@ export interface PassengerInfo {
 
     /* Mobile / Small screen natural scrolling fallback */
     @media (max-width: 991.98px) {
-      .seat-cell-item.seater {
-        width: 36px;
-        min-height: 46px;
+      :host {
+        --seat-w: 36px;
+        --row-unit-h: 44px;
+        --aisle-w: 24px;
+        --col-gap: 8px;
+        --row-gap: 6px;
+        --bus-padding: 8px 14px 14px 14px;
+        --decks-gap: 16px;
       }
       .seat-cell-item.seater .seater-svg {
         width: 28px;
-        height: 28px;
-      }
-      .seat-cell-item.sleeper {
-        width: 36px;
-        min-height: 72px;
+        height: 26px;
       }
       .seat-cell-item.sleeper .sleeper-svg {
         width: 28px;
-        height: 60px;
+        height: 64px;
       }
       .legend-icon-box {
         width: 30px;
         height: 30px;
-      }
-      .seat-row-track {
-        margin-bottom: 8px;
       }
     }
   `]
@@ -1341,8 +1511,26 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
     return this.layout?.arrivalTime || this.schedule?.arrivalTime || '05:45';
   }
 
+  get departureTimeFormatted(): string {
+    return this.formatTime24(this.departureTime);
+  }
+
+  get arrivalTimeFormatted(): string {
+    return this.formatTime24(this.arrivalTime);
+  }
+
+  formatTime24(timeStr: string): string {
+    if (!timeStr) return '';
+    const parts = timeStr.split(':');
+    const h = String(parts[0] || '0').padStart(2, '0');
+    const m = String(parts[1] || '00').padStart(2, '0');
+    return `${h}:${m}`;
+  }
+
   get busThumbnail(): string {
-    return 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=300&q=80';
+    if (this.schedule?.busImage) return this.schedule.busImage;
+    if (this.schedule?.thumbnailUrl) return this.schedule.thumbnailUrl;
+    return 'assets/images/travel-easy-bus.png';
   }
 
   onThumbError(e: any) {
@@ -1359,10 +1547,11 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
 
   get departureDateFormatted(): string {
     const rawDate = this.layout?.travelDate || this.schedule?.travelDate || this.travelDate;
-    if (!rawDate) return 'Wed, 22 Oct';
+    if (!rawDate) return 'Wed, 16 Apr 2025';
     try {
-      const d = new Date(rawDate);
-      return d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
+      const dateStr = rawDate.length === 10 ? `${rawDate}T12:00:00` : rawDate;
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
     } catch {
       return rawDate;
     }
@@ -1370,13 +1559,14 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
 
   get arrivalDateFormatted(): string {
     const rawDate = this.layout?.travelDate || this.schedule?.travelDate || this.travelDate;
-    if (!rawDate) return 'Thu, 23 Oct';
+    if (!rawDate) return 'Thu, 17 Apr 2025';
     try {
-      const d = new Date(rawDate);
+      const dateStr = rawDate.length === 10 ? `${rawDate}T12:00:00` : rawDate;
+      const d = new Date(dateStr);
       if (this.isOvernight) {
         d.setDate(d.getDate() + 1);
       }
-      return d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
+      return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
     } catch {
       return rawDate;
     }
@@ -1452,6 +1642,77 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
     return deck.positions
       .filter(p => p.row === row && p.side === side)
       .sort((a, b) => a.column - b.column);
+  }
+
+  // --- Bus Deck CSS Grid Helpers for Physically Coherent Layout ---
+
+  isDeck2x2(deck: DeckLayout): boolean {
+    return deck.positions?.some(p => p.column === 1 || p.side === 'CENTER') || false;
+  }
+
+  isDeck1x1(deck: DeckLayout): boolean {
+    const hasCol3 = deck.positions?.some(p => p.column >= 3);
+    const hasLeftCol1 = deck.positions?.some(p => p.column === 1);
+    const maxRightCol = Math.max(...(deck.positions?.filter(p => p.side === 'RIGHT').map(p => p.column) || [0]));
+    return !hasCol3 && !hasLeftCol1 && maxRightCol <= 2 && (deck.columns === 3 || deck.columns === 2);
+  }
+
+  getDeckTotalGridRows(deck: DeckLayout): number {
+    return 12;
+  }
+
+  getDeckGridTemplateColumns(deck: DeckLayout): string {
+    if (this.isDeck2x2(deck)) {
+      return 'var(--seat-w) var(--seat-w) var(--aisle-w) var(--seat-w) var(--seat-w)';
+    } else if (this.isDeck1x1(deck)) {
+      return 'var(--seat-w) var(--aisle-w) var(--seat-w)';
+    } else {
+      return 'var(--seat-w) var(--aisle-w) var(--seat-w) var(--seat-w)';
+    }
+  }
+
+  getGridColumn(deck: DeckLayout, pos: SeatPosition): string {
+    const is2x2 = this.isDeck2x2(deck);
+    const is1x1 = this.isDeck1x1(deck);
+
+    if (is2x2) {
+      if (pos.side === 'LEFT') {
+        return pos.column === 0 ? '1' : '2';
+      } else if (pos.side === 'CENTER') {
+        return '3';
+      } else {
+        return (pos.column === 2 || (pos.row === 12 && pos.column === 3)) ? '4' : '5';
+      }
+    } else if (is1x1) {
+      if (pos.side === 'LEFT') {
+        return '1';
+      } else {
+        return '3';
+      }
+    } else {
+      // 2+1 Layouts: col 1 = Left, col 2 = Aisle, col 3 = Right Aisle, col 4 = Right Window
+      if (pos.side === 'LEFT') {
+        return '1';
+      } else {
+        return pos.column === 2 ? '3' : '4';
+      }
+    }
+  }
+
+  getGridRow(deck: DeckLayout, pos: SeatPosition): string {
+    const isSleeper = pos.seatType === 'SLEEPER';
+
+    if (isSleeper) {
+      let startRow = pos.row;
+      // If sleeper rows are 1..6 (sequential) rather than 1, 3, 5, 7, 9, 11
+      const hasEvenSleeperRows = deck.positions?.some(p => p.seatType === 'SLEEPER' && (p.row === 2 || p.row === 4 || p.row === 6));
+      if (hasEvenSleeperRows && pos.row <= 6) {
+        startRow = (pos.row - 1) * 2 + 1;
+      }
+      return `${startRow} / span 2`;
+    } else {
+      return `${pos.row} / span 1`;
+    }
   }
 
   isSeatSelected(seatNumber: string): boolean {
