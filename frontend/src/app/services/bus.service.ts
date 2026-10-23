@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { TripSeatLayout } from '../models/bus.model';
 
 @Injectable({
   providedIn: 'root'
@@ -20,6 +21,18 @@ export class BusService {
 
   getBusesByOperator(operatorId: number): Observable<any[]> {
     return this.http.get<any[]>(`${this.apiUrl}/operator/${operatorId}`);
+  }
+
+  getTemplates(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/templates`);
+  }
+
+  getTemplatesByConfiguration(config: string): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/templates/by-configuration/${config}`);
+  }
+
+  getScheduleLayout(scheduleId: number): Observable<TripSeatLayout> {
+    return this.http.get<TripSeatLayout>(`${this.apiUrl}/schedules/${scheduleId}/layout`);
   }
 
   createSchedule(scheduleData: any): Observable<any> {

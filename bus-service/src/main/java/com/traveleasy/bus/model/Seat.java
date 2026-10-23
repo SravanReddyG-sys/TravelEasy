@@ -24,4 +24,25 @@ public class Seat {
 
     @Builder.Default
     private String status = "AVAILABLE"; // AVAILABLE, BOOKED, LOCKED
+
+    private String deck; // "LOWER", "UPPER", "SINGLE"
+
+    @Column(name = "seat_row")
+    private Integer rowNumber;
+
+    @Column(name = "seat_col")
+    private Integer columnNumber;
+
+    private String side; // "LEFT", "RIGHT", "CENTER"
+
+    @Builder.Default
+    private Boolean isBookable = true;
+
+    @Builder.Default
+    private Integer rowSpan = 1;
+
+    @Builder.Default
+    private Integer colSpan = 1;
+
+    private Integer visualOrder;
 }

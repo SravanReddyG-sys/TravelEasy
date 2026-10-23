@@ -2,12 +2,11 @@ import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { BusResultCardComponent } from '../bus-result-card/bus-result-card.component';
-import { BusSeatPickerComponent } from '../bus-seat-picker/bus-seat-picker.component';
 
 @Component({
   selector: 'app-bus-results-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, BusResultCardComponent, BusSeatPickerComponent],
+  imports: [CommonModule, FormsModule, BusResultCardComponent],
   template: `
     <div class="bus-results-container">
       <!-- Results Header: Count, Route, Date & Sort By -->
@@ -48,7 +47,7 @@ import { BusSeatPickerComponent } from '../bus-seat-picker/bus-seat-picker.compo
         </button>
       </div>
 
-      <!-- Bus Cards List with Seat Picker Expansion -->
+      <!-- Bus Cards List -->
       <div *ngFor="let b of buses" class="mb-3">
         <app-bus-result-card 
           [bus]="b" 
@@ -57,22 +56,6 @@ import { BusSeatPickerComponent } from '../bus-seat-picker/bus-seat-picker.compo
           (selectSeats)="onToggleSeats(b)"
           (saveToFavourites)="saveToFavourites.emit($event)"
         ></app-bus-result-card>
-
-        <!-- Seat Picker Accordion -->
-        <div *ngIf="selectedSchedule?.id === b.id" class="mt-2">
-          <app-bus-seat-picker
-            [schedule]="selectedSchedule"
-            [seats]="seatList"
-            [isLoading]="isLoadingSeats"
-            [selectedSeats]="selectedSeatNumbers"
-            [selectedBoardingPoint]="selectedBoardingPoint"
-            [selectedDroppingPoint]="selectedDroppingPoint"
-            (seatToggled)="seatToggled.emit($event)"
-            (boardingPointChanged)="boardingPointChanged.emit($event)"
-            (droppingPointChanged)="droppingPointChanged.emit($event)"
-            (proceedToCheckout)="proceedToCheckout.emit(selectedSchedule)"
-          ></app-bus-seat-picker>
-        </div>
       </div>
 
       <!-- Pagination -->

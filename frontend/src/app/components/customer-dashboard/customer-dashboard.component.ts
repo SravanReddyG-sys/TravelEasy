@@ -9,12 +9,14 @@ import { BookingService } from '../../services/booking.service';
 import { TravellerService } from '../../services/traveller.service';
 import { User } from '../../models/user.model';
 import { Destination, DestinationAttraction } from '../../models/destination.model';
+import { TripSeatLayout } from '../../models/bus.model';
 
 import { TravellerHeaderComponent } from '../../shared/components/traveller-header/traveller-header.component';
 import { TravellerSidebarComponent } from '../../shared/components/traveller-sidebar/traveller-sidebar.component';
 import { BusSearchPanelComponent } from '../../features/traveller/bus-booking/components/bus-search-panel/bus-search-panel.component';
 import { BusFilterPanelComponent } from '../../features/traveller/bus-booking/components/bus-filter-panel/bus-filter-panel.component';
 import { BusResultsListComponent } from '../../features/traveller/bus-booking/components/bus-results-list/bus-results-list.component';
+import { BusSeatPickerComponent } from '../../features/traveller/bus-booking/components/bus-seat-picker/bus-seat-picker.component';
 import { DestinationDetailsComponent } from '../../features/traveller/destination-details/destination-details.component';
 import { HotelSearchPanelComponent } from '../../features/traveller/hotel-booking/components/hotel-search-panel/hotel-search-panel.component';
 import { HotelResultCardComponent } from '../../features/traveller/hotel-booking/components/hotel-result-card/hotel-result-card.component';
@@ -35,6 +37,7 @@ export { Destination, DestinationAttraction };
     BusSearchPanelComponent,
     BusFilterPanelComponent,
     BusResultsListComponent,
+    BusSeatPickerComponent,
     DestinationDetailsComponent,
     HotelSearchPanelComponent,
     HotelResultCardComponent,
@@ -77,7 +80,7 @@ export { Destination, DestinationAttraction };
         ></app-traveller-sidebar>
 
         <!-- ==================== MAIN CONTENT AREA ==================== -->
-        <main class="main-content flex-grow-1 p-4" style="background-color: #F5F9FE;">
+        <main class="main-content flex-grow-1" [ngClass]="busViewMode === 'seat-selection' ? 'p-2 px-md-3 py-md-1' : 'p-4'" style="background-color: #F5F9FE;">
 
           <!-- #################### TAB 0: DASHBOARD #################### -->
           <div *ngIf="activeTab === 'dashboard'">
@@ -290,137 +293,165 @@ export { Destination, DestinationAttraction };
 
           <!-- #################### TAB 1: BUS BOOKING #################### -->
           <div *ngIf="activeTab === 'bus'">
-            <!-- Bus Search Scenic Banner -->
-            <app-bus-search-panel
-              [origin]="busOrigin"
-              [destination]="busDestination"
-              [journeyDate]="busDate"
-              [isSearching]="isSearchingBuses"
-              [searchError]="busSearchError"
-              (originChange)="busOrigin = $event"
-              (destinationChange)="busDestination = $event"
-              (journeyDateChange)="busDate = $event"
-              (swapCities)="swapBusCities()"
-              (search)="onSearchBuses()"
-            ></app-bus-search-panel>
+            
+            <!-- Standard Search & Results View -->
+            <div *ngIf="busViewMode === 'results'">
+              <!-- Bus Search Scenic Banner -->
+              <app-bus-search-panel
+                [origin]="busOrigin"
+                [destination]="busDestination"
+                [journeyDate]="busDate"
+                [isSearching]="isSearchingBuses"
+                [searchError]="busSearchError"
+                (originChange)="busOrigin = $event"
+                (destinationChange)="busDestination = $event"
+                (journeyDateChange)="busDate = $event"
+                (swapCities)="swapBusCities()"
+                (search)="onSearchBuses()"
+              ></app-bus-search-panel>
 
-            <!-- Loading Spinner State -->
-            <div *ngIf="isSearchingBuses" class="text-center py-5">
-              <div class="spinner-border text-primary mb-3" role="status"></div>
-              <h6 class="fw-bold text-navy">Searching buses from {{ busOrigin }} to {{ busDestination }}...</h6>
-            </div>
-
-            <!-- Search Results State -->
-            <div *ngIf="!isSearchingBuses && busesSearched">
-              
-              <!-- Route Empty State: No schedules found -->
-              <div *ngIf="busResults.length === 0" class="empty-state-card bg-white rounded-4 border p-5 text-center shadow-sm">
-                <div class="empty-icon-wrap mx-auto mb-3">
-                  <i class="fa-solid fa-bus text-primary fs-2"></i>
-                </div>
-                <h5 class="fw-bold text-navy mb-2">No buses found for this route and journey date</h5>
-                <p class="text-secondary small mb-4" style="max-width: 520px; margin: 0 auto;">
-                  No scheduled buses were found from <strong>{{ busOrigin }}</strong> to <strong>{{ busDestination }}</strong> on {{ formattedBusDate }}. Try selecting an active route with scheduled departures:
-                </p>
-                <div class="d-flex flex-wrap justify-content-center gap-2">
-                  <button class="btn btn-outline-primary btn-sm rounded-pill px-3 py-2 fw-semibold" (click)="searchQuickRoute('Bengaluru', 'Hyderabad')">
-                    <i class="fa-solid fa-route me-1"></i> Bengaluru → Hyderabad
-                  </button>
-                  <button class="btn btn-outline-primary btn-sm rounded-pill px-3 py-2 fw-semibold" (click)="searchQuickRoute('Vijayawada', 'Hyderabad')">
-                    <i class="fa-solid fa-route me-1"></i> Vijayawada → Hyderabad
-                  </button>
-                  <button class="btn btn-outline-primary btn-sm rounded-pill px-3 py-2 fw-semibold" (click)="searchQuickRoute('Hyderabad', 'Bengaluru')">
-                    <i class="fa-solid fa-route me-1"></i> Hyderabad → Bengaluru
-                  </button>
-                </div>
+              <!-- Loading Spinner State -->
+              <div *ngIf="isSearchingBuses" class="text-center py-5">
+                <div class="spinner-border text-primary mb-3" role="status"></div>
+                <h6 class="fw-bold text-navy">Searching buses from {{ busOrigin }} to {{ busDestination }}...</h6>
               </div>
 
-              <!-- When Buses Found: Two-Column Layout -->
-              <div *ngIf="busResults.length > 0" class="row g-4 align-items-start">
+              <!-- Search Results State -->
+              <div *ngIf="!isSearchingBuses && busesSearched">
                 
-                <!-- ================= LEFT COLUMN: FILTERS PANEL ================= -->
-                <div class="col-xl-3 col-lg-4">
-                  <app-bus-filter-panel
-                    [filterBusTypeAC]="filterBusTypeAC"
-                    [filterBusTypeNonAC]="filterBusTypeNonAC"
-                    [filterSeatTypeSeater]="filterSeatTypeSeater"
-                    [filterSeatTypeSleeper]="filterSeatTypeSleeper"
-                    [filterSingleSeatOnly]="filterSingleSeatOnly"
-                    [depBands]="depBands"
-                    [arrBands]="arrBands"
-                    [countBusTypeAC]="countBusTypeAC"
-                    [countBusTypeNonAC]="countBusTypeNonAC"
-                    [countSeatTypeSeater]="countSeatTypeSeater"
-                    [countSeatTypeSleeper]="countSeatTypeSleeper"
-                    [countDepBefore6am]="countDepBefore6am"
-                    [countDep6to12]="countDep6to12"
-                    [countDep12to18]="countDep12to18"
-                    [countDepAfter6pm]="countDepAfter6pm"
-                    [countArrBefore6am]="countArrBefore6am"
-                    [countArr6to12]="countArr6to12"
-                    [countArr12to18]="countArr12to18"
-                    [countArrAfter6pm]="countArrAfter6pm"
-                    [availablePickupPoints]="availablePickupPoints"
-                    [displayedPickupPoints]="displayedPickupPoints"
-                    [selectedPickupPoints]="selectedPickupPoints"
-                    [showAllPickupPoints]="showAllPickupPoints"
-                    [pickupSearchQuery]="pickupSearchQuery"
-                    [availableDroppingPoints]="availableDroppingPoints"
-                    [displayedDroppingPoints]="displayedDroppingPoints"
-                    [selectedDroppingPoints]="selectedDroppingPoints"
-                    [showAllDroppingPoints]="showAllDroppingPoints"
-                    [droppingSearchQuery]="droppingSearchQuery"
-                    [amenityDefinitions]="amenityDefinitions"
-                    [selectedAmenities]="selectedAmenities"
-                    [filterMinPrice]="filterMinPrice"
-                    [filterMaxPrice]="filterMaxPrice"
-                    [defaultMinPrice]="defaultMinPrice"
-                    [defaultMaxPrice]="defaultMaxPrice"
-                    [hasActiveFilters]="hasActiveBusFilters"
-                    [filterSectionsOpen]="filterSectionsOpen"
-                    [amenityCounts]="amenityCounts"
-                    (filterChange)="onFilterStateChanged($event)"
-                    (priceChange)="onFilterPriceChanged($event)"
-                    (clearAll)="clearAllBusFilters()"
-                    (togglePickupPoint)="togglePickupPoint($event)"
-                    (toggleDroppingPoint)="toggleDroppingPoint($event)"
-                    (toggleAmenity)="toggleAmenity($event)"
-                    (toggleSection)="toggleFilterSection($event)"
-                  ></app-bus-filter-panel>
+                <!-- Route Empty State: No schedules found -->
+                <div *ngIf="busResults.length === 0" class="empty-state-card bg-white rounded-4 border p-5 text-center shadow-sm">
+                  <div class="empty-icon-wrap mx-auto mb-3">
+                    <i class="fa-solid fa-bus text-primary fs-2"></i>
+                  </div>
+                  <h5 class="fw-bold text-navy mb-2">No buses found for this route and journey date</h5>
+                  <p class="text-secondary small mb-4" style="max-width: 520px; margin: 0 auto;">
+                    No scheduled buses were found from <strong>{{ busOrigin }}</strong> to <strong>{{ busDestination }}</strong> on {{ formattedBusDate }}. Try selecting an active route with scheduled departures:
+                  </p>
+                  <div class="d-flex flex-wrap justify-content-center gap-2">
+                    <button class="btn btn-outline-primary btn-sm rounded-pill px-3 py-2 fw-semibold" (click)="searchQuickRoute('Bengaluru', 'Hyderabad')">
+                      <i class="fa-solid fa-route me-1"></i> Bengaluru → Hyderabad
+                    </button>
+                    <button class="btn btn-outline-primary btn-sm rounded-pill px-3 py-2 fw-semibold" (click)="searchQuickRoute('Vijayawada', 'Hyderabad')">
+                      <i class="fa-solid fa-route me-1"></i> Vijayawada → Hyderabad
+                    </button>
+                    <button class="btn btn-outline-primary btn-sm rounded-pill px-3 py-2 fw-semibold" (click)="searchQuickRoute('Hyderabad', 'Bengaluru')">
+                      <i class="fa-solid fa-route me-1"></i> Hyderabad → Bengaluru
+                    </button>
+                  </div>
                 </div>
 
-                <!-- ================= RIGHT COLUMN: BUS RESULTS ================= -->
-                <div class="col-xl-9 col-lg-8">
-                  <app-bus-results-list
-                    [buses]="pagedBusList"
-                    [totalFilteredBuses]="totalFilteredBuses"
-                    [origin]="busOrigin"
-                    [destination]="busDestination"
-                    [formattedDate]="formattedBusDate"
-                    [sortBy]="busSortBy"
-                    [currentPage]="busCurrentPage"
-                    [pageSize]="busPageSize"
-                    [selectedSchedule]="selectedSchedule"
-                    [selectedSeatNumbers]="selectedSeatNumbers"
-                    [selectedBoardingPoint]="selectedBoardingPoint"
-                    [selectedDroppingPoint]="selectedDroppingPoint"
-                    [savedBusIds]="savedBusIds"
-                    [seatList]="seatList"
-                    [isLoadingSeats]="isLoadingSeats"
-                    (sortChange)="busSortBy = $event; applyFilters()"
-                    (pageChange)="setBusPage($event)"
-                    (clearFilters)="clearAllBusFilters()"
-                    (toggleSeats)="openBusSeatMap($event)"
-                    (saveToFavourites)="saveBusToFavourites($event)"
-                    (seatToggled)="toggleSeatByNumber($event)"
-                    (boardingPointChanged)="selectedBoardingPoint = $event"
-                    (droppingPointChanged)="selectedDroppingPoint = $event"
-                    (proceedToCheckout)="proceedToBusCheckout($event)"
-                  ></app-bus-results-list>
-                </div>
+                <!-- When Buses Found: Two-Column Layout -->
+                <div *ngIf="busResults.length > 0" class="row g-4 align-items-start">
+                  
+                  <!-- ================= LEFT COLUMN: FILTERS PANEL ================= -->
+                  <div class="col-xl-3 col-lg-4">
+                    <app-bus-filter-panel
+                      [filterBusTypeAC]="filterBusTypeAC"
+                      [filterBusTypeNonAC]="filterBusTypeNonAC"
+                      [filterSeatTypeSeater]="filterSeatTypeSeater"
+                      [filterSeatTypeSleeper]="filterSeatTypeSleeper"
+                      [filterSingleSeatOnly]="filterSingleSeatOnly"
+                      [depBands]="depBands"
+                      [arrBands]="arrBands"
+                      [countBusTypeAC]="countBusTypeAC"
+                      [countBusTypeNonAC]="countBusTypeNonAC"
+                      [countSeatTypeSeater]="countSeatTypeSeater"
+                      [countSeatTypeSleeper]="countSeatTypeSleeper"
+                      [countDepBefore6am]="countDepBefore6am"
+                      [countDep6to12]="countDep6to12"
+                      [countDep12to18]="countDep12to18"
+                      [countDepAfter6pm]="countDepAfter6pm"
+                      [countArrBefore6am]="countArrBefore6am"
+                      [countArr6to12]="countArr6to12"
+                      [countArr12to18]="countArr12to18"
+                      [countArrAfter6pm]="countArrAfter6pm"
+                      [availablePickupPoints]="availablePickupPoints"
+                      [displayedPickupPoints]="displayedPickupPoints"
+                      [selectedPickupPoints]="selectedPickupPoints"
+                      [showAllPickupPoints]="showAllPickupPoints"
+                      [pickupSearchQuery]="pickupSearchQuery"
+                      [availableDroppingPoints]="availableDroppingPoints"
+                      [displayedDroppingPoints]="displayedDroppingPoints"
+                      [selectedDroppingPoints]="selectedDroppingPoints"
+                      [showAllDroppingPoints]="showAllDroppingPoints"
+                      [droppingSearchQuery]="droppingSearchQuery"
+                      [amenityDefinitions]="amenityDefinitions"
+                      [selectedAmenities]="selectedAmenities"
+                      [filterMinPrice]="filterMinPrice"
+                      [filterMaxPrice]="filterMaxPrice"
+                      [defaultMinPrice]="defaultMinPrice"
+                      [defaultMaxPrice]="defaultMaxPrice"
+                      [hasActiveFilters]="hasActiveBusFilters"
+                      [filterSectionsOpen]="filterSectionsOpen"
+                      [amenityCounts]="amenityCounts"
+                      (filterChange)="onFilterStateChanged($event)"
+                      (priceChange)="onFilterPriceChanged($event)"
+                      (clearAll)="clearAllBusFilters()"
+                      (togglePickupPoint)="togglePickupPoint($event)"
+                      (toggleDroppingPoint)="toggleDroppingPoint($event)"
+                      (toggleAmenity)="toggleAmenity($event)"
+                      (toggleSection)="toggleFilterSection($event)"
+                    ></app-bus-filter-panel>
+                  </div>
 
+                  <!-- ================= RIGHT COLUMN: BUS RESULTS ================= -->
+                  <div class="col-xl-9 col-lg-8">
+                    <app-bus-results-list
+                      [buses]="pagedBusList"
+                      [totalFilteredBuses]="totalFilteredBuses"
+                      [origin]="busOrigin"
+                      [destination]="busDestination"
+                      [formattedDate]="formattedBusDate"
+                      [sortBy]="busSortBy"
+                      [currentPage]="busCurrentPage"
+                      [pageSize]="busPageSize"
+                      [selectedSchedule]="selectedSchedule"
+                      [selectedSeatNumbers]="selectedSeatNumbers"
+                      [selectedBoardingPoint]="selectedBoardingPoint"
+                      [selectedDroppingPoint]="selectedDroppingPoint"
+                      [savedBusIds]="savedBusIds"
+                      [seatList]="seatList"
+                      [isLoadingSeats]="isLoadingSeats"
+                      (sortChange)="busSortBy = $event; applyFilters()"
+                      (pageChange)="setBusPage($event)"
+                      (clearFilters)="clearAllBusFilters()"
+                      (toggleSeats)="openBusSeatMap($event)"
+                      (saveToFavourites)="saveBusToFavourites($event)"
+                      (seatToggled)="toggleSeatByNumber($event)"
+                      (boardingPointChanged)="selectedBoardingPoint = $event"
+                      (droppingPointChanged)="selectedDroppingPoint = $event"
+                      (proceedToCheckout)="proceedToBusCheckout($event)"
+                    ></app-bus-results-list>
+                  </div>
+
+                </div>
               </div>
             </div>
+
+            <!-- ================= DEDICATED SEAT SELECTION PAGE (APPROVED MOCKUP) ================= -->
+            <div *ngIf="busViewMode === 'seat-selection'" class="container-fluid px-2 px-md-3">
+              <app-bus-seat-picker
+                [schedule]="selectedSchedule"
+                [layout]="currentTripLayout"
+                [isLoading]="isLoadingSeats"
+                [origin]="busOrigin"
+                [destination]="busDestination"
+                [travelDate]="busDate"
+                [selectedSeats]="selectedSeatNumbers"
+                [selectedBoardingPoint]="selectedBoardingPoint"
+                [selectedDroppingPoint]="selectedDroppingPoint"
+                [currentUser]="currentUser"
+                (backToResults)="busViewMode = 'results'"
+                (seatToggled)="toggleSeatByNumber($event)"
+                (seatRemoved)="removeSeatByNumber($event)"
+                (seatsReset)="resetSelectedSeats()"
+                (boardingPointChanged)="selectedBoardingPoint = $event"
+                (droppingPointChanged)="selectedDroppingPoint = $event"
+                (proceedToPayment)="onSeatPickerProceedToPayment($event)"
+              ></app-bus-seat-picker>
+            </div>
+
           </div>
 
           <!-- #################### TAB 2: HOTEL BOOKING #################### -->
@@ -994,6 +1025,10 @@ export class CustomerDashboardComponent implements OnInit {
   seatList: any[] = [];
   selectedSeatNumbers: string[] = [];
   isLoadingSeats = false;
+  busViewMode: 'results' | 'seat-selection' = 'results';
+  currentTripLayout: TripSeatLayout | null = null;
+  selectedBoardingPoint = '';
+  selectedDroppingPoint = '';
   busFleetMap: Map<number, any> = new Map();
 
   // Bus Filters State
@@ -1652,6 +1687,7 @@ export class CustomerDashboardComponent implements OnInit {
     }
 
     this.isSearchingBuses = true;
+    this.busViewMode = 'results';
     this.selectedSchedule = null;
     this.selectedSeatNumbers = [];
 
@@ -1899,6 +1935,24 @@ export class CustomerDashboardComponent implements OnInit {
     } else {
       this.selectedSeatNumbers.push(seatNumber);
     }
+  }
+
+  removeSeatByNumber(seatNumber: string) {
+    this.selectedSeatNumbers = this.selectedSeatNumbers.filter(s => s !== seatNumber);
+  }
+
+  resetSelectedSeats() {
+    this.selectedSeatNumbers = [];
+  }
+
+  get amenityCounts(): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const b of this.busResults) {
+      if (Array.isArray(b.amenities)) {
+        for (const a of b.amenities) counts[a] = (counts[a] || 0) + 1;
+      }
+    }
+    return counts;
   }
 
   get availablePickupPoints(): { name: string; count: number }[] {
@@ -2150,23 +2204,44 @@ export class CustomerDashboardComponent implements OnInit {
   }
 
   openBusSeatMap(schedule: any) {
-    if (this.selectedSchedule?.id === schedule.id) {
-      this.selectedSchedule = null;
-      return;
-    }
+    console.log('[DEBUG-SEAT] openBusSeatMap called for schedule:', schedule?.id, schedule?.operatorName);
     this.selectedSchedule = schedule;
     this.selectedSeatNumbers = [];
     this.isLoadingSeats = true;
-    this.busService.getScheduleDetails(schedule.id).subscribe({
-      next: (res) => {
-        this.seatList = res?.seats || [];
+    this.busViewMode = 'seat-selection';
+    this.busService.getScheduleLayout(schedule.id).subscribe({
+      next: (layout) => {
+        console.log('[DEBUG-SEAT] layout loaded successfully:', layout?.templateName, layout?.decks?.length);
+        this.currentTripLayout = layout;
         this.isLoadingSeats = false;
+        if (layout?.boardingPoints) {
+          const bPoints = layout.boardingPoints.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+          if (bPoints.length > 0) this.selectedBoardingPoint = bPoints[0];
+        }
+        if (layout?.droppingPoints) {
+          const dPoints = layout.droppingPoints.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+          if (dPoints.length > 0) this.selectedDroppingPoint = dPoints[0];
+        }
       },
-      error: () => {
-        this.seatList = [];
+      error: (err) => {
+        console.error('[DEBUG-SEAT] layout load error:', err);
+        this.currentTripLayout = null;
         this.isLoadingSeats = false;
       }
     });
+  }
+
+  onSeatPickerProceedToPayment(payload: any) {
+    this.checkoutServiceType = 'BUS';
+    this.checkoutServiceId = payload.schedule.id;
+    this.checkoutProviderId = payload.schedule.busId || 1;
+    this.checkoutServiceTitle = `${payload.schedule.operatorName} (${payload.schedule.origin || this.busOrigin} to ${payload.schedule.destination || this.busDestination})`;
+
+    const passList = (payload.passengers || []).map((p: any) => `${p.name} (Seat ${p.seatNumber}, Age: ${p.age}, ${p.gender})`).join('; ');
+    this.checkoutDetails = `Seats: ${payload.selectedSeats.join(', ')} | Boarding: ${payload.boardingPoint} | Dropping: ${payload.droppingPoint} | Passengers: ${passList} | Date: ${payload.schedule.travelDate || this.busDate}`;
+
+    this.checkoutAmount = payload.totalAmount;
+    this.showCheckoutModal = true;
   }
 
   toggleSeat(seat: any) {

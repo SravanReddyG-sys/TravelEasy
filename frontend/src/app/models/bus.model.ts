@@ -64,3 +64,56 @@ export interface BusFilterState {
   minPrice: number;
   maxPrice: number;
 }
+
+export interface SeatPosition {
+  positionId: string;
+  seatNumber: string;
+  seatType: string; // 'SEATER' | 'SLEEPER'
+  deck: string;     // 'LOWER' | 'UPPER' | 'SINGLE'
+  row: number;
+  column: number;
+  side: string;     // 'LEFT' | 'RIGHT' | 'CENTER'
+  isWindow: boolean;
+  isBookable: boolean;
+  rowSpan?: number;
+  colSpan?: number;
+  price: number;
+  status: string;   // 'AVAILABLE' | 'BOOKED'
+  gender?: string;  // 'UNISEX' | 'MALE' | 'FEMALE'
+  visualOrder?: number;
+}
+
+export interface DeckLayout {
+  deck: string;
+  deckName: string;
+  rows: number;
+  columns: number;
+  inventory: number;
+  availableCount: number;
+  positions: SeatPosition[];
+}
+
+export interface TripSeatLayout {
+  scheduleId: number;
+  busId: number;
+  templateId: string;
+  templateName: string;
+  referenceImage: string;
+  busNumber: string;
+  operatorName: string;
+  busType: string;
+  busConfiguration: string;
+  facilityType: string;
+  amenities: string;
+  totalInventory: number;
+  availableSeats: number;
+  baseFare: number;
+  origin?: string;
+  destination?: string;
+  travelDate?: string;
+  departureTime?: string;
+  arrivalTime?: string;
+  boardingPoints?: string;
+  droppingPoints?: string;
+  decks: DeckLayout[];
+}

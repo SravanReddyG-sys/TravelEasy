@@ -43,7 +43,11 @@ import { User } from '../../models/user.model';
               <div class="d-flex justify-content-between align-items-start">
                 <div>
                   <h5 class="fw-bold mb-1">{{ bus.operatorName }}</h5>
-                  <span class="badge bg-secondary mb-2">{{ bus.busType }}</span>
+                  <div class="mb-2">
+                    <span class="badge bg-secondary me-1">{{ bus.busType }}</span>
+                    <span *ngIf="bus.facilityType" class="badge bg-info text-dark me-1">{{ bus.facilityType }}</span>
+                    <span *ngIf="bus.templateId" class="badge bg-primary">{{ bus.templateId }}</span>
+                  </div>
                   <p class="mb-1 text-muted small"><i class="fa-solid fa-id-card me-1"></i> Bus Reg: <strong>{{ bus.busNumber }}</strong></p>
                   <p class="mb-1 text-muted small"><i class="fa-solid fa-chair me-1"></i> Total Capacity: {{ bus.totalSeats }} Seats</p>
                   <p class="mb-0 text-primary small"><i class="fa-solid fa-wifi me-1"></i> {{ bus.amenities }}</p>
@@ -104,23 +108,61 @@ import { User } from '../../models/user.model';
             <div class="modal-body p-4">
               <form (ngSubmit)="submitAddBus()">
                 <div class="mb-3">
-                  <label class="form-label font-weight-bold">Bus Registration Number</label>
+                  <label class="form-label fw-bold">Bus Registration Number</label>
                   <input type="text" class="form-control" [(ngModel)]="newBusNumber" name="newBusNumber" required placeholder="e.g. AP39TV1234">
                 </div>
+
+                <div class="row mb-3">
+                  <div class="col-md-6">
+                    <label class="form-label fw-bold">Facility Type</label>
+                    <select class="form-select" [(ngModel)]="newFacilityType" name="newFacilityType" (change)="onFacilityOrConfigChange()">
+                      <option value="AC">AC (Air Conditioned)</option>
+                      <option value="NON_AC">Non-AC</option>
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-bold">Bus Configuration</label>
+                    <select class="form-select" [(ngModel)]="newBusConfiguration" name="newBusConfiguration" (change)="onFacilityOrConfigChange()">
+                      <option value="SINGLE_DECK">Single Decker</option>
+                      <option value="DOUBLE_DECK">Double Decker</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div class="mb-3">
-                  <label class="form-label font-weight-bold">Bus Category / Type</label>
-                  <select class="form-select" [(ngModel)]="newBusType" name="newBusType">
-                    <option value="AC Sleeper (2+1)">AC Sleeper (2+1)</option>
-                    <option value="Volvo Multi-Axle AC Semi-Sleeper">Volvo Multi-Axle AC Semi-Sleeper</option>
-                    <option value="Non-AC Seater (2+2)">Non-AC Seater (2+2)</option>
+                  <label class="form-label fw-bold">Physical Seat Layout Template</label>
+                  <select class="form-select" [(ngModel)]="selectedTemplateId" name="selectedTemplateId" (change)="onTemplateChange()" required>
+                    <option *ngFor="let t of filteredTemplates" [value]="t.id">
+                      {{ t.displayName }} ({{ t.totalInventory }} positions)
+                    </option>
                   </select>
                 </div>
-                <div class="mb-3">
-                  <label class="form-label font-weight-bold">Total Seat Capacity</label>
-                  <input type="number" class="form-control" [(ngModel)]="newTotalSeats" name="newTotalSeats" required placeholder="30">
+
+                <!-- Template Preview Container -->
+                <div *ngIf="selectedTemplate" class="card bg-light p-3 mb-3 border">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="badge bg-primary fw-bold">{{ selectedTemplate.id }}</span>
+                    <span class="badge bg-success fw-bold">{{ selectedTemplate.totalInventory }} Positions (Fixed Inventory)</span>
+                  </div>
+                  <p class="text-muted small mb-2">{{ selectedTemplate.description }}</p>
+                  <div *ngIf="selectedTemplate.referenceImage" class="text-center p-2 bg-white rounded border">
+                    <img [src]="'/assets/images/' + selectedTemplate.referenceImage" [alt]="selectedTemplate.displayName" style="max-height: 200px; max-width: 100%; object-fit: contain;">
+                  </div>
                 </div>
+
+                <div class="row mb-3">
+                  <div class="col-md-6">
+                    <label class="form-label fw-bold">Total Seat Capacity (Derived)</label>
+                    <input type="number" class="form-control bg-light" [value]="newTotalSeats" readonly title="Capacity is derived automatically from the assigned seat template">
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-bold">Category Display Title</label>
+                    <input type="text" class="form-control" [(ngModel)]="newBusType" name="newBusType" required>
+                  </div>
+                </div>
+
                 <div class="mb-3">
-                  <label class="form-label font-weight-bold">Amenities Included</label>
+                  <label class="form-label fw-bold">Amenities Included</label>
                   <input type="text" class="form-control" [(ngModel)]="newAmenities" name="newAmenities" placeholder="Wi-Fi, Charging Point, Water Bottle">
                 </div>
                 <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold">Save Bus Registration</button>
@@ -185,9 +227,17 @@ export class BusOperatorDashboardComponent implements OnInit {
   // Add Bus Modal State
   showAddBusModal = false;
   newBusNumber = '';
-  newBusType = 'AC Sleeper (2+1)';
-  newTotalSeats = 30;
+  newBusType = 'AC 2+1 Seater (Single Deck)';
+  newFacilityType = 'AC';
+  newBusConfiguration = 'SINGLE_DECK';
+  newTotalSeats = 36;
   newAmenities = 'Wi-Fi, Charging Point, Water Bottle';
+
+  // Templates
+  allTemplates: any[] = [];
+  filteredTemplates: any[] = [];
+  selectedTemplateId = '';
+  selectedTemplate: any = null;
 
   // Add Schedule Modal State
   showScheduleModal = false;
@@ -208,6 +258,37 @@ export class BusOperatorDashboardComponent implements OnInit {
   ngOnInit() {
     this.currentUser = this.authService.currentUserValue;
     this.loadBuses();
+    this.loadTemplates();
+  }
+
+  loadTemplates() {
+    this.busService.getTemplates().subscribe({
+      next: (templates) => {
+        this.allTemplates = templates;
+        this.onFacilityOrConfigChange();
+      },
+      error: (err) => console.error('Failed to load bus layout templates', err)
+    });
+  }
+
+  onFacilityOrConfigChange() {
+    this.filteredTemplates = this.allTemplates.filter(t => t.busConfiguration === this.newBusConfiguration);
+    if (this.filteredTemplates.length > 0) {
+      const match = this.filteredTemplates.find(t => t.id === this.selectedTemplateId) || this.filteredTemplates[0];
+      this.selectedTemplateId = match.id;
+      this.onTemplateChange();
+    } else {
+      this.selectedTemplate = null;
+      this.selectedTemplateId = '';
+    }
+  }
+
+  onTemplateChange() {
+    this.selectedTemplate = this.allTemplates.find(t => t.id === this.selectedTemplateId) || null;
+    if (this.selectedTemplate) {
+      this.newTotalSeats = this.selectedTemplate.totalInventory;
+      this.newBusType = `${this.newFacilityType === 'AC' ? 'AC' : 'Non-AC'} ${this.selectedTemplate.displayName}`;
+    }
   }
 
   loadBuses() {
@@ -231,15 +312,22 @@ export class BusOperatorDashboardComponent implements OnInit {
       operatorName: this.currentUser.fullName,
       busNumber: this.newBusNumber,
       busType: this.newBusType,
+      facilityType: this.newFacilityType,
+      busConfiguration: this.newBusConfiguration,
+      templateId: this.selectedTemplateId,
       totalSeats: this.newTotalSeats,
       amenities: this.newAmenities
     };
 
     this.busService.addBus(payload).subscribe({
       next: () => {
-        alert('Bus Registered Successfully!');
+        alert('Bus Registered Successfully with approved layout template!');
         this.showAddBusModal = false;
         this.loadBuses();
+      },
+      error: (err) => {
+        const msg = err.error?.message || 'Failed to register bus';
+        alert('Error: ' + msg);
       }
     });
   }

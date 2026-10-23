@@ -351,6 +351,6 @@ export class BusFilterPanelComponent {
   }
 
   getAmenityCount(name: string): number {
-    return this.amenityCounts[name] || 0;
+    return (this.amenityCounts && this.amenityCounts[name]) || 0;
   }
 }
