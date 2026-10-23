@@ -1033,7 +1033,7 @@ export interface PassengerInfo {
 
                 <div class="d-flex justify-content-between align-items-center mb-1 text-secondary" style="font-size: 0.85rem;">
                   <span>Base Fare</span>
-                  <span class="fw-bold text-navy">₹ {{ calculatedBaseFare | number:'1.0-0' }}</span>
+                  <span class="fw-bold text-navy text-end">₹ {{ calculatedBaseFare | number:'1.0-0' }}</span>
                 </div>
 
                 <div class="d-flex justify-content-between align-items-center mb-2 text-secondary" style="font-size: 0.85rem;">
@@ -1045,14 +1045,14 @@ export interface PassengerInfo {
                       <line x1="12" y1="8" x2="12.01" y2="8"></line>
                     </svg>
                   </span>
-                  <span class="fw-bold text-navy">₹ {{ calculatedTaxes | number:'1.0-0' }}</span>
+                  <span class="fw-bold text-navy text-end">₹ {{ calculatedTaxes | number:'1.0-0' }}</span>
                 </div>
 
                 <div class="border-top my-2"></div>
 
                 <div class="d-flex justify-content-between align-items-baseline mt-1">
                   <span class="fw-bold text-navy" style="font-size: 1.05rem;">Total Amount</span>
-                  <span class="fw-bold text-navy total-highlight-price">
+                  <span class="fw-bold text-navy total-highlight-price text-end">
                     ₹ {{ calculatedTotalAmount | number:'1.0-0' }}
                   </span>
                 </div>
@@ -2103,9 +2103,21 @@ export interface PassengerInfo {
 
     .summary-four-sections-grid {
       display: grid;
-      grid-template-columns: 22% 1px 26% 1px 26% 1px 26%;
-      gap: 14px;
+      grid-template-columns: minmax(0, 1.1fr) 1px minmax(0, 1.25fr) 1px minmax(0, 1.15fr) 1px minmax(0, 1.2fr);
+      gap: 0;
       align-items: start;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .summary-grid-col {
+      min-width: 0;
+      box-sizing: border-box;
+    }
+
+    .col-fare {
+      min-width: 0;
+      box-sizing: border-box;
     }
 
     .summary-col-divider {
@@ -2149,9 +2161,10 @@ export interface PassengerInfo {
     }
 
     .total-highlight-price {
-      font-size: 1.60rem;
+      font-size: 1.55rem;
       font-weight: 800;
       color: #0F172A;
+      white-space: nowrap;
     }
 
     /* Gateway Option Box */
@@ -2309,6 +2322,30 @@ export interface PassengerInfo {
     }
 
     /* Stage 3 Responsive */
+    @media (min-width: 992px) and (max-width: 1199.98px) {
+      .summary-four-sections-grid {
+        grid-template-columns: minmax(0, 1.15fr) 1px minmax(0, 1.15fr) 1px minmax(0, 1.1fr) 1px minmax(0, 1.2fr);
+        gap: 0;
+      }
+      .col-fare {
+        padding-left: 12px !important;
+      }
+      .col-seats {
+        padding-right: 12px !important;
+      }
+      .col-points,
+      .col-passengers {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+      }
+      .total-highlight-price {
+        font-size: 1.35rem;
+      }
+      .section-header-title {
+        font-size: 0.90rem;
+      }
+    }
+
     @media (max-width: 991px) {
       .summary-four-sections-grid {
         grid-template-columns: 1fr;
