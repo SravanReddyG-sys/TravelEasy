@@ -8,6 +8,7 @@ export interface PassengerInfo {
   name: string;
   age: number | null;
   gender: string;
+  idProof?: string;
 }
 
 @Component({
@@ -21,13 +22,16 @@ export interface PassengerInfo {
       <div class="header-nav-container mb-2">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
           <div>
-            <!-- Back to bus results (Strictly ABOVE title) -->
-            <button class="btn btn-link btn-back-results p-0 text-decoration-none d-inline-flex align-items-center mb-1" (click)="onBackToResults()">
+            <!-- Back button: dynamic based on current stage -->
+            <button class="btn btn-link btn-back-results p-0 text-decoration-none d-inline-flex align-items-center mb-1" 
+                    (click)="currentStage === 2 ? currentStage = 1 : onBackToResults()">
               <i class="fa-solid fa-arrow-left me-1 small"></i>
-              <span>Back to bus results</span>
+              <span>{{ currentStage === 2 ? 'Back to seat selection' : 'Back to bus results' }}</span>
             </button>
             <div class="d-flex align-items-baseline gap-2">
-              <h5 class="fw-bold text-navy mb-0 page-title">Select Your Seats</h5>
+              <h5 class="fw-bold text-navy mb-0 page-title">
+                {{ currentStage === 2 ? 'Passenger Details' : 'Select Your Seats' }}
+              </h5>
             </div>
           </div>
 
@@ -538,124 +542,283 @@ export interface PassengerInfo {
 
       </div>
 
-      <!-- ================= STAGE 2: PASSENGER DETAILS VIEW ================= -->
-      <div *ngIf="currentStage === 2" class="passenger-details-stage-wrap">
-        <div class="mb-3">
-          <button class="btn btn-outline-secondary btn-sm rounded-pill px-3" (click)="currentStage = 1">
-            <i class="fa-solid fa-arrow-left me-1"></i> Back to Seat Selection
-          </button>
-        </div>
+      <!-- ================= STAGE 2: PASSENGER DETAILS VIEW (APPROVED MOCKUP) ================= -->
+      <div *ngIf="currentStage === 2" class="passenger-details-stage-grid">
+        
+        <!-- ================= LEFT COLUMN: PASSENGER & CONTACT INFORMATION (68-70%) ================= -->
+        <div class="col-passenger-forms">
+          
+          <!-- Card 1: Passenger Information -->
+          <div class="passenger-info-card bg-white rounded-3 border p-3 mb-2 mb-xl-3">
+            <div class="mb-2">
+              <h5 class="fw-bold text-navy mb-0 card-main-heading">Passenger Information</h5>
+              <div class="card-sub-text">Enter traveller details for each selected seat</div>
+            </div>
 
-        <div class="row g-4">
-          <!-- Passenger Forms Column -->
-          <div class="col-xl-8 col-lg-8">
-            <div class="bg-white rounded-4 border p-4 shadow-sm mb-4">
-              <h5 class="fw-bold text-navy mb-3">
-                <i class="fa-solid fa-user-group text-primary me-2"></i>Passenger Information
-              </h5>
-              <p class="text-muted small mb-4">Please enter legal names matching official government photo IDs.</p>
-
-              <!-- Passenger details for each selected seat -->
-              <div *ngFor="let p of passengers; let idx = index" class="passenger-seat-card p-3 rounded-3 border bg-light mb-3">
-                <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
-                  <span class="fw-bold text-navy">
-                    <span class="badge bg-primary me-2">Seat {{ p.seatNumber }}</span> Passenger {{ idx + 1 }}
+            <!-- List of Passenger Cards for each selected seat -->
+            <div class="d-flex flex-column gap-2">
+              <div *ngFor="let p of passengers; let idx = index" class="passenger-seat-item-card p-2 p-md-2 p-lg-2 px-3 rounded-2 border">
+                
+                <!-- Passenger Item Header -->
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <span class="fw-bold text-navy passenger-card-title">
+                    Passenger {{ idx + 1 }} · Seat {{ p.seatNumber }}
                   </span>
-                  <span class="smaller text-muted">Primary Seat</span>
+                  
+                  <!-- Lead Passenger Badge for Passenger 1 -->
+                  <span *ngIf="idx === 0" class="badge badge-lead-passenger">
+                    Lead Passenger
+                  </span>
+
+                  <!-- Remove Action for Passenger 2+ -->
+                  <button *ngIf="idx > 0" 
+                          class="btn btn-link text-danger p-0 text-decoration-none d-flex align-items-center gap-1 btn-remove-passenger"
+                          (click)="onRemovePassenger(idx)"
+                          title="Remove passenger and seat {{ p.seatNumber }}">
+                    <i class="fa-regular fa-trash-can small"></i>
+                    <span>Remove</span>
+                  </button>
                 </div>
 
-                <div class="row g-3">
-                  <div class="col-md-6">
-                    <label class="form-label smaller fw-bold text-navy">Full Name *</label>
-                    <input type="text" class="form-control form-control-sm rounded-3" 
-                           [(ngModel)]="p.name" placeholder="Enter passenger full name">
+                <!-- Form Fields in a Single Horizontal Row on Desktop -->
+                <div class="passenger-fields-row d-flex flex-wrap gap-2 gap-md-2 align-items-flex-start">
+                  
+                  <!-- Full Name -->
+                  <div class="field-item field-full-name">
+                    <label class="form-label field-label mb-1">Full Name <span class="text-danger">*</span></label>
+                    <input type="text" 
+                           class="form-control form-control-sm custom-passenger-input" 
+                           [(ngModel)]="p.name" 
+                           placeholder="Enter full name"
+                           required>
                   </div>
-                  <div class="col-md-3">
-                    <label class="form-label smaller fw-bold text-navy">Age *</label>
-                    <input type="number" min="1" max="120" class="form-control form-control-sm rounded-3" 
-                           [(ngModel)]="p.age" placeholder="Age">
+
+                  <!-- Age -->
+                  <div class="field-item field-age">
+                    <label class="form-label field-label mb-1">Age <span class="text-danger">*</span></label>
+                    <input type="number" 
+                           min="1" 
+                           max="120" 
+                           class="form-control form-control-sm custom-passenger-input" 
+                           [(ngModel)]="p.age" 
+                           placeholder="Age"
+                           required>
                   </div>
-                  <div class="col-md-3">
-                    <label class="form-label smaller fw-bold text-navy">Gender *</label>
-                    <select class="form-select form-select-sm rounded-3" [(ngModel)]="p.gender">
-                      <option value="MALE">Male</option>
-                      <option value="FEMALE">Female</option>
-                      <option value="OTHER">Other</option>
+
+                  <!-- Gender -->
+                  <div class="field-item field-gender">
+                    <label class="form-label field-label mb-1">Gender <span class="text-danger">*</span></label>
+                    <select class="form-select form-select-sm custom-passenger-input" [(ngModel)]="p.gender" required>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
                     </select>
                   </div>
-                </div>
-              </div>
 
-              <!-- Contact Information -->
-              <h6 class="fw-bold text-navy mt-4 mb-3">
-                <i class="fa-solid fa-envelope text-primary me-2"></i>Contact Information (For Tickets & SMS updates)
-              </h6>
-              <div class="row g-3">
-                <div class="col-md-6">
-                  <label class="form-label smaller fw-bold text-navy">Email Address *</label>
-                  <input type="email" class="form-control form-control-sm rounded-3" 
-                         [(ngModel)]="contactEmail" placeholder="traveller@example.com">
+                  <!-- ID Proof (Optional) -->
+                  <div class="field-item field-id-proof">
+                    <label class="form-label field-label mb-1">ID Proof (Optional)</label>
+                    <select class="form-select form-select-sm custom-passenger-input" [(ngModel)]="p.idProof">
+                      <option value="Aadhaar Card">Aadhaar Card</option>
+                      <option value="PAN Card">PAN Card</option>
+                      <option value="Passport">Passport</option>
+                      <option value="Driving License">Driving License</option>
+                      <option value="Voter ID">Voter ID</option>
+                      <option value="None">None</option>
+                    </select>
+                  </div>
+
                 </div>
-                <div class="col-md-6">
-                  <label class="form-label smaller fw-bold text-navy">Mobile Number *</label>
-                  <input type="tel" class="form-control form-control-sm rounded-3" 
-                         [(ngModel)]="contactPhone" placeholder="10-digit mobile number">
-                </div>
+
               </div>
             </div>
+
           </div>
 
-          <!-- Trip & Fare Summary Column in Stage 2 -->
-          <div class="col-xl-4 col-lg-4">
-            <div class="bg-white rounded-4 border p-4 shadow-sm">
-              <h5 class="fw-bold text-navy mb-3">Trip Summary</h5>
-              
-              <div class="summary-route-item mb-3 p-3 bg-light rounded-3 border">
-                <div class="fw-bold text-navy">{{ displayOperatorName }}</div>
-                <div class="text-secondary smaller">{{ displayOrigin }} to {{ displayDestination }}</div>
-                <div class="text-muted smaller">{{ departureDateFormatted }} • {{ formatTime12(departureTime) }}</div>
-                <hr class="my-2">
-                <div class="smaller">
-                  <span class="text-muted">Seats:</span> 
-                  <strong class="text-navy ms-1">{{ selectedSeats.join(', ') }}</strong>
-                </div>
-                <div class="smaller mt-1">
-                  <span class="text-muted">Pickup:</span> 
-                  <strong class="text-success ms-1">{{ selectedBoardingPoint }}</strong>
-                </div>
-                <div class="smaller mt-1">
-                  <span class="text-muted">Drop:</span> 
-                  <strong class="text-danger ms-1">{{ selectedDroppingPoint }}</strong>
-                </div>
+          <!-- Card 2: Contact Information -->
+          <div class="contact-info-card bg-white rounded-3 border p-3">
+            <div class="mb-2">
+              <h5 class="fw-bold text-navy mb-0 card-main-heading">Contact Information</h5>
+              <div class="card-sub-text">Enter contact details for booking confirmation and communication</div>
+            </div>
+
+            <!-- Contact Inputs Row -->
+            <div class="contact-inputs-row d-flex flex-wrap gap-2 gap-md-3">
+              <!-- Mobile Number -->
+              <div class="contact-field flex-grow-1">
+                <label class="form-label field-label mb-1">Mobile Number <span class="text-danger">*</span></label>
+                <input type="tel" 
+                       class="form-control form-control-sm custom-passenger-input" 
+                       [(ngModel)]="contactPhone" 
+                       placeholder="+91 98765 43210"
+                       required>
               </div>
 
-              <div class="d-flex justify-content-between mb-2 small text-secondary">
-                <span>Base Fare</span>
-                <span class="fw-bold text-navy">₹{{ calculatedBaseFare | number:'1.2-2' }}</span>
-              </div>
-              <div class="d-flex justify-content-between mb-2 small text-secondary">
-                <span>Taxes & Fees</span>
-                <span class="fw-bold text-navy">₹{{ calculatedTaxes | number:'1.2-2' }}</span>
-              </div>
-              <hr class="my-2">
-              <div class="d-flex justify-content-between mb-3">
-                <span class="fw-bold text-navy fs-6">Payable Amount</span>
-                <span class="fw-bold fs-4 text-primary">₹{{ calculatedTotalAmount | number:'1.2-2' }}</span>
-              </div>
-
-              <button class="btn btn-success w-100 py-3 rounded-pill fw-bold shadow-sm"
-                      [disabled]="!isPassengerFormValid"
-                      (click)="onProceedToPaymentStage()">
-                <span>Proceed to Payment</span>
-                <i class="fa-solid fa-lock ms-2"></i>
-              </button>
-
-              <div *ngIf="!isPassengerFormValid" class="text-danger smaller text-center mt-2">
-                Please complete all passenger full names, ages, and contact details.
+              <!-- Email Address -->
+              <div class="contact-field flex-grow-1">
+                <label class="form-label field-label mb-1">Email Address <span class="text-danger">*</span></label>
+                <input type="email" 
+                       class="form-control form-control-sm custom-passenger-input" 
+                       [(ngModel)]="contactEmail" 
+                       placeholder="john.doe@example.com"
+                       required>
               </div>
             </div>
+
+            <!-- Informational Notice Strip -->
+            <div class="contact-notice-strip p-2 px-3 rounded-2 mt-2 d-flex align-items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0284C7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span class="notice-text">
+                Your ticket and booking details will be sent to this mobile number and email address.
+              </span>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- ================= RIGHT COLUMN: BOOKING SUMMARY (30-32%) ================= -->
+        <div class="col-booking-summary">
+          <div class="booking-summary-card bg-white rounded-3 border p-3">
+            
+            <!-- Summary Heading & Journey Details -->
+            <div class="summary-top-header mb-2">
+              <h5 class="fw-bold text-navy mb-1 card-main-heading">Booking Summary</h5>
+              <div class="fw-bold text-navy route-heading">
+                {{ displayOrigin }} → {{ displayDestination }}
+              </div>
+              <div class="text-secondary small mt-0" style="font-size: 0.82rem;">
+                {{ departureDateFormatted }}
+              </div>
+            </div>
+
+            <!-- Selected Seats Section with Edit Seats Action -->
+            <div class="summary-section pt-2 border-top">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="fw-bold text-navy" style="font-size: 0.90rem;">
+                  Selected Seats ({{ selectedSeats.length }})
+                </span>
+                <button class="btn btn-link p-0 text-decoration-none text-primary fw-semibold small d-flex align-items-center gap-1 btn-edit-seats"
+                        (click)="onEditSeats()">
+                  <i class="fa-solid fa-pencil" style="font-size: 0.70rem;"></i>
+                  <span>Edit Seats</span>
+                </button>
+              </div>
+
+              <!-- Selected Seats List -->
+              <div class="d-flex flex-column gap-1 mb-1">
+                <div *ngFor="let sn of selectedSeats" class="selected-seat-summary-row d-flex align-items-center justify-content-between py-1">
+                  <span class="selected-seat-badge-clean">
+                    {{ sn }}
+                  </span>
+                  <span class="fw-bold text-navy" style="font-size: 0.90rem;">
+                    ₹ {{ getSeatPrice(sn) | number:'1.0-0' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Boarding and Dropping Points Timeline Display -->
+            <div class="summary-section pt-2 border-top">
+              <!-- Boarding Point -->
+              <div class="d-flex align-items-start gap-2 mb-1">
+                <span class="timeline-point-dot green-dot mt-1"></span>
+                <div class="d-flex justify-content-between align-items-center flex-grow-1">
+                  <div>
+                    <div class="text-secondary text-micro">Boarding Point</div>
+                    <div class="fw-semibold text-navy small text-truncate" style="max-width: 170px;" [title]="selectedBoardingPoint">
+                      {{ selectedBoardingPoint }}
+                    </div>
+                  </div>
+                  <div class="fw-bold text-navy small">
+                    {{ selectedBoardingTime }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Vertical Connector Line -->
+              <div class="timeline-connector-segment ms-1"></div>
+
+              <!-- Dropping Point -->
+              <div class="d-flex align-items-start gap-2 mt-1">
+                <span class="timeline-point-dot red-dot mt-1"></span>
+                <div class="d-flex justify-content-between align-items-center flex-grow-1">
+                  <div>
+                    <div class="text-secondary text-micro">Dropping Point</div>
+                    <div class="fw-semibold text-navy small text-truncate" style="max-width: 170px;" [title]="selectedDroppingPoint">
+                      {{ selectedDroppingPoint }}
+                    </div>
+                  </div>
+                  <div class="fw-bold text-navy small">
+                    {{ selectedDroppingTime }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Fare Details Section -->
+            <div class="summary-section pt-2 border-top">
+              <div class="fw-bold text-navy mb-1" style="font-size: 0.90rem;">
+                Fare Details
+              </div>
+              <div class="d-flex justify-content-between align-items-center mb-1 text-secondary" style="font-size: 0.82rem;">
+                <span>Base Fare</span>
+                <span class="fw-medium text-secondary">₹ {{ calculatedBaseFare | number:'1.0-0' }}</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mb-1 text-secondary" style="font-size: 0.82rem;">
+                <span class="d-flex align-items-center gap-1">
+                  Taxes & Fees
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cursor-pointer" title="Includes 5% GST and platform processing">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                  </svg>
+                </span>
+                <span class="fw-medium text-secondary">₹ {{ calculatedTaxes | number:'1.0-0' }}</span>
+              </div>
+            </div>
+
+            <!-- Total Amount Row -->
+            <div class="total-amount-row d-flex justify-content-between align-items-center pt-2 border-top mb-2">
+              <span class="total-label text-navy fw-bold" style="font-size: 1.00rem;">Total Amount</span>
+              <span class="total-value text-navy fw-bold" style="font-size: 1.25rem;">₹ {{ calculatedTotalAmount | number:'1.0-0' }}</span>
+            </div>
+
+            <!-- Continue to Payment Button -->
+            <button class="btn btn-primary w-100 py-2 d-flex align-items-center justify-content-center gap-2 mb-2 btn-continue-payment"
+                    [disabled]="!isPassengerFormValid"
+                    (click)="onProceedToPaymentStage()">
+              <span>Continue to Payment</span>
+              <i class="fa-solid fa-arrow-right small"></i>
+            </button>
+
+            <!-- Validation message if disabled -->
+            <div *ngIf="!isPassengerFormValid" class="text-danger text-center text-micro mb-1">
+              <i class="fa-solid fa-circle-exclamation me-1"></i>
+              Please fill all passenger names, valid ages (1-120), and contact details.
+            </div>
+
+            <!-- Seat-Hold Information Card Immediately Below Button -->
+            <div class="hold-time-card p-2 px-3 rounded-2">
+              <div class="d-flex align-items-start gap-2">
+                <svg class="hold-info-icon flex-shrink-0 mt-1" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0284C7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                <div class="text-secondary" style="font-size: 0.78rem; line-height: 1.35;">
+                  Your selected seats are temporarily held for 10 minutes while you complete your booking.
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
+
       </div>
 
     </div>
@@ -805,7 +968,8 @@ export interface PassengerInfo {
       font-weight: 700;
     }
     .step-item.completed {
-      color: #059669;
+      color: var(--primary-blue);
+      font-weight: 700;
     }
     .step-circle {
       width: 20px;
@@ -824,7 +988,7 @@ export interface PassengerInfo {
       color: #FFFFFF;
     }
     .step-item.completed .step-circle {
-      background: #10B981;
+      background: var(--primary-blue);
       color: #FFFFFF;
     }
     .step-connector {
@@ -834,7 +998,7 @@ export interface PassengerInfo {
       margin: 0 6px;
     }
     .step-connector.completed {
-      background: #10B981;
+      background: var(--primary-blue);
     }
 
     /* ================= SELECTED BUS SUMMARY CARD ================= */
@@ -1275,6 +1439,177 @@ export interface PassengerInfo {
       fill: none;
     }
 
+    /* ================= PASSENGER DETAILS STAGE 2 STYLING ================= */
+    .passenger-details-stage-grid {
+      display: grid;
+      grid-template-columns: 69% 29%;
+      gap: 20px;
+      align-items: start;
+      width: 100%;
+    }
+
+    .col-passenger-forms {
+      min-width: 0;
+    }
+
+    .passenger-info-card,
+    .contact-info-card,
+    .booking-summary-card {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+
+    .passenger-seat-item-card {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 8px;
+    }
+
+    .passenger-card-title {
+      font-size: 0.88rem;
+    }
+
+    .badge-lead-passenger {
+      background-color: #E0F2FE;
+      color: #0284C7;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+
+    .btn-remove-passenger {
+      color: #EF4444;
+      font-size: 0.80rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: color 0.15s ease;
+    }
+    .btn-remove-passenger:hover {
+      color: #DC2626;
+    }
+
+    .field-label {
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: #475569;
+    }
+
+    .custom-passenger-input {
+      background-color: #FFFFFF;
+      border: 1px solid #CBD5E1;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      color: #0F172A;
+      padding: 4px 8px;
+      height: 33px;
+      transition: all 0.2s ease;
+    }
+    .custom-passenger-input:focus {
+      border-color: #0875E1;
+      box-shadow: 0 0 0 2px rgba(8, 117, 225, 0.15);
+      outline: none;
+    }
+
+    .field-full-name {
+      flex: 1 1 34%;
+      min-width: 160px;
+    }
+    .field-age {
+      flex: 0 0 13%;
+      min-width: 70px;
+      max-width: 90px;
+    }
+    .field-gender {
+      flex: 0 0 20%;
+      min-width: 105px;
+    }
+    .field-id-proof {
+      flex: 0 0 24%;
+      min-width: 125px;
+    }
+
+    /* Contact Strip */
+    .contact-notice-strip {
+      background-color: #F0F9FF;
+      border: 1px solid #BAE6FD;
+    }
+    .notice-text {
+      color: #0369A1;
+      font-size: 0.80rem;
+      line-height: 1.35;
+    }
+
+    /* Right Column: Booking Summary */
+    .col-booking-summary {
+      min-width: 0;
+    }
+    .route-heading {
+      font-size: 0.98rem;
+    }
+    .btn-edit-seats {
+      font-size: 0.82rem;
+      transition: color 0.15s ease;
+    }
+    .btn-edit-seats:hover {
+      color: #0662BE;
+    }
+
+    .selected-seat-badge-clean {
+      background-color: #EFF6FF;
+      border: 1px solid #BFDBFE;
+      color: #1D4ED8;
+      font-size: 0.85rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 6px;
+      display: inline-block;
+    }
+
+    .selected-seat-summary-row {
+      border-bottom: 1px solid #F1F5F9;
+    }
+    .selected-seat-summary-row:last-child {
+      border-bottom: none;
+    }
+
+    .timeline-connector-segment {
+      width: 0;
+      min-height: 18px;
+      border-left: 2px dotted #CBD5E1;
+      margin: 2px 0 2px 4px;
+    }
+
+    .btn-continue-payment {
+      background-color: #0875E1;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: #FFFFFF;
+      padding: 10px 16px;
+      transition: all 0.2s ease;
+    }
+    .btn-continue-payment:hover:not(:disabled) {
+      background-color: #0662BE;
+      box-shadow: 0 4px 12px rgba(8, 117, 225, 0.25);
+    }
+    .btn-continue-payment:disabled {
+      background-color: #94A3B8;
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+
+    /* Stage 2 Responsive */
+    @media (max-width: 1199px) {
+      .passenger-details-stage-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+    }
+
     /* Legend Matrix Table (Screenshot 2) */
     .legend-matrix-table {
       width: 100%;
@@ -1436,8 +1771,23 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
   private initContactDefaults() {
     if (this.currentUser) {
       if (!this.contactEmail) this.contactEmail = this.currentUser.email || '';
-      if (!this.contactPhone) this.contactPhone = this.currentUser.phone || '9876543210';
+      if (!this.contactPhone) {
+        const p = this.currentUser.phone || '';
+        this.contactPhone = p.startsWith('+') ? p : (p ? `+91 ${p}` : '+91 98765 43210');
+      }
+    } else {
+      if (!this.contactEmail) this.contactEmail = 'john.doe@example.com';
+      if (!this.contactPhone) this.contactPhone = '+91 98765 43210';
     }
+  }
+
+  private calculateAge(dob: string): number | null {
+    if (!dob) return null;
+    const birth = new Date(dob);
+    if (isNaN(birth.getTime())) return null;
+    const diff = Date.now() - birth.getTime();
+    const ageDate = new Date(diff);
+    return Math.abs(ageDate.getUTCFullYear() - 1970);
   }
 
   private ensureDefaultPoints() {
@@ -1458,15 +1808,20 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
     const oldMap = new Map<string, PassengerInfo>();
     this.passengers.forEach(p => oldMap.set(p.seatNumber, p));
 
-    this.passengers = this.selectedSeats.map(seatNo => {
+    this.passengers = this.selectedSeats.map((seatNo, idx) => {
       if (oldMap.has(seatNo)) {
         return oldMap.get(seatNo)!;
       }
+      const leadName = (idx === 0 && this.currentUser?.fullName) ? this.currentUser.fullName : (idx === 0 ? 'John Doe' : '');
+      const leadAge = (idx === 0 && this.currentUser?.age) ? this.currentUser.age : (idx === 0 && this.currentUser?.dateOfBirth ? this.calculateAge(this.currentUser.dateOfBirth) : (idx === 0 ? 28 : null));
+      const leadGender = (idx === 0 && this.currentUser?.gender) ? this.currentUser.gender : 'Male';
+
       return {
         seatNumber: seatNo,
-        name: this.currentUser?.fullName && this.passengers.length === 0 ? this.currentUser.fullName : '',
-        age: null,
-        gender: 'MALE'
+        name: leadName,
+        age: leadAge,
+        gender: leadGender,
+        idProof: 'Aadhaar Card'
       };
     });
   }
@@ -1793,7 +2148,6 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
 
   onRemoveSeat(seatNumber: string) {
     this.seatRemoved.emit(seatNumber);
-    this.seatToggled.emit(seatNumber);
   }
 
   onResetSeats() {
@@ -1839,14 +2193,40 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
   }
 
   get isPassengerFormValid(): boolean {
-    if (this.passengers.length === 0) return false;
+    if (this.selectedSeats.length === 0 || this.passengers.length === 0) return false;
     for (const p of this.passengers) {
       if (!p.name || p.name.trim().length < 2) return false;
       if (!p.age || p.age < 1 || p.age > 120) return false;
+      if (!p.gender) return false;
     }
-    if (!this.contactEmail || !this.contactEmail.includes('@')) return false;
-    if (!this.contactPhone || this.contactPhone.length < 7) return false;
+    if (!this.contactEmail || !this.contactEmail.includes('@') || !this.contactEmail.includes('.')) return false;
+    if (!this.contactPhone || this.contactPhone.trim().length < 7) return false;
     return true;
+  }
+
+  get selectedBoardingTime(): string {
+    const found = this.boardingList.find(b => b.name === this.selectedBoardingPoint);
+    return found ? found.time : this.departureTimeFormatted;
+  }
+
+  get selectedDroppingTime(): string {
+    const found = this.droppingList.find(d => d.name === this.selectedDroppingPoint);
+    return found ? found.time : this.arrivalTimeFormatted;
+  }
+
+  onRemovePassenger(idx: number) {
+    if (idx <= 0 || idx >= this.passengers.length) return;
+    const removedSeat = this.passengers[idx].seatNumber;
+    this.passengers.splice(idx, 1);
+    const seatIdx = this.selectedSeats.indexOf(removedSeat);
+    if (seatIdx >= 0) {
+      this.selectedSeats.splice(seatIdx, 1);
+      this.seatRemoved.emit(removedSeat);
+    }
+  }
+
+  onEditSeats() {
+    this.currentStage = 1;
   }
 
   onContinueToPassengerDetails() {
