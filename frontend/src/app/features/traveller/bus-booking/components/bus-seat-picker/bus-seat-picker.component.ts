@@ -179,16 +179,15 @@ export interface PassengerInfo {
       </div>
 
       <!-- ================= STAGE 1: SEAT SELECTION 3-COLUMN CONTENT ================= -->
-      <div *ngIf="!isLoading && displayDecks.length > 0 && currentStage === 1" class="row g-2 g-xl-3 align-items-stretch">
+      <div *ngIf="!isLoading && displayDecks.length > 0 && currentStage === 1" class="seat-selection-three-columns-grid">
         
         <!-- ================= COLUMN 1: SEAT LAYOUT ================= -->
-        <div class="col-xl-6 col-lg-6 col-md-12">
-          <div class="seat-layout-card bg-white rounded-3 border p-2 p-md-3 shadow-xs h-100 d-flex flex-column">
-            <!-- Header matching Screenshot 1 -->
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <h6 class="fw-bold text-dark mb-0">Select Seats</h6>
-              <span class="fw-semibold text-secondary smaller cursor-pointer" (click)="toggleLegend()">Know your seats</span>
-            </div>
+        <div class="seat-layout-card bg-white rounded-3 border p-3 shadow-xs">
+          <!-- Card Header matching Reference Screenshot -->
+          <div class="mb-3">
+            <h5 class="fw-bold text-navy mb-0 card-main-heading">Seat Layout</h5>
+            <div class="text-secondary small mt-0">Click on a seat to select or deselect</div>
+          </div>
 
             <!-- Deck selector toggle for mobile/tablets -->
             <div *ngIf="isDoubleDeck" class="d-xl-none d-lg-none d-flex gap-1 mb-2">
@@ -213,8 +212,8 @@ export interface PassengerInfo {
                 <div *ngIf="activeDeckView === 'ALL' || activeDeckView === deck.deck" 
                      class="deck-column flex-grow-1">
                   
-                  <!-- Deck Header matching Screenshot 1 (e.g. LOWER BERTH(19), UPPER BERTH(4)) -->
-                  <div class="deck-title-header mb-1 text-center fw-bold smaller text-uppercase">
+                  <!-- Deck Header Title (e.g. Lower Deck (23), Upper Deck (15)) -->
+                  <div class="deck-title-header mb-2 text-center fw-semibold text-secondary">
                     {{ getDeckHeaderTitle(deck) }}
                   </div>
 
@@ -257,160 +256,170 @@ export interface PassengerInfo {
             </div>
 
           </div>
-        </div>
 
         <!-- ================= COLUMN 2: LEGEND & BOARDING/DROPPING POINTS ================= -->
-        <div class="col-xl-3 col-lg-3 col-md-6">
-          <div class="d-flex flex-column gap-2 h-100">
-            
-            <!-- Card A: Seat Legend matching Screenshot 2 (Seater / Sleeper info) -->
-            <div class="bg-white rounded-3 border p-2 px-3 shadow-xs collapsible-card">
-              <div class="d-flex justify-content-between align-items-center cursor-pointer mb-1" (click)="legendExpanded = !legendExpanded">
-                <span class="fw-bold text-dark text-micro-heading mb-0">Seater / Sleeper info</span>
-                <button class="btn btn-sm btn-link p-0 text-secondary">
-                  <i class="fa-solid fa-xs" [class.fa-chevron-up]="legendExpanded" [class.fa-chevron-down]="!legendExpanded"></i>
-                </button>
+        <div class="middle-column-stack d-flex flex-column gap-3">
+          
+          <!-- Card A: Seat Legend (Collapsible) -->
+          <div class="bg-white rounded-3 border p-3 shadow-xs collapsible-card seat-legend-card">
+            <div class="d-flex justify-content-between align-items-center cursor-pointer" 
+                 (click)="legendExpanded = !legendExpanded">
+              <h6 class="fw-bold text-navy mb-0" style="font-size: 0.95rem;">Seat Legend</h6>
+              <button class="btn btn-sm btn-link p-0 text-secondary">
+                <i class="fa-solid fa-xs" [class.fa-chevron-up]="legendExpanded" [class.fa-chevron-down]="!legendExpanded"></i>
+              </button>
+            </div>
+
+            <!-- Subheading -->
+            <div class="text-secondary small fw-medium mt-1 mb-2">Seater / Sleeper info</div>
+
+            <!-- Expanded Legend Content matching Screenshot 2 -->
+            <div *ngIf="legendExpanded" class="legend-matrix-table pt-1">
+              
+              <!-- Column Headers -->
+              <div class="legend-row d-flex align-items-center pb-2">
+                <div class="legend-col-label"></div>
+                <div class="legend-col-head">Unisex</div>
+                <div class="legend-col-head">Male</div>
+                <div class="legend-col-head">Female</div>
               </div>
 
-              <!-- Expanded Legend Content matching Screenshot 2 -->
-              <div *ngIf="legendExpanded" class="legend-matrix-table mt-1 pt-1 border-top">
+              <!-- Row 1: Available -->
+              <div class="legend-row d-flex align-items-center my-1">
+                <div class="legend-col-label">Available</div>
                 
-                <!-- Column Headers -->
-                <div class="legend-row d-flex align-items-center pb-1">
-                  <div class="legend-col-label"></div>
-                  <div class="legend-col-head">Unisex</div>
-                  <div class="legend-col-head">Male</div>
-                  <div class="legend-col-head">Female</div>
+                <!-- Unisex Available -->
+                <div class="legend-col-cell">
+                  <div class="legend-icon-box avail-unisex"></div>
                 </div>
-
-                <!-- Row 1: Available -->
-                <div class="legend-row d-flex align-items-center my-1">
-                  <div class="legend-col-label">Available</div>
-                  
-                  <!-- Unisex Available -->
-                  <div class="legend-col-cell">
-                    <div class="legend-icon-box avail-unisex"></div>
-                  </div>
-                  
-                  <!-- Male Available -->
-                  <div class="legend-col-cell">
-                    <div class="legend-icon-box avail-male">
-                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#3b82f6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="10" cy="6.5" r="3.2"/>
-                        <path d="M5 16 C5 12.5, 7.5 11.5, 10 11.5 C12.5 11.5, 15 12.5, 15 16"/>
-                      </svg>
-                    </div>
-                  </div>
-                  
-                  <!-- Female Available -->
-                  <div class="legend-col-cell">
-                    <div class="legend-icon-box avail-female">
-                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#b854d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="10" cy="6.5" r="3.2"/>
-                        <path d="M7 6.5 C7 4.5, 13 4.5, 13 6.5"/>
-                        <path d="M5 16 C5 13, 7.5 12, 10 12 C12.5 12, 15 13, 15 16"/>
-                      </svg>
-                    </div>
+                
+                <!-- Male Available -->
+                <div class="legend-col-cell">
+                  <div class="legend-icon-box avail-male">
+                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#3b82f6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="10" cy="6.5" r="3.2"/>
+                      <path d="M5 16 C5 12.5, 7.5 11.5, 10 11.5 C12.5 11.5, 15 12.5, 15 16"/>
+                    </svg>
                   </div>
                 </div>
-
-                <!-- Row 2: Selected -->
-                <div class="legend-row d-flex align-items-center my-1">
-                  <div class="legend-col-label">Selected</div>
-                  
-                  <!-- Unisex Selected -->
-                  <div class="legend-col-cell">
-                    <div class="legend-icon-box sel-unisex"></div>
-                  </div>
-                  
-                  <!-- Male Selected -->
-                  <div class="legend-col-cell">
-                    <div class="legend-icon-box sel-male">
-                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#2563eb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="10" cy="6.5" r="3.2"/>
-                        <path d="M5 16 C5 12.5, 7.5 11.5, 10 11.5 C12.5 11.5, 15 12.5, 15 16"/>
-                      </svg>
-                    </div>
-                  </div>
-                  
-                  <!-- Female Selected -->
-                  <div class="legend-col-cell">
-                    <div class="legend-icon-box sel-female">
-                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#b854d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="10" cy="6.5" r="3.2"/>
-                        <path d="M7 6.5 C7 4.5, 13 4.5, 13 6.5"/>
-                        <path d="M5 16 C5 13, 7.5 12, 10 12 C12.5 12, 15 13, 15 16"/>
-                      </svg>
-                    </div>
+                
+                <!-- Female Available -->
+                <div class="legend-col-cell">
+                  <div class="legend-icon-box avail-female">
+                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#b854d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="10" cy="6.5" r="3.2"/>
+                      <path d="M7 6.5 C7 4.5, 13 4.5, 13 6.5"/>
+                      <path d="M5 16 C5 13, 7.5 12, 10 12 C12.5 12, 15 13, 15 16"/>
+                    </svg>
                   </div>
                 </div>
+              </div>
 
-                <!-- Row 3: Booked -->
-                <div class="legend-row d-flex align-items-center my-1">
-                  <div class="legend-col-label">Booked</div>
-                  
-                  <!-- Unisex Booked -->
-                  <div class="legend-col-cell">
-                    <div class="legend-icon-box book-unisex"></div>
-                  </div>
-                  
-                  <!-- Male Booked -->
-                  <div class="legend-col-cell">
-                    <div class="legend-icon-box book-male">
-                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#b0b0b0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="10" cy="6.5" r="3.2"/>
-                        <path d="M5 16 C5 12.5, 7.5 11.5, 10 11.5 C12.5 11.5, 15 12.5, 15 16"/>
-                      </svg>
-                    </div>
-                  </div>
-                  
-                  <!-- Female Booked -->
-                  <div class="legend-col-cell">
-                    <div class="legend-icon-box book-female">
-                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#b0b0b0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="10" cy="6.5" r="3.2"/>
-                        <path d="M7 6.5 C7 4.5, 13 4.5, 13 6.5"/>
-                        <path d="M5 16 C5 13, 7.5 12, 10 12 C12.5 12, 15 13, 15 16"/>
-                      </svg>
-                    </div>
+              <!-- Row 2: Selected -->
+              <div class="legend-row d-flex align-items-center my-1">
+                <div class="legend-col-label">Selected</div>
+                
+                <!-- Unisex Selected -->
+                <div class="legend-col-cell">
+                  <div class="legend-icon-box sel-unisex"></div>
+                </div>
+                
+                <!-- Male Selected -->
+                <div class="legend-col-cell">
+                  <div class="legend-icon-box sel-male">
+                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#2563eb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="10" cy="6.5" r="3.2"/>
+                      <path d="M5 16 C5 12.5, 7.5 11.5, 10 11.5 C12.5 11.5, 15 12.5, 15 16"/>
+                    </svg>
                   </div>
                 </div>
+                
+                <!-- Female Selected -->
+                <div class="legend-col-cell">
+                  <div class="legend-icon-box sel-female">
+                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#b854d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="10" cy="6.5" r="3.2"/>
+                      <path d="M7 6.5 C7 4.5, 13 4.5, 13 6.5"/>
+                      <path d="M5 16 C5 13, 7.5 12, 10 12 C12.5 12, 15 13, 15 16"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
 
+              <!-- Row 3: Booked -->
+              <div class="legend-row d-flex align-items-center my-1">
+                <div class="legend-col-label">Booked</div>
+                
+                <!-- Unisex Booked -->
+                <div class="legend-col-cell">
+                  <div class="legend-icon-box book-unisex"></div>
+                </div>
+                
+                <!-- Male Booked -->
+                <div class="legend-col-cell">
+                  <div class="legend-icon-box book-male">
+                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#b0b0b0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="10" cy="6.5" r="3.2"/>
+                      <path d="M5 16 C5 12.5, 7.5 11.5, 10 11.5 C12.5 11.5, 15 12.5, 15 16"/>
+                    </svg>
+                  </div>
+                </div>
+                
+                <!-- Female Booked -->
+                <div class="legend-col-cell">
+                  <div class="legend-icon-box book-female">
+                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#b0b0b0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="10" cy="6.5" r="3.2"/>
+                      <path d="M7 6.5 C7 4.5, 13 4.5, 13 6.5"/>
+                      <path d="M5 16 C5 13, 7.5 12, 10 12 C12.5 12, 15 13, 15 16"/>
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Card B: Boarding and Dropping Points (Collapsible) -->
+          <div class="bg-white rounded-3 border p-3 shadow-xs collapsible-card points-selector-card">
+            <div class="d-flex justify-content-between align-items-center cursor-pointer mb-2" 
+                 (click)="pointsExpanded = !pointsExpanded">
+              <h6 class="fw-bold text-navy mb-0" style="font-size: 0.95rem;">Boarding and Dropping Points</h6>
+              <button class="btn btn-sm btn-link p-0 text-secondary">
+                <i class="fa-solid fa-xs" [class.fa-chevron-up]="pointsExpanded" [class.fa-chevron-down]="!pointsExpanded"></i>
+              </button>
+            </div>
+
+            <!-- Collapsed Summary Chips -->
+            <div *ngIf="!pointsExpanded" class="mt-2 pt-2 border-top">
+              <div class="text-secondary small d-flex flex-column gap-1">
+                <div class="text-truncate">
+                  <i class="fa-solid fa-location-dot text-success me-1"></i>
+                  <span class="fw-semibold text-navy">{{ selectedBoardingPoint || 'Boarding not chosen' }}</span>
+                </div>
+                <div class="text-truncate">
+                  <i class="fa-solid fa-location-dot text-danger me-1"></i>
+                  <span class="fw-semibold text-navy">{{ selectedDroppingPoint || 'Dropping not chosen' }}</span>
+                </div>
               </div>
             </div>
 
-            <!-- Card B: Boarding and Dropping Points (Collapsible) -->
-            <div class="bg-white rounded-3 border p-2 px-3 shadow-xs collapsible-card flex-grow-1">
-              <div class="d-flex justify-content-between align-items-center cursor-pointer mb-1" (click)="pointsExpanded = !pointsExpanded">
-                <span class="fw-bold text-dark text-micro-heading mb-0">Boarding & Dropping Points</span>
-                <button class="btn btn-sm btn-link p-0 text-secondary">
-                  <i class="fa-solid fa-xs" [class.fa-chevron-up]="pointsExpanded" [class.fa-chevron-down]="!pointsExpanded"></i>
-                </button>
-              </div>
-
-              <!-- Collapsed Summary Chips -->
-              <div *ngIf="!pointsExpanded" class="mt-1 pt-1 border-top">
-                <div class="text-micro text-secondary d-flex flex-column gap-1">
-                  <div class="text-truncate">
-                    <i class="fa-solid fa-location-dot text-success me-1"></i>
-                    <span class="fw-semibold">{{ selectedBoardingPoint || 'Boarding not chosen' }}</span>
-                  </div>
-                  <div class="text-truncate">
-                    <i class="fa-solid fa-location-dot text-danger me-1"></i>
-                    <span class="fw-semibold">{{ selectedDroppingPoint || 'Dropping not chosen' }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Expanded Points Form -->
-              <div *ngIf="pointsExpanded" class="mt-2 pt-1 border-top">
+            <!-- Expanded Points Timeline Layout -->
+            <div *ngIf="pointsExpanded" class="mt-3">
+              <div class="points-timeline-container position-relative ps-4">
                 
-                <!-- Boarding Point -->
-                <div class="mb-2">
-                  <label class="form-label text-micro fw-bold text-navy mb-1 d-flex align-items-center">
-                    <i class="fa-solid fa-location-dot text-success me-1"></i>Boarding Point <span class="text-danger ms-1">*</span>
-                  </label>
-                  <select class="form-select form-select-sm rounded-2 text-micro py-1" 
+                <!-- Vertical Connecting Line between icons -->
+                <div class="timeline-vertical-connector"></div>
+
+                <!-- Boarding Point Block -->
+                <div class="timeline-item mb-3 position-relative">
+                  <span class="timeline-indicator-icon boarding-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                  </span>
+                  <label class="fw-bold text-navy small mb-1 d-block">Boarding Point</label>
+                  <select class="form-select form-select-sm custom-points-select" 
                           [ngModel]="selectedBoardingPoint" 
                           (ngModelChange)="onBoardingChange($event)">
                     <option value="" disabled>Select pickup location</option>
@@ -420,12 +429,15 @@ export interface PassengerInfo {
                   </select>
                 </div>
 
-                <!-- Dropping Point -->
-                <div class="mb-1">
-                  <label class="form-label text-micro fw-bold text-navy mb-1 d-flex align-items-center">
-                    <i class="fa-solid fa-location-dot text-danger me-1"></i>Dropping Point <span class="text-danger ms-1">*</span>
-                  </label>
-                  <select class="form-select form-select-sm rounded-2 text-micro py-1" 
+                <!-- Dropping Point Block -->
+                <div class="timeline-item position-relative">
+                  <span class="timeline-indicator-icon dropping-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#EF4444" stroke="#EF4444" stroke-width="2">
+                      <circle cx="12" cy="12" r="7"/>
+                    </svg>
+                  </span>
+                  <label class="fw-bold text-navy small mb-1 d-block">Dropping Point</label>
+                  <select class="form-select form-select-sm custom-points-select" 
                           [ngModel]="selectedDroppingPoint" 
                           (ngModelChange)="onDroppingChange($event)">
                     <option value="" disabled>Select drop-off location</option>
@@ -435,114 +447,137 @@ export interface PassengerInfo {
                   </select>
                 </div>
 
-                <div class="text-muted text-micro mt-1">
-                  <i class="fa-solid fa-circle-exclamation me-1 text-primary"></i>Selection required before checkout
-                </div>
-
               </div>
             </div>
 
           </div>
+
         </div>
 
         <!-- ================= COLUMN 3: YOUR SELECTION & FARE SUMMARY ================= -->
-        <div class="col-xl-3 col-lg-3 col-md-12">
-          <div class="bg-white rounded-3 border p-2 px-3 shadow-xs h-100 d-flex flex-column justify-content-between">
-            
-            <div>
-              <!-- Header: Your Selection with Count and Reset / Remove All -->
-              <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
-                <div class="d-flex align-items-center gap-2">
-                  <h6 class="fw-bold text-navy mb-0 smaller">Your Selection</h6>
-                  <span class="badge rounded-pill" [class.bg-primary]="selectedSeats.length > 0" [class.bg-secondary]="selectedSeats.length === 0" style="font-size: 0.68rem;">
-                    {{ selectedSeats.length }} {{ selectedSeats.length === 1 ? 'seat' : 'seats' }}
-                  </span>
-                </div>
-                
-                <div *ngIf="selectedSeats.length > 0" class="d-flex gap-2">
-                  <button class="btn btn-link p-0 text-micro text-secondary text-decoration-none" (click)="onResetSeats()">
-                    Reset
-                  </button>
-                  <span class="text-muted text-micro">•</span>
-                  <button class="btn btn-link p-0 text-micro text-danger text-decoration-none" (click)="onRemoveAllSeats()">
-                    Remove All
-                  </button>
+        <div class="bg-white rounded-3 border p-3 shadow-xs your-selection-card d-flex flex-column justify-content-between">
+          
+          <div>
+            <!-- Header: Your Selection with Reset action -->
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h5 class="fw-bold text-navy mb-0 card-main-heading">Your Selection</h5>
+              
+              <button class="btn btn-link p-0 text-primary text-decoration-none fw-semibold small d-flex align-items-center gap-1 btn-reset-selection" 
+                      (click)="onResetSeats()">
+                <i class="fa-solid fa-rotate-left small"></i>
+                <span>Reset</span>
+              </button>
+            </div>
+
+            <!-- Selected Seats Row with Count and Remove All -->
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-bold text-navy small selected-seats-heading-label">
+                Selected Seats ({{ selectedSeats.length }})
+              </span>
+              
+              <button *ngIf="selectedSeats.length > 0" 
+                      class="btn btn-link p-0 text-primary text-decoration-none small fw-semibold" 
+                      (click)="onRemoveAllSeats()">
+                Remove All
+              </button>
+            </div>
+
+            <!-- Selected Seats List / Empty State -->
+            <div class="selected-seats-container mb-3">
+              <div *ngIf="selectedSeats.length === 0" class="empty-selection-box py-3 text-center border rounded-2 bg-light">
+                <i class="fa-solid fa-chair text-muted mb-1"></i>
+                <div class="fw-semibold text-navy small">No seats selected yet</div>
+                <div class="text-secondary text-micro px-2">
+                  Click available seats in the layout to add.
                 </div>
               </div>
 
-              <!-- Selected Seats List / Empty State -->
-              <div class="selected-seats-chip-container mb-2" style="max-height: 80px; overflow-y: auto;">
-                <div *ngIf="selectedSeats.length === 0" class="empty-selection-box py-2 text-center border rounded-2 bg-light">
-                  <i class="fa-solid fa-chair text-muted small mb-1"></i>
-                  <div class="fw-bold text-navy text-micro">No seats selected yet</div>
-                  <div class="text-muted text-micro px-2">
-                    Click available seats in the layout to add.
-                  </div>
-                </div>
-
-                <div *ngIf="selectedSeats.length > 0" class="selected-seats-list d-flex flex-wrap gap-1">
-                  <div *ngFor="let sn of selectedSeats" class="selected-seat-chip-item d-inline-flex align-items-center gap-1 bg-light border rounded-pill px-2 py-0">
-                    <span class="fw-bold text-primary text-micro">{{ sn }}</span>
-                    <span class="text-secondary text-micro">₹{{ getSeatPrice(sn) | number:'1.0-0' }}</span>
-                    <button class="btn btn-link p-0 text-muted ms-1 text-micro hover-danger border-0" (click)="onRemoveSeat(sn)" title="Remove seat">
+              <!-- List of Individual Selected Seats matching Screenshot 3 -->
+              <div *ngIf="selectedSeats.length > 0" class="selected-seats-vertical-list d-flex flex-column gap-2" style="max-height: 140px; overflow-y: auto;">
+                <div *ngFor="let sn of selectedSeats" class="d-flex align-items-center justify-content-between py-1">
+                  <!-- Seat Pill with X button -->
+                  <span class="selected-seat-badge-pill d-inline-flex align-items-center gap-2">
+                    <span class="badge-seat-name">{{ sn }}</span>
+                    <button type="button" class="btn-remove-seat-x p-0 border-0 bg-transparent text-secondary" (click)="onRemoveSeat(sn)" title="Remove seat {{ sn }}">
                       <i class="fa-solid fa-xmark"></i>
                     </button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Fare Breakdown Details -->
-              <div class="fare-breakdown-box bg-light rounded-2 p-2 mb-2 border text-micro">
-                <div class="d-flex justify-content-between align-items-center mb-1 text-secondary">
-                  <span>Base Fare ({{ selectedSeats.length }} seat{{ selectedSeats.length !== 1 ? 's' : '' }})</span>
-                  <span class="fw-semibold text-navy">₹{{ calculatedBaseFare | number:'1.2-2' }}</span>
-                </div>
-
-                <div class="d-flex justify-content-between align-items-center mb-1 text-secondary">
-                  <span class="d-flex align-items-center gap-1">
-                    Taxes & Fees 
-                    <i class="fa-solid fa-circle-info text-muted cursor-pointer" title="Includes 5% GST and platform fee"></i>
                   </span>
-                  <span class="fw-semibold text-navy">₹{{ calculatedTaxes | number:'1.2-2' }}</span>
-                </div>
-
-                <hr class="my-1">
-
-                <div class="d-flex justify-content-between align-items-center pt-1">
-                  <span class="fw-bold text-navy smaller">Total Amount</span>
-                  <span class="fw-bold text-primary fs-5">₹{{ calculatedTotalAmount | number:'1.2-2' }}</span>
-                </div>
-              </div>
-
-              <!-- Continue Button -->
-              <button class="btn btn-primary w-100 py-2 rounded-pill fw-bold btn-continue-booking shadow-xs"
-                      [disabled]="!canProceedToPassengerDetails"
-                      (click)="onContinueToPassengerDetails()"
-                      style="font-size: 0.88rem;">
-                <span>Continue to Passenger Details</span>
-                <i class="fa-solid fa-arrow-right ms-2 small"></i>
-              </button>
-
-              <!-- Validation message if disabled -->
-              <div *ngIf="validationNotice" class="text-danger text-center text-micro mt-1">
-                <i class="fa-solid fa-circle-exclamation me-1"></i>{{ validationNotice }}
-              </div>
-            </div>
-
-            <!-- Hold Time Notice Box -->
-            <div class="hold-time-notice-box p-2 rounded-2 mt-2">
-              <div class="d-flex align-items-start gap-2">
-                <i class="fa-solid fa-circle-info text-primary mt-1 text-micro"></i>
-                <div>
-                  <div class="fw-bold text-navy text-micro">Hold time: 10 minutes</div>
-                  <div class="text-muted text-micro" style="line-height: 1.2;">
-                    Your selected seats will be temporarily held for 10 minutes while you complete your booking.
-                  </div>
+                  <!-- Individual Fare on the Right -->
+                  <span class="fw-bold text-navy individual-seat-fare">
+                    ₹ {{ getSeatPrice(sn) | number:'1.0-0' }}
+                  </span>
                 </div>
               </div>
             </div>
 
+            <div class="border-top my-2"></div>
+
+            <!-- Fare Breakdown Details matching Screenshot 3 -->
+            <div class="fare-breakdown-section mb-2">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="text-navy fw-semibold" style="font-size: 0.88rem;">Fare per seat</span>
+                <span class="fw-bold text-navy" style="font-size: 0.95rem;">₹ {{ farePerSeat | number:'1.0-0' }}</span>
+              </div>
+
+              <div class="d-flex justify-content-between align-items-center mb-1 text-secondary" style="font-size: 0.82rem;">
+                <span>Base Fare</span>
+                <span class="fw-medium text-secondary">₹ {{ calculatedBaseFare | number:'1.0-0' }}</span>
+              </div>
+
+              <div class="d-flex justify-content-between align-items-center mb-1 text-secondary" style="font-size: 0.82rem;">
+                <span class="d-flex align-items-center gap-1">
+                  Taxes & Fees 
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="cursor-pointer" title="Includes 5% GST and platform processing">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                  </svg>
+                </span>
+                <span class="fw-medium text-secondary">₹ {{ calculatedTaxes | number:'1.0-0' }}</span>
+              </div>
+            </div>
+
+            <div class="border-top my-2"></div>
+
+            <!-- Total Amount Row -->
+            <div class="d-flex justify-content-between align-items-baseline mb-3">
+              <span class="fw-bold text-navy" style="font-size: 1.05rem;">Total Amount</span>
+              <span class="fw-bold text-navy total-highlight-price" style="font-size: 1.30rem;">
+                ₹ {{ calculatedTotalAmount | number:'1.0-0' }}
+              </span>
+            </div>
+
+            <!-- Continue Button -->
+            <button class="btn btn-primary w-100 py-2 fw-semibold btn-continue-booking d-flex align-items-center justify-content-center gap-2 mb-2"
+                    [disabled]="!canProceedToPassengerDetails"
+                    (click)="onContinueToPassengerDetails()">
+              <span>Continue to Passenger Details</span>
+              <i class="fa-solid fa-arrow-right small"></i>
+            </button>
+
+            <!-- Validation message if disabled -->
+            <div *ngIf="validationNotice" class="text-danger text-center text-micro mb-2">
+              <i class="fa-solid fa-circle-exclamation me-1"></i>{{ validationNotice }}
+            </div>
           </div>
+
+          <!-- Seat-Hold Information Card Immediately Below Button -->
+          <div class="hold-time-notice-box p-2 px-3 rounded-2">
+            <div class="d-flex align-items-start gap-2">
+              <svg class="hold-info-icon flex-shrink-0 mt-1" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0284C7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <div>
+                <div class="fw-bold text-navy text-micro" style="font-size: 0.80rem;">Hold time: 10 minutes</div>
+                <div class="text-secondary text-micro" style="font-size: 0.74rem; line-height: 1.3;">
+                  Your selected seats will be held for 10 minutes while you complete your booking.
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
 
       </div>
@@ -1683,11 +1718,10 @@ export interface PassengerInfo {
       flex: 0 0 auto;
     }
     .deck-title-header {
-      color: #555555;
-      letter-spacing: 0.5px;
-      font-size: 0.72rem;
-      font-weight: 700;
-      text-transform: uppercase;
+      color: #334155;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: none;
     }
     .bus-body-outline {
       background: #FFFFFF;
@@ -2292,6 +2326,37 @@ export interface PassengerInfo {
       }
     }
 
+    /* ================= STAGE 1: 3-COLUMN SEAT SELECTION CSS ================= */
+    .seat-selection-three-columns-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+      width: 100%;
+    }
+    @media (max-width: 1199.98px) {
+      .seat-selection-three-columns-grid {
+        grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr);
+        gap: 12px;
+      }
+    }
+    @media (max-width: 991.98px) {
+      .seat-selection-three-columns-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+    }
+
+    .seat-layout-card,
+    .seat-legend-card,
+    .points-selector-card,
+    .your-selection-card {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+
     /* Legend Matrix Table (Screenshot 2) */
     .legend-matrix-table {
       width: 100%;
@@ -2361,15 +2426,81 @@ export interface PassengerInfo {
       background: #F0F0F0;
     }
 
+    /* Boarding & Dropping Timeline */
+    .points-timeline-container {
+      position: relative;
+    }
+    .timeline-vertical-connector {
+      position: absolute;
+      left: 7px;
+      top: 14px;
+      bottom: 24px;
+      width: 2px;
+      background: #CBD5E1;
+      z-index: 1;
+    }
+    .timeline-indicator-icon {
+      position: absolute;
+      left: -24px;
+      top: 2px;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #FFFFFF;
+    }
+    .custom-points-select {
+      border-color: #CBD5E1;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      color: #0F172A;
+      padding: 5px 10px;
+    }
+    .custom-points-select:focus {
+      border-color: #0875E1;
+      box-shadow: 0 0 0 2px rgba(8, 117, 225, 0.15);
+    }
+
     /* Right column & Summary */
+    .selected-seat-badge-pill {
+      background-color: #EFF6FF;
+      border: 1px solid #DBEAFE;
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #1E3A8A;
+    }
+    .btn-remove-seat-x {
+      color: #64748B;
+      font-size: 0.76rem;
+      cursor: pointer;
+      transition: color 0.15s ease;
+      line-height: 1;
+    }
+    .btn-remove-seat-x:hover {
+      color: #EF4444;
+    }
+    .individual-seat-fare {
+      font-size: 0.90rem;
+    }
+    .btn-reset-selection {
+      color: #0875E1;
+      font-size: 0.82rem;
+    }
+    .btn-reset-selection:hover {
+      color: #0662be;
+    }
     .hold-time-notice-box {
-      background: #F0F7FF;
+      background: #F0F9FF;
       border: 1px solid #BAE6FD;
+      border-radius: 8px;
     }
     .btn-continue-booking {
       background: var(--primary-blue);
       border: none;
       letter-spacing: -0.2px;
+      border-radius: 8px;
       transition: all 0.2s ease;
     }
     .btn-continue-booking:hover:not(:disabled) {
@@ -2656,12 +2787,13 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
   }
 
   getDeckHeaderTitle(deck: DeckLayout): string {
+    const totalInDeck = deck.positions?.length || deck.availableCount || 0;
     if (deck.deck === 'UPPER') {
-      return `UPPER BERTH(${deck.availableCount})`;
+      return `Upper Deck (${totalInDeck})`;
     } else if (this.isDoubleDeck) {
-      return `LOWER BERTH(${deck.availableCount})`;
+      return `Lower Deck (${totalInDeck})`;
     } else {
-      return `SEATS(${deck.availableCount})`;
+      return `Lower Deck (${totalInDeck})`;
     }
   }
 
@@ -2860,6 +2992,11 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
   }
 
   // --- Financial Calculations ---
+
+  get farePerSeat(): number {
+    if (this.selectedSeats.length === 0) return 0;
+    return Math.round(this.calculatedBaseFare / this.selectedSeats.length);
+  }
 
   get calculatedBaseFare(): number {
     return this.selectedSeats.reduce((sum, s) => sum + this.getSeatPrice(s), 0);
