@@ -33,4 +33,8 @@ export class HotelService {
   reserveRooms(roomId: number, count: number): Observable<any> {
     return this.http.put(`${this.apiUrl}/rooms/${roomId}/reserve?count=${count}`, {});
   }
+
+  releaseRooms(roomId: number, count: number): Observable<any> {
+    return this.http.put(`${this.apiUrl}/rooms/${roomId}/release?count=${count}`, {});
+  }
 }

@@ -23,4 +23,8 @@ public class Bus {
     private String busType; // AC Sleeper, Volvo AC Multi-Axle, Non-AC Seater
     private Integer totalSeats;
     private String amenities; // Wi-Fi, Charging Point, Water Bottle, Blanket
+
+    private String facilityType; // "AC", "NON_AC"
+    private String busConfiguration; // "SINGLE_DECK", "DOUBLE_DECK"
+    private String templateId; // references SeatLayoutTemplate.id
 }

@@ -1,0 +1,5 @@
+com\traveleasy\review\model\Review$ReviewBuilder.class
+com\traveleasy\review\model\Review.class
+com\traveleasy\review\controller\ReviewController.class
+com\traveleasy\review\repository\ReviewRepository.class
+com\traveleasy\review\ReviewServiceApplication.class

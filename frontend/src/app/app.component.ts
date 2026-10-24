@@ -1,27 +1,70 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterOutlet } from '@angular/router';
+import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { NavbarComponent } from './components/navbar/navbar.component';
+import { HeaderComponent } from './components/header/header.component';
+import { FooterComponent } from './components/footer/footer.component';
+import { filter } from 'rxjs/operators';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, NavbarComponent],
+  imports: [CommonModule, RouterOutlet, NavbarComponent, HeaderComponent, FooterComponent],
   template: `
-    <div class="d-flex flex-column min-vh-100">
-      <app-navbar></app-navbar>
-      
-      <main class="flex-grow-1">
+    <div class="d-flex flex-column min-vh-100 position-relative">
+      <!-- Standard Travel Easy Header on public-facing pages (excluding dedicated auth/registration wizard pages) -->
+      <app-header *ngIf="showPublicHeaderFooter" [transparent]="true"></app-header>
+
+      <!-- Role Console Navbar on authenticated dashboards -->
+      <app-navbar *ngIf="isDashboardPage"></app-navbar>
+
+      <main class="flex-grow-1 d-flex flex-column">
         <router-outlet></router-outlet>
       </main>
 
-      <footer class="bg-dark text-white py-4 mt-auto border-top border-secondary">
+      <!-- Standard Travel Easy Footer on public-facing pages (excluding dedicated auth/registration wizard pages) -->
+      <app-footer *ngIf="showPublicHeaderFooter"></app-footer>
+
+      <!-- Role Console Footer on authenticated dashboards -->
+      <footer *ngIf="isDashboardPage" class="bg-dark text-white py-4 mt-auto border-top border-secondary">
         <div class="container text-center">
           <p class="mb-1 fw-semibold">&copy; 2026 TravelEasy Inc. All Rights Reserved.</p>
-          <small class="text-muted">Software Application Architecture (SWE4007) Project | Microservices & Angular Edition</small>
+          <small class="text-muted">Software Application Architecture (SWE4007) Project | Microservices &amp; Angular Edition</small>
         </div>
       </footer>
     </div>
   `
 })
-export class AppComponent {}
+export class AppComponent {
+  isHomePage = true;
+  isDashboardPage = false;
+  isPublicPage = true;
+  showPublicHeaderFooter = true;
+
+  constructor(private router: Router) {
+    this.updateLayout(this.router.url);
+
+    this.router.events.pipe(
+      filter(event => event instanceof NavigationEnd)
+    ).subscribe((event: any) => {
+      const url: string = event.urlAfterRedirects || event.url || '';
+      this.updateLayout(url);
+    });
+  }
+
+  private updateLayout(url: string) {
+    const path = url.split('?')[0].split('#')[0].replace(/\/+$/, '');
+    const isCustomerPage = path === '/customer' || path.startsWith('/customer/');
+    this.isDashboardPage = !isCustomerPage && (path === '/bus-operator' || path === '/hotel-manager' || path === '/admin');
+    this.isPublicPage = !isCustomerPage && !this.isDashboardPage;
+    this.isHomePage = path === '' || path === '/home';
+
+    const excludedHeaderFooterPages = [
+      '/login',
+      '/register/traveller',
+      '/register/bus-operator',
+      '/register/hotel-partner'
+    ];
+    this.showPublicHeaderFooter = this.isPublicPage && !excludedHeaderFooterPages.includes(path);
+  }
+}

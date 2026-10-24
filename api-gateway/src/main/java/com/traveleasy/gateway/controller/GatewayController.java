@@ -34,6 +34,9 @@ public class GatewayController {
     @Value("${review.service.url:http://localhost:8087}")
     private String reviewServiceUrl;
 
+    @Value("${traveller.service.url:http://localhost:8088}")
+    private String travellerServiceUrl;
+
     private final RestTemplate restTemplate = new RestTemplate();
 
     @RequestMapping("/api/**")
@@ -54,10 +57,12 @@ public class GatewayController {
             targetBaseUrl = bookingServiceUrl;
         } else if (path.startsWith("/api/payments")) {
             targetBaseUrl = paymentServiceUrl;
-        } else if (path.startsWith("/api/notifications")) {
+        } else if (path.startsWith("/api/notifications") || path.startsWith("/api/newsletter")) {
             targetBaseUrl = notificationServiceUrl;
         } else if (path.startsWith("/api/reviews")) {
             targetBaseUrl = reviewServiceUrl;
+        } else if (path.startsWith("/api/traveller")) {
+            targetBaseUrl = travellerServiceUrl;
         } else {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Route not found in API Gateway".getBytes());
         }

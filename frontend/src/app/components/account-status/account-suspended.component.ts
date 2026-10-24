@@ -8,7 +8,7 @@ import { AuthService } from '../../services/auth.service';
   standalone: true,
   imports: [CommonModule, RouterModule],
   template: `
-    <div class="container py-5">
+    <div class="container py-5" style="padding-top: 96px !important;">
       <div class="row justify-content-center">
         <div class="col-md-8 col-lg-6 text-center">
           <div class="card p-5 shadow-lg border-0 rounded-4">
@@ -25,7 +25,7 @@ import { AuthService } from '../../services/auth.service';
 
             <div class="d-flex gap-2 justify-content-center">
               <button class="btn btn-outline-secondary px-4 py-2 rounded-pill fw-semibold" (click)="logout()">
-                <i class="fa-solid fa-right-from-bracket me-1"></i> Sign Out
+                <i class="fa-solid fa-right-from-bracket me-1"></i> Login Page
               </button>
               <a href="mailto:support@traveleasy.com" class="btn btn-dark px-4 py-2 rounded-pill fw-semibold">
                 <i class="fa-solid fa-headset me-1"></i> Contact Support

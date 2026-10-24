@@ -11,8 +11,11 @@ import { User } from '../../models/user.model';
   template: `
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top shadow-sm py-2">
       <div class="container">
-        <a class="navbar-brand d-flex align-items-center fw-bold text-white fs-4" routerLink="/">
-          <i class="fa-solid fa-bus-simple text-danger me-2"></i> Travel<span class="text-primary">Easy</span>
+        <a class="navbar-brand d-flex align-items-center gap-2 fw-bold text-white fs-4" routerLink="/">
+          <span class="d-inline-flex align-items-center justify-content-center rounded-circle text-white" style="width: 36px; height: 36px; background: #0d5bd9; font-size: 15px;">
+            <i class="fa-solid fa-paper-plane"></i>
+          </span>
+          <span style="font-weight: 700; color: #ffffff;">Travel <span style="color: #38bdf8;">Easy</span></span>
         </a>
         
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">

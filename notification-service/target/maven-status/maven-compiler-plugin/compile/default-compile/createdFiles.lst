@@ -1,0 +1,9 @@
+com\traveleasy\notification\model\NotificationLog.class
+com\traveleasy\notification\controller\NotificationController.class
+com\traveleasy\notification\model\NotificationLog$NotificationLogBuilder.class
+com\traveleasy\notification\controller\NewsletterController.class
+com\traveleasy\notification\model\NewsletterSubscription$NewsletterSubscriptionBuilder.class
+com\traveleasy\notification\NotificationServiceApplication.class
+com\traveleasy\notification\repository\NewsletterSubscriptionRepository.class
+com\traveleasy\notification\model\NewsletterSubscription.class
+com\traveleasy\notification\repository\NotificationRepository.class

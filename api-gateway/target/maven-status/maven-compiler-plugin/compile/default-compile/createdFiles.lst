@@ -1,0 +1,4 @@
+com\traveleasy\gateway\controller\GatewayController.class
+com\traveleasy\gateway\config\CorsConfig$1.class
+com\traveleasy\gateway\config\CorsConfig.class
+com\traveleasy\gateway\ApiGatewayApplication.class

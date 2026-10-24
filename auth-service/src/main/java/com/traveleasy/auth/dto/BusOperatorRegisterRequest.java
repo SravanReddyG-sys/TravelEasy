@@ -38,6 +38,9 @@ public class BusOperatorRegisterRequest {
     @Size(min = 2, max = 100, message = "Representative designation must be between 2 and 100 characters")
     private String representativeDesignation;
 
+    @Size(max = 100, message = "Custom designation cannot exceed 100 characters")
+    private String customDesignation;
+
     @NotBlank(message = "Legal organization name is required")
     @Size(min = 2, max = 200, message = "Legal organization name must be between 2 and 200 characters")
     private String legalOrganizationName;
@@ -58,6 +61,14 @@ public class BusOperatorRegisterRequest {
 
     @NotBlank(message = "Registered address is required")
     private String registeredAddress;
+
+    private String flatBuildingOffice;
+    private String streetRoad;
+    private String landmark;
+    private String cityLocality;
+    private String state;
+    private String country;
+    private String pinCode;
 
     @NotBlank(message = "Business contact email is required")
     @Email(message = "Invalid business contact email format")

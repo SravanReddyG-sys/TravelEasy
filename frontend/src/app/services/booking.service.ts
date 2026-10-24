@@ -18,6 +18,14 @@ export class BookingService {
     return this.http.get<any[]>(`${this.apiUrl}/bookings/customer/${customerId}`);
   }
 
+  getBookingById(id: number): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/bookings/${id}`);
+  }
+
+  getBookingByRef(bookingRef: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/bookings/ref/${bookingRef}`);
+  }
+
   getProviderBookings(providerId: number): Observable<any[]> {
     return this.http.get<any[]>(`${this.apiUrl}/bookings/provider/${providerId}`);
   }
@@ -32,6 +40,22 @@ export class BookingService {
 
   cancelBooking(bookingId: number): Observable<any> {
     return this.http.put(`${this.apiUrl}/bookings/${bookingId}/cancel`, {});
+  }
+
+  getPaymentConfig(): Observable<{ keyId: string; currency: string }> {
+    return this.http.get<{ keyId: string; currency: string }>(`${this.apiUrl}/payments/config`);
+  }
+
+  getPaymentByBookingRef(bookingRef: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/payments/booking/${bookingRef}`);
+  }
+
+  createPaymentOrder(orderData: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/payments/create-order`, orderData);
+  }
+
+  verifyPaymentSignature(verificationData: any): Observable<any> {
+    return this.http.post(`${this.apiUrl}/payments/verify`, verificationData);
   }
 
   processPayment(paymentData: any): Observable<any> {

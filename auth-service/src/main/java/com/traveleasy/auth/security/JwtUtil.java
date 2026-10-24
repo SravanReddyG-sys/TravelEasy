@@ -40,6 +40,23 @@ public class JwtUtil {
                 .compact();
     }
 
+    public String generateApplicationToken(Long userId, String email, String role, String fullName) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", userId);
+        claims.put("role", role);
+        claims.put("fullName", fullName);
+        claims.put("scope", "APPLICATION_DETAILS");
+        claims.put("tokenType", "APPLICATION_TRACKING");
+
+        return Jwts.builder()
+                .setClaims(claims)
+                .setSubject(email)
+                .setIssuedAt(new Date(System.currentTimeMillis()))
+                .setExpiration(new Date(System.currentTimeMillis() + expiration))
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+
     public String extractEmail(String token) {
         return extractAllClaims(token).getSubject();
     }

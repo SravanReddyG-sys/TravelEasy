@@ -38,6 +38,12 @@ public class UserController {
     public ResponseEntity<?> verifyProvider(@PathVariable Long id, @RequestParam boolean verified) {
         return userRepository.findById(id).map(user -> {
             user.setVerified(verified);
+            if (verified) {
+                user.setStatus("ACTIVE");
+                user.setVerificationStatus("APPROVED");
+            } else {
+                user.setVerificationStatus("REJECTED");
+            }
             userRepository.save(user);
             return ResponseEntity.ok(Map.of("message", "User verification status updated to " + verified, "user", user));
         }).orElse(ResponseEntity.notFound().build());
