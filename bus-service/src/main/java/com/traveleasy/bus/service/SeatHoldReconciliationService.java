@@ -7,6 +7,9 @@ import com.traveleasy.bus.repository.SeatRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -74,7 +77,26 @@ public class SeatHoldReconciliationService {
                     schedule.setAvailableSeats(schedule.getAvailableSeats() + 1);
                     scheduleRepository.save(schedule);
                 }
+
+                // Authoritatively expire the booking in booking-service
+                notifyBookingServiceExpired(bookingRef);
             }
+        }
+    }
+
+    private void notifyBookingServiceExpired(String bookingRef) {
+        if (bookingRef == null || bookingRef.isBlank()) {
+            return;
+        }
+        try {
+            String url = bookingServiceUrl + "/api/bookings/ref/" + bookingRef + "/expire";
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-Internal-Service", "bus-service");
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            restTemplate.exchange(url, HttpMethod.PUT, entity, Map.class);
+            log.info("Notified booking-service to expire booking {}", bookingRef);
+        } catch (Exception e) {
+            log.debug("Notice to booking-service for expired booking {} returned: {}", bookingRef, e.getMessage());
         }
     }
 

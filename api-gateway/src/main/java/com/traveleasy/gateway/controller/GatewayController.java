@@ -5,9 +5,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Enumeration;
 
 @RestController
@@ -64,7 +66,7 @@ public class GatewayController {
         } else if (path.startsWith("/api/traveller")) {
             targetBaseUrl = travellerServiceUrl;
         } else {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Route not found in API Gateway".getBytes());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Route not found in API Gateway".getBytes(StandardCharsets.UTF_8));
         }
 
         String targetUrl = targetBaseUrl + path + (query != null ? "?" + query : "");
@@ -101,9 +103,18 @@ public class GatewayController {
                 });
             }
             return new ResponseEntity<>(e.getResponseBodyAsByteArray(), responseHeaders, e.getStatusCode());
+        } catch (ResourceAccessException e) {
+            HttpHeaders errHeaders = new HttpHeaders();
+            errHeaders.setContentType(MediaType.APPLICATION_JSON);
+            String safeMsg = e.getMessage() != null ? e.getMessage().replace("\"", "'") : "Connection refused";
+            String jsonError = "{\"error\":\"Bad Gateway\",\"message\":\"Downstream service unavailable: " + safeMsg + "\",\"status\":502}";
+            return new ResponseEntity<>(jsonError.getBytes(StandardCharsets.UTF_8), errHeaders, HttpStatus.BAD_GATEWAY);
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(("Gateway Error: " + e.getMessage()).getBytes());
+            HttpHeaders errHeaders = new HttpHeaders();
+            errHeaders.setContentType(MediaType.APPLICATION_JSON);
+            String safeMsg = e.getMessage() != null ? e.getMessage().replace("\"", "'") : "Internal error";
+            String jsonError = "{\"error\":\"Internal Server Error\",\"message\":\"Gateway Error: " + safeMsg + "\",\"status\":500}";
+            return new ResponseEntity<>(jsonError.getBytes(StandardCharsets.UTF_8), errHeaders, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 }

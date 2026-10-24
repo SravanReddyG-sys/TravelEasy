@@ -31,11 +31,14 @@ public class Booking {
     private String serviceTitle; // e.g. "Vijayawada to Hyderabad - Bus" or "Novotel Vijayawada"
 
     private Double totalAmount;
-    private String status; // INITIATED, PENDING_PAYMENT, CONFIRMED, CANCELLED, FAILED
+    private String status; // INITIATED, PENDING_PAYMENT, CONFIRMED, CANCELLED, FAILED, EXPIRED
 
     @Column(length = 4000)
     private String detailsJson; // Seats booked or room types & stay dates
 
     @Builder.Default
     private LocalDateTime bookingDate = LocalDateTime.now();
+
+    @Builder.Default
+    private LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(15);
 }

@@ -1,2 +1,3 @@
 com\traveleasy\bus\SeatLayoutCatalogueTest.class
+com\traveleasy\bus\service\SeatHoldReconciliationServiceTest.class
 com\traveleasy\bus\BusRegistrationAndTripInventoryTest.class

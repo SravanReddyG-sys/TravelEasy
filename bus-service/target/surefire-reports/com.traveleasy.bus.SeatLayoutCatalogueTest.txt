@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: com.traveleasy.bus.SeatLayoutCatalogueTest
 -------------------------------------------------------------------------------
-Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 33.44 s -- in com.traveleasy.bus.SeatLayoutCatalogueTest
+Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.961 s -- in com.traveleasy.bus.SeatLayoutCatalogueTest

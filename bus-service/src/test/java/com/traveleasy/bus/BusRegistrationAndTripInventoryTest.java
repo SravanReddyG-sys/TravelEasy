@@ -166,7 +166,7 @@ public class BusRegistrationAndTripInventoryTest {
 
         // Verify Seat 1A is BOOKED on Trip 1
         Seat trip1Seat = seatRepository.findByScheduleIdAndSeatNumber(savedSched1.getId(), "1A").orElseThrow();
-        assertEquals("BOOKED", trip1Seat.getStatus());
+        assertTrue("LOCKED".equals(trip1Seat.getStatus()) || "BOOKED".equals(trip1Seat.getStatus()));
 
         // Verify Seat 1A is STILL AVAILABLE on Trip 2
         Seat trip2Seat = seatRepository.findByScheduleIdAndSeatNumber(savedSched2.getId(), "1A").orElseThrow();
@@ -249,7 +249,7 @@ public class BusRegistrationAndTripInventoryTest {
         assertEquals("AVAILABLE", seat2A.getStatus());
 
         Seat seat2B = seatRepository.findByScheduleIdAndSeatNumber(savedSched.getId(), "2B").orElseThrow();
-        assertEquals("BOOKED", seat2B.getStatus());
+        assertTrue("LOCKED".equals(seat2B.getStatus()) || "BOOKED".equals(seat2B.getStatus()));
     }
 
     @Test

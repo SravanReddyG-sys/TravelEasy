@@ -519,7 +519,7 @@ export { Destination, DestinationAttraction };
               [hasActiveFilters]="hasActiveBookingFilters()"
               [isLoading]="isLoadingBookings"
               [errorMessage]="bookingsError"
-              [totalBookingsCount]="myBookings.length"
+              [totalBookingsCount]="allBookingsCount"
               [totalFilteredCount]="filteredBookings.length"
               [bookings]="pagedBookings"
               [currentPage]="bookingCurrentPage"
@@ -2437,8 +2437,12 @@ export class CustomerDashboardComponent implements OnInit {
     this.bookingService.getCustomerBookings(this.currentUser.id).subscribe({
       next: (res) => {
         this.isLoadingBookings = false;
-        this.myBookings = res || [];
-        const confirmed = this.myBookings.filter((b: any) => b.status === 'CONFIRMED' || b.status === 'PENDING_PAYMENT');
+        // Authoritative filter: Only confirmed, completed, or cancelled bookings.
+        // Temporary seat holds and incomplete payment attempts are never presented as bookings.
+        this.myBookings = (res || []).filter((b: any) =>
+          b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED'
+        );
+        const confirmed = this.myBookings.filter((b: any) => b.status === 'CONFIRMED');
         if (confirmed.length > 0) {
           this.displayBookings = confirmed.slice(0, 3).map((b: any) => ({
             serviceType: b.serviceType,
@@ -2464,15 +2468,15 @@ export class CustomerDashboardComponent implements OnInit {
   }
 
   get allBookingsCount(): number {
-    return this.myBookings.length;
+    return this.myBookings.filter(b => b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED').length;
   }
 
   get busBookingsCount(): number {
-    return this.myBookings.filter(b => b.serviceType === 'BUS').length;
+    return this.myBookings.filter(b => b.serviceType === 'BUS' && (b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED')).length;
   }
 
   get hotelBookingsCount(): number {
-    return this.myBookings.filter(b => b.serviceType === 'HOTEL').length;
+    return this.myBookings.filter(b => b.serviceType === 'HOTEL' && (b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED')).length;
   }
 
   setBookingCategoryTab(tab: 'ALL' | 'BUS' | 'HOTEL') {
@@ -2625,9 +2629,6 @@ export class CustomerDashboardComponent implements OnInit {
     if (b.status === 'CONFIRMED') {
       statusClass = 'badge-confirmed';
       statusDisplay = 'Confirmed';
-    } else if (b.status === 'UPCOMING' || b.status === 'PENDING_PAYMENT' || b.status === 'INITIATED') {
-      statusClass = 'badge-upcoming';
-      statusDisplay = b.status === 'PENDING_PAYMENT' ? 'Pending Payment' : 'Upcoming';
     } else if (b.status === 'COMPLETED') {
       statusClass = 'badge-completed';
       statusDisplay = 'Completed';
@@ -2652,7 +2653,7 @@ export class CustomerDashboardComponent implements OnInit {
       status: b.status,
       statusBadgeClass: statusClass,
       statusDisplay,
-      isCancellable: b.status === 'CONFIRMED' || b.status === 'PENDING_PAYMENT' || b.status === 'INITIATED',
+      isCancellable: b.status === 'CONFIRMED',
       isCompleted: b.status === 'COMPLETED',
       isConfirmed: b.status === 'CONFIRMED',
       rawBookingDate: b.bookingDate,
@@ -2674,7 +2675,7 @@ export class CustomerDashboardComponent implements OnInit {
   }
 
   get filteredBookings(): any[] {
-    let list = this.myBookings;
+    let list = this.myBookings.filter(b => b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED');
 
     if (this.bookingCategoryTab === 'BUS') {
       list = list.filter(b => b.serviceType === 'BUS');
@@ -2707,7 +2708,7 @@ export class CustomerDashboardComponent implements OnInit {
 
     if (this.bookingStatusFilter !== 'ALL') {
       if (this.bookingStatusFilter === 'UPCOMING') {
-        list = list.filter(b => b.status === 'UPCOMING' || b.status === 'PENDING_PAYMENT' || b.status === 'INITIATED');
+        list = list.filter(b => b.status === 'CONFIRMED');
       } else {
         list = list.filter(b => b.status === this.bookingStatusFilter);
       }

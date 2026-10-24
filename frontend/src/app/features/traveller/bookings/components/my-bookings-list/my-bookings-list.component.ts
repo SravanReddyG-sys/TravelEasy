@@ -404,6 +404,21 @@ import { FormsModule } from '@angular/forms';
       color: #DC2626;
       border: 1px solid #FECACA;
     }
+    .badge-status-expired {
+      background: #F1F5F9;
+      color: #64748B;
+      border: 1px solid #CBD5E1;
+    }
+    .badge-status-completed {
+      background: #F0FDF4;
+      color: #16A34A;
+      border: 1px solid #BBF7D0;
+    }
+    .badge-status-failed {
+      background: #FEF2F2;
+      color: #DC2626;
+      border: 1px solid #FECACA;
+    }
     .booking-card-price {
       font-size: 1.35rem;
       font-weight: 800;
