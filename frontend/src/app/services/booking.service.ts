@@ -46,6 +46,10 @@ export class BookingService {
     return this.http.get<{ keyId: string; currency: string }>(`${this.apiUrl}/payments/config`);
   }
 
+  getPaymentByBookingRef(bookingRef: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/payments/booking/${bookingRef}`);
+  }
+
   createPaymentOrder(orderData: any): Observable<any> {
     return this.http.post(`${this.apiUrl}/payments/create-order`, orderData);
   }

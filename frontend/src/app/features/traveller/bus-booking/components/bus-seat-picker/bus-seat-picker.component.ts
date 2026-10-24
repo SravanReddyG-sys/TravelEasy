@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges, NgZone, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TripSeatLayout, DeckLayout, SeatPosition } from '../../../../../models/bus.model';
@@ -2612,7 +2612,9 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
 
   constructor(
     private bookingService: BookingService,
-    private busService: BusService
+    private busService: BusService,
+    private ngZone: NgZone,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit() {
@@ -3150,6 +3152,24 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
     this.backToResults.emit();
   }
 
+  private handlePaymentSuccess(booking: any, txnRef: string, paymentId?: string) {
+    this.ngZone.run(() => {
+      this.isProcessingPayment = false;
+      this.paymentSuccess = true;
+      this.paymentError = null;
+      this.confirmedBookingRef = booking.bookingRef;
+      this.confirmedTransactionRef = txnRef || paymentId || `TXN-${booking.bookingRef}`;
+      this.cdr.detectChanges();
+
+      this.bookingConfirmed.emit({
+        booking,
+        passengers: this.passengers,
+        seats: this.selectedSeats,
+        schedule: this.schedule
+      });
+    });
+  }
+
   onPayNow() {
     if (this.isProcessingPayment || this.selectedSeats.length === 0) return;
     this.isProcessingPayment = true;
@@ -3193,6 +3213,30 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
               next: (orderRes: any) => {
                 // Step 4: Launch Razorpay Hosted / Standard Checkout Modal
                 if (typeof (window as any).Razorpay === 'function') {
+                  let pollInterval: any = null;
+                  const stopPolling = () => {
+                    if (pollInterval) {
+                      clearInterval(pollInterval);
+                      pollInterval = null;
+                    }
+                  };
+
+                  const checkPaymentStatus = () => {
+                    if (this.paymentSuccess) {
+                      stopPolling();
+                      return;
+                    }
+                    this.bookingService.getPaymentByBookingRef(booking.bookingRef).subscribe({
+                      next: (payTxn: any) => {
+                        if (payTxn && (payTxn.status || '').toUpperCase() === 'SUCCESS') {
+                          stopPolling();
+                          this.handlePaymentSuccess(booking, payTxn.transactionRef, payTxn.razorpayPaymentId);
+                        }
+                      },
+                      error: () => {}
+                    });
+                  };
+
                   const options = {
                     key: orderRes.keyId,
                     amount: orderRes.amountInPaise,
@@ -3209,72 +3253,136 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
                       color: '#0875E1'
                     },
                     handler: (response: any) => {
-                      // Step 5: Server-side HMAC Signature Verification
-                      this.bookingService.verifyPaymentSignature({
-                        bookingRef: booking.bookingRef,
-                        razorpayOrderId: response.razorpay_order_id,
-                        razorpayPaymentId: response.razorpay_payment_id,
-                        razorpaySignature: response.razorpay_signature
-                      }).subscribe({
-                        next: (verifyRes: any) => {
-                          this.isProcessingPayment = false;
-                          this.paymentSuccess = true;
-                          this.confirmedBookingRef = booking.bookingRef;
-                          this.confirmedTransactionRef = verifyRes.transaction?.transactionRef || response.razorpay_payment_id;
-                          this.bookingConfirmed.emit({
-                            booking,
-                            passengers: this.passengers,
-                            seats: this.selectedSeats,
-                            schedule: this.schedule
-                          });
-                        },
-                        error: (verifyErr: any) => {
-                          this.compensatePaymentFailure(booking.id, verifyErr.error?.message || 'Payment signature verification failed.');
-                        }
+                      stopPolling();
+                      this.ngZone.run(() => {
+                        // Step 5: Server-side HMAC Signature Verification
+                        this.bookingService.verifyPaymentSignature({
+                          bookingRef: booking.bookingRef,
+                          razorpayOrderId: response.razorpay_order_id,
+                          razorpayPaymentId: response.razorpay_payment_id,
+                          razorpaySignature: response.razorpay_signature
+                        }).subscribe({
+                          next: (verifyRes: any) => {
+                            const txnRef = verifyRes.transaction?.transactionRef || response.razorpay_payment_id;
+                            this.handlePaymentSuccess(booking, txnRef, response.razorpay_payment_id);
+                          },
+                          error: (verifyErr: any) => {
+                            // Check if webhook already confirmed the payment
+                            this.bookingService.getPaymentByBookingRef(booking.bookingRef).subscribe({
+                              next: (payTxn: any) => {
+                                if (payTxn && (payTxn.status || '').toUpperCase() === 'SUCCESS') {
+                                  this.handlePaymentSuccess(booking, payTxn.transactionRef, response.razorpay_payment_id);
+                                } else {
+                                  this.ngZone.run(() => {
+                                    this.compensatePaymentFailure(booking.id, verifyErr.error?.message || 'Payment signature verification failed.');
+                                    this.cdr.detectChanges();
+                                  });
+                                }
+                              },
+                              error: () => {
+                                this.ngZone.run(() => {
+                                  this.compensatePaymentFailure(booking.id, verifyErr.error?.message || 'Payment signature verification failed.');
+                                  this.cdr.detectChanges();
+                                });
+                              }
+                            });
+                          }
+                        });
                       });
                     },
                     modal: {
                       ondismiss: () => {
-                        this.isProcessingPayment = false;
-                        // User dismissed modal without paying; server holds seats for 15-min window
+                        // When modal closes, check if payment succeeded (e.g. via webhook)
+                        setTimeout(() => {
+                          if (!this.paymentSuccess) {
+                            this.bookingService.getPaymentByBookingRef(booking.bookingRef).subscribe({
+                              next: (payTxn: any) => {
+                                stopPolling();
+                                if (payTxn && (payTxn.status || '').toUpperCase() === 'SUCCESS') {
+                                  this.handlePaymentSuccess(booking, payTxn.transactionRef, payTxn.razorpayPaymentId);
+                                } else {
+                                  this.ngZone.run(() => {
+                                    this.isProcessingPayment = false;
+                                    this.cdr.detectChanges();
+                                  });
+                                }
+                              },
+                              error: () => {
+                                stopPolling();
+                                this.ngZone.run(() => {
+                                  this.isProcessingPayment = false;
+                                  this.cdr.detectChanges();
+                                });
+                              }
+                            });
+                          } else {
+                            stopPolling();
+                          }
+                        }, 1200);
                       }
                     }
                   };
 
                   const rzp = new (window as any).Razorpay(options);
                   rzp.on('payment.failed', (failRes: any) => {
-                    this.isProcessingPayment = false;
-                    this.paymentError = failRes.error?.description || 'Payment failed or was declined by bank.';
+                    stopPolling();
+                    this.ngZone.run(() => {
+                      this.isProcessingPayment = false;
+                      this.paymentError = failRes.error?.description || 'Payment failed or was declined by bank.';
+                      this.cdr.detectChanges();
+                    });
                   });
                   rzp.open();
+
+                  // Start periodic poll check every 2.5 seconds while payment is processing (timeout after 90s)
+                  pollInterval = setInterval(() => {
+                    checkPaymentStatus();
+                  }, 2500);
+                  setTimeout(() => stopPolling(), 90000);
+
                 } else {
-                  this.isProcessingPayment = false;
-                  this.paymentError = 'Razorpay checkout script failed to load. Please check your internet or ad-blocker settings.';
+                  this.ngZone.run(() => {
+                    this.isProcessingPayment = false;
+                    this.paymentError = 'Razorpay checkout script failed to load. Please check your internet or ad-blocker settings.';
+                    this.cdr.detectChanges();
+                  });
                 }
               },
               error: (err: any) => {
-                this.compensatePaymentFailure(booking.id, err.error?.message || 'Failed to initiate payment gateway order.');
+                this.ngZone.run(() => {
+                  this.compensatePaymentFailure(booking.id, err.error?.message || 'Failed to initiate payment gateway order.');
+                  this.cdr.detectChanges();
+                });
               }
             });
           },
           error: () => {
             this.busService.releaseSeats(this.schedule.id, this.selectedSeats).subscribe();
-            this.isProcessingPayment = false;
-            this.paymentError = 'Unable to create booking reservation. Your temporary seat hold has been released. Please try again.';
+            this.ngZone.run(() => {
+              this.isProcessingPayment = false;
+              this.paymentError = 'Unable to create booking reservation. Your temporary seat hold has been released. Please try again.';
+              this.cdr.detectChanges();
+            });
           }
         });
       },
       error: () => {
-        this.isProcessingPayment = false;
-        this.paymentError = 'Selected seat(s) could not be reserved or are no longer available. Please choose another seat.';
+        this.ngZone.run(() => {
+          this.isProcessingPayment = false;
+          this.paymentError = 'Selected seat(s) could not be reserved or are no longer available. Please choose another seat.';
+          this.cdr.detectChanges();
+        });
       }
     });
   }
 
   private compensatePaymentFailure(bookingId: number, customMessage?: string) {
-    this.isProcessingPayment = false;
-    this.busService.releaseSeats(this.schedule.id, this.selectedSeats).subscribe();
-    this.bookingService.cancelBooking(bookingId).subscribe();
-    this.paymentError = customMessage || 'Payment authorization failed. Your temporary seat hold has been released. Please try again.';
+    this.ngZone.run(() => {
+      this.isProcessingPayment = false;
+      this.busService.releaseSeats(this.schedule.id, this.selectedSeats).subscribe();
+      this.bookingService.cancelBooking(bookingId).subscribe();
+      this.paymentError = customMessage || 'Payment authorization failed. Your temporary seat hold has been released. Please try again.';
+      this.cdr.detectChanges();
+    });
   }
 }
