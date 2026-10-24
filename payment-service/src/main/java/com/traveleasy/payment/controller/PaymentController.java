@@ -61,7 +61,7 @@ public class PaymentController {
     }
 
     /**
-     * Automated Razorpay refund initiation.
+     * Automated Razorpay refund initiation by transaction reference.
      */
     @PostMapping("/refund/{transactionRef}")
     public ResponseEntity<RefundResponse> processRefund(
@@ -69,6 +69,18 @@ public class PaymentController {
             @RequestBody(required = false) RefundRequest request) {
         log.info("Received refund request for transaction {}", transactionRef);
         RefundResponse response = paymentService.processRefund(transactionRef, request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Automated Razorpay refund initiation by booking reference.
+     */
+    @PostMapping("/refund/booking/{bookingRef}")
+    public ResponseEntity<RefundResponse> processRefundByBooking(
+            @PathVariable String bookingRef,
+            @RequestBody(required = false) RefundRequest request) {
+        log.info("Received refund request for booking {}", bookingRef);
+        RefundResponse response = paymentService.processRefundByBooking(bookingRef, request);
         return ResponseEntity.ok(response);
     }
 

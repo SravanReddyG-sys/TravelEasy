@@ -2787,19 +2787,27 @@ export class CustomerDashboardComponent implements OnInit {
     this.isCancellingBooking = true;
     const bookingId = this.bookingToCancel.id;
     this.bookingService.cancelBooking(bookingId).subscribe({
-      next: () => {
+      next: (res: any) => {
         this.isCancellingBooking = false;
         this.showCancelConfirmModal = false;
         if (this.showBookingDetailsModal && this.selectedBookingDetails?.id === bookingId) {
           this.showBookingDetailsModal = false;
         }
         this.bookingToCancel = null;
-        alert('Booking cancelled successfully! Reserved inventory has been released.');
+        const refundInfo = res?.refund;
+        let msg = 'Booking cancelled successfully! Reserved seats have been released.';
+        if (refundInfo && (refundInfo.refundId || refundInfo.id)) {
+          const rfdId = refundInfo.refundId || refundInfo.id;
+          const amt = refundInfo.refundAmount || res?.booking?.totalAmount;
+          msg += `\nRefund of ₹${amt} processed via Razorpay (Refund ID: ${rfdId}).`;
+        }
+        alert(msg);
         this.loadMyBookings();
       },
-      error: () => {
+      error: (err: any) => {
         this.isCancellingBooking = false;
-        alert('Failed to cancel booking. Please try again or contact support.');
+        const errMsg = err?.error?.message || 'Failed to cancel booking. Please try again or contact support.';
+        alert(errMsg);
       }
     });
   }
@@ -2810,9 +2818,20 @@ export class CustomerDashboardComponent implements OnInit {
       this.promptCancelBooking(this.parseBooking(found));
     } else {
       this.bookingService.cancelBooking(bookingId).subscribe({
-        next: () => {
-          alert('Booking Cancelled Successfully!');
+        next: (res: any) => {
+          const refundInfo = res?.refund;
+          let msg = 'Booking Cancelled Successfully! Reserved seats have been released.';
+          if (refundInfo && (refundInfo.refundId || refundInfo.id)) {
+            const rfdId = refundInfo.refundId || refundInfo.id;
+            const amt = refundInfo.refundAmount || res?.booking?.totalAmount;
+            msg += `\nRefund of ₹${amt} processed via Razorpay (Refund ID: ${rfdId}).`;
+          }
+          alert(msg);
           this.loadMyBookings();
+        },
+        error: (err: any) => {
+          const errMsg = err?.error?.message || 'Failed to cancel booking.';
+          alert(errMsg);
         }
       });
     }

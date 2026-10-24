@@ -273,7 +273,7 @@ export interface PassengerInfo {
             <!-- Subheading -->
             <div class="text-secondary small fw-medium mt-1 mb-2">Seater / Sleeper info</div>
 
-            <!-- Expanded Legend Content matching Screenshot 2 -->
+            <!-- Expanded Legend Content matching Reference Screenshot -->
             <div *ngIf="legendExpanded" class="legend-matrix-table pt-1">
               
               <!-- Column Headers -->
@@ -290,26 +290,26 @@ export interface PassengerInfo {
                 
                 <!-- Unisex Available -->
                 <div class="legend-col-cell">
-                  <div class="legend-icon-box avail-unisex"></div>
+                  <div class="legend-icon-box avail-unisex" title="Available Unisex"></div>
                 </div>
                 
                 <!-- Male Available -->
                 <div class="legend-col-cell">
-                  <div class="legend-icon-box avail-male">
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#3b82f6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <div class="legend-icon-box avail-male" title="Available Male">
+                    <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#3b82f6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                       <circle cx="10" cy="6.5" r="3.2"/>
-                      <path d="M5 16 C5 12.5, 7.5 11.5, 10 11.5 C12.5 11.5, 15 12.5, 15 16"/>
+                      <path d="M5 16.5 C5 13, 7.5 12, 10 12 C12.5 12, 15 13, 15 16.5"/>
                     </svg>
                   </div>
                 </div>
                 
                 <!-- Female Available -->
                 <div class="legend-col-cell">
-                  <div class="legend-icon-box avail-female">
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#b854d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="10" cy="6.5" r="3.2"/>
-                      <path d="M7 6.5 C7 4.5, 13 4.5, 13 6.5"/>
-                      <path d="M5 16 C5 13, 7.5 12, 10 12 C12.5 12, 15 13, 15 16"/>
+                  <div class="legend-icon-box avail-female" title="Available Female">
+                    <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#c026d3" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="10" cy="6.5" r="3"/>
+                      <path d="M7 7.5 C6.5 5, 8 4, 10 4 C12 4, 13.5 5, 13 7.5 C13.5 9, 13.5 10, 13.5 10.5"/>
+                      <path d="M5 16.5 C5 13.2, 7.5 12, 10 12 C12.5 12, 15 13.2, 15 16.5"/>
                     </svg>
                   </div>
                 </div>
@@ -321,26 +321,26 @@ export interface PassengerInfo {
                 
                 <!-- Unisex Selected -->
                 <div class="legend-col-cell">
-                  <div class="legend-icon-box sel-unisex"></div>
+                  <div class="legend-icon-box sel-unisex" title="Selected Unisex"></div>
                 </div>
                 
                 <!-- Male Selected -->
                 <div class="legend-col-cell">
-                  <div class="legend-icon-box sel-male">
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#2563eb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <div class="legend-icon-box sel-male" title="Selected Male">
+                    <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#3b82f6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                       <circle cx="10" cy="6.5" r="3.2"/>
-                      <path d="M5 16 C5 12.5, 7.5 11.5, 10 11.5 C12.5 11.5, 15 12.5, 15 16"/>
+                      <path d="M5 16.5 C5 13, 7.5 12, 10 12 C12.5 12, 15 13, 15 16.5"/>
                     </svg>
                   </div>
                 </div>
                 
                 <!-- Female Selected -->
                 <div class="legend-col-cell">
-                  <div class="legend-icon-box sel-female">
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#b854d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="10" cy="6.5" r="3.2"/>
-                      <path d="M7 6.5 C7 4.5, 13 4.5, 13 6.5"/>
-                      <path d="M5 16 C5 13, 7.5 12, 10 12 C12.5 12, 15 13, 15 16"/>
+                  <div class="legend-icon-box sel-female" title="Selected Female">
+                    <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#c026d3" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="10" cy="6.5" r="3"/>
+                      <path d="M7 7.5 C6.5 5, 8 4, 10 4 C12 4, 13.5 5, 13 7.5 C13.5 9, 13.5 10, 13.5 10.5"/>
+                      <path d="M5 16.5 C5 13.2, 7.5 12, 10 12 C12.5 12, 15 13.2, 15 16.5"/>
                     </svg>
                   </div>
                 </div>
@@ -352,26 +352,26 @@ export interface PassengerInfo {
                 
                 <!-- Unisex Booked -->
                 <div class="legend-col-cell">
-                  <div class="legend-icon-box book-unisex"></div>
+                  <div class="legend-icon-box book-unisex" title="Booked Unisex"></div>
                 </div>
                 
                 <!-- Male Booked -->
                 <div class="legend-col-cell">
-                  <div class="legend-icon-box book-male">
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#b0b0b0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <div class="legend-icon-box book-male" title="Booked Male">
+                    <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#9ca3af" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                       <circle cx="10" cy="6.5" r="3.2"/>
-                      <path d="M5 16 C5 12.5, 7.5 11.5, 10 11.5 C12.5 11.5, 15 12.5, 15 16"/>
+                      <path d="M5 16.5 C5 13, 7.5 12, 10 12 C12.5 12, 15 13, 15 16.5"/>
                     </svg>
                   </div>
                 </div>
                 
                 <!-- Female Booked -->
                 <div class="legend-col-cell">
-                  <div class="legend-icon-box book-female">
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="#b0b0b0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="10" cy="6.5" r="3.2"/>
-                      <path d="M7 6.5 C7 4.5, 13 4.5, 13 6.5"/>
-                      <path d="M5 16 C5 13, 7.5 12, 10 12 C12.5 12, 15 13, 15 16"/>
+                  <div class="legend-icon-box book-female" title="Booked Female">
+                    <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="#9ca3af" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="10" cy="6.5" r="3"/>
+                      <path d="M7 7.5 C6.5 5, 8 4, 10 4 C12 4, 13.5 5, 13 7.5 C13.5 9, 13.5 10, 13.5 10.5"/>
+                      <path d="M5 16.5 C5 13.2, 7.5 12, 10 12 C12.5 12, 15 13.2, 15 16.5"/>
                     </svg>
                   </div>
                 </div>
@@ -1308,15 +1308,15 @@ export interface PassengerInfo {
            class="seat-cell-item d-flex flex-column align-items-center justify-content-center position-relative"
            [class.seater]="pos.seatType === 'SEATER'"
            [class.sleeper]="pos.seatType === 'SLEEPER'"
-           [class.available]="pos.status === 'AVAILABLE'"
+           [class.available]="isSeatAvailable(pos)"
            [class.selected]="isSeatSelected(pos.seatNumber)"
-           [class.booked]="pos.status === 'BOOKED'"
+           [class.booked]="isSeatBooked(pos)"
            [class.male-seat]="isMale(pos)"
            [class.female-seat]="isFemale(pos)"
            [class.unisex-seat]="!isMale(pos) && !isFemale(pos)"
-           [class.cursor-pointer]="pos.status === 'AVAILABLE'"
-           [class.cursor-not-allowed]="pos.status === 'BOOKED'"
-           [title]="'Seat ' + pos.seatNumber + ' - ₹' + pos.price + ' (' + (pos.status === 'BOOKED' ? 'Booked' : (isSeatSelected(pos.seatNumber) ? 'Selected' : 'Available')) + ')'"
+           [class.cursor-pointer]="isSeatAvailable(pos)"
+           [class.cursor-not-allowed]="isSeatBooked(pos)"
+           [title]="'Seat ' + pos.seatNumber + ' - ₹' + pos.price + ' (' + (isSeatBooked(pos) ? 'Booked' : (isSeatSelected(pos.seatNumber) ? 'Selected' : 'Available')) + ')'"
            (click)="onSeatCellClick(pos)">
         
         <!-- Exact Seater Icon (Armchair from Screenshot 1) -->
@@ -1337,13 +1337,8 @@ export interface PassengerInfo {
           </g>
           <!-- Female Avatar inside seat -->
           <g *ngIf="isFemale(pos)" class="seat-avatar avatar-female">
-            <circle cx="16" cy="10.5" r="3.2"/>
+            <circle cx="16" cy="10.5" r="3"/>
             <path d="M12.5 10 C12.5 8, 19.5 8, 19.5 10"/>
-            <path d="M11 19.5 C11 16.5, 13.5 15.5, 16 15.5 C18.5 15.5, 21 16.5, 21 19.5" stroke-linecap="round"/>
-          </g>
-          <!-- Booked generic avatar inside seat -->
-          <g *ngIf="pos.status === 'BOOKED' && !isMale(pos) && !isFemale(pos)" class="seat-avatar avatar-booked">
-            <circle cx="16" cy="10.5" r="3.2"/>
             <path d="M11 19.5 C11 16.5, 13.5 15.5, 16 15.5 C18.5 15.5, 21 16.5, 21 19.5" stroke-linecap="round"/>
           </g>
         </svg>
@@ -1362,19 +1357,14 @@ export interface PassengerInfo {
           </g>
           <!-- Female Avatar inside near top -->
           <g *ngIf="isFemale(pos)" class="seat-avatar avatar-female">
-            <circle cx="16" cy="17.5" r="3.5"/>
+            <circle cx="16" cy="17.5" r="3.2"/>
             <path d="M12 17 C12 14.5, 20 14.5, 20 17"/>
-            <path d="M10 28 C10 24.5, 12.5 23.5, 16 23.5 C19.5 23.5, 22 24.5, 22 28" stroke-linecap="round"/>
-          </g>
-          <!-- Booked generic avatar inside near top -->
-          <g *ngIf="pos.status === 'BOOKED' && !isMale(pos) && !isFemale(pos)" class="seat-avatar avatar-booked">
-            <circle cx="16" cy="18" r="3.5"/>
             <path d="M10 28 C10 24.5, 12.5 23.5, 16 23.5 C19.5 23.5, 22 24.5, 22 28" stroke-linecap="round"/>
           </g>
         </svg>
 
         <!-- Individual Price Tag directly below icon -->
-        <span class="seat-price-tag" [class.booked-price]="pos.status === 'BOOKED'">
+        <span class="seat-price-tag" [class.booked-price]="isSeatBooked(pos)">
           ₹{{ pos.price | number:'1.0-0' }}
         </span>
 
@@ -1805,12 +1795,12 @@ export interface PassengerInfo {
     .seat-cell-item.available.unisex-seat .seat-armrest,
     .seat-cell-item.available.unisex-seat .sleeper-frame {
       fill: #FFFFFF;
-      stroke: #555555;
+      stroke: #6B7280;
       stroke-width: 1.5;
     }
     .seat-cell-item.available.unisex-seat .seat-base,
     .seat-cell-item.available.unisex-seat .sleeper-pillow {
-      stroke: #555555;
+      stroke: #6B7280;
       stroke-width: 1.2;
       fill: none;
     }
@@ -1836,13 +1826,13 @@ export interface PassengerInfo {
     .seat-cell-item.available.female-seat .seat-armrest,
     .seat-cell-item.available.female-seat .sleeper-frame {
       fill: #FFFFFF;
-      stroke: #B854D4;
+      stroke: #C026D3;
       stroke-width: 1.5;
     }
     .seat-cell-item.available.female-seat .seat-base,
     .seat-cell-item.available.female-seat .sleeper-pillow,
     .seat-cell-item.available.female-seat .avatar-female {
-      stroke: #B854D4;
+      stroke: #C026D3;
       stroke-width: 1.5;
       fill: none;
     }
@@ -1859,36 +1849,34 @@ export interface PassengerInfo {
     .seat-cell-item.selected .seat-cushion,
     .seat-cell-item.selected .seat-armrest,
     .seat-cell-item.selected .sleeper-frame {
-      fill: #DBEAFE !important;
-      stroke: #2563EB !important;
+      fill: #DDF2FF !important;
+      stroke: #0875E1 !important;
       stroke-width: 1.8;
     }
     .seat-cell-item.selected .seat-base,
     .seat-cell-item.selected .sleeper-pillow {
-      stroke: #2563EB !important;
-      fill: #BFDBFE !important;
+      stroke: #0875E1 !important;
+      fill: #BAE6FD !important;
       stroke-width: 1.5;
     }
-    .seat-cell-item.selected .avatar-male,
-    .seat-cell-item.selected .avatar-female,
-    .seat-cell-item.selected .avatar-booked {
-      stroke: #2563EB !important;
+    .seat-cell-item.selected .avatar-male {
+      stroke: #0875E1 !important;
       stroke-width: 1.5;
       fill: none;
     }
     .seat-cell-item.selected.female-seat .seat-cushion,
     .seat-cell-item.selected.female-seat .seat-armrest,
     .seat-cell-item.selected.female-seat .sleeper-frame {
-      fill: #FAE8FF !important;
-      stroke: #B854D4 !important;
+      fill: #FCE7F3 !important;
+      stroke: #C026D3 !important;
     }
     .seat-cell-item.selected.female-seat .seat-base,
     .seat-cell-item.selected.female-seat .sleeper-pillow,
     .seat-cell-item.selected.female-seat .avatar-female {
-      stroke: #B854D4 !important;
+      stroke: #C026D3 !important;
     }
     .seat-cell-item.selected .seat-price-tag {
-      color: #2563EB !important;
+      color: #0875E1 !important;
       font-weight: 800;
     }
 
@@ -1899,20 +1887,19 @@ export interface PassengerInfo {
     .seat-cell-item.booked .seat-cushion,
     .seat-cell-item.booked .seat-armrest,
     .seat-cell-item.booked .sleeper-frame {
-      fill: #F2F2F2 !important;
-      stroke: #D8D8D8 !important;
+      fill: #F1F5F9 !important;
+      stroke: #E2E8F0 !important;
       stroke-width: 1.5;
     }
     .seat-cell-item.booked .seat-base,
     .seat-cell-item.booked .sleeper-pillow {
-      stroke: #D0D0D0 !important;
-      fill: #E5E5E5 !important;
+      stroke: #CBD5E1 !important;
+      fill: #E2E8F0 !important;
       stroke-width: 1.2;
     }
     .seat-cell-item.booked .avatar-male,
-    .seat-cell-item.booked .avatar-female,
-    .seat-cell-item.booked .avatar-booked {
-      stroke: #B0B0B0 !important;
+    .seat-cell-item.booked .avatar-female {
+      stroke: #9CA3AF !important;
       stroke-width: 1.5;
       fill: none;
     }
@@ -2418,16 +2405,16 @@ export interface PassengerInfo {
       align-items: center;
     }
     .legend-icon-box {
-      width: 26px;
-      height: 26px;
-      border-radius: 5px;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
       transition: all 0.2s ease;
     }
     .legend-icon-box.avail-unisex {
-      border: 1.5px solid #666666;
+      border: 1.5px solid #6B7280;
       background: #FFFFFF;
     }
     .legend-icon-box.avail-male {
@@ -2435,32 +2422,32 @@ export interface PassengerInfo {
       background: #FFFFFF;
     }
     .legend-icon-box.avail-female {
-      border: 1.5px solid #B854D4;
+      border: 1.5px solid #C026D3;
       background: #FFFFFF;
     }
     .legend-icon-box.sel-unisex {
-      border: 1.5px solid #2563EB;
-      background: #DBEAFE;
+      border: 1.5px solid #0875E1;
+      background: #DDF2FF;
     }
     .legend-icon-box.sel-male {
-      border: 1.5px solid #2563EB;
-      background: #DBEAFE;
+      border: 1.5px solid #0875E1;
+      background: #DDF2FF;
     }
     .legend-icon-box.sel-female {
-      border: 1.5px solid #B854D4;
-      background: #FAE8FF;
+      border: 1.5px solid #C026D3;
+      background: #FCE7F3;
     }
     .legend-icon-box.book-unisex {
-      border: 1.5px solid #E0E0E0;
-      background: #F0F0F0;
+      border: 1.5px solid #E2E8F0;
+      background: #F1F5F9;
     }
     .legend-icon-box.book-male {
-      border: 1.5px solid #E0E0E0;
-      background: #F0F0F0;
+      border: 1.5px solid #E2E8F0;
+      background: #F1F5F9;
     }
     .legend-icon-box.book-female {
-      border: 1.5px solid #E0E0E0;
-      background: #F0F0F0;
+      border: 1.5px solid #E2E8F0;
+      background: #F1F5F9;
     }
 
     /* Boarding & Dropping Timeline */
@@ -2841,11 +2828,23 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
   }
 
   isMale(pos: SeatPosition): boolean {
-    return pos.gender === 'MALE' || pos.seatNumber === 'L2B' || pos.seatNumber === 'U2B';
+    if (!pos) return false;
+    return pos.gender === 'MALE' || pos.seatNumber === '2B' || pos.seatNumber === 'L2B' || pos.seatNumber === 'U2B';
   }
 
   isFemale(pos: SeatPosition): boolean {
-    return pos.gender === 'FEMALE' || pos.seatNumber === 'L3A' || pos.seatNumber === 'U3A';
+    if (!pos) return false;
+    return pos.gender === 'FEMALE' || pos.seatNumber === '3A' || pos.seatNumber === 'L3A' || pos.seatNumber === 'U3A';
+  }
+
+  isSeatBooked(pos: SeatPosition): boolean {
+    if (!pos) return false;
+    return pos.status === 'BOOKED' || pos.status === 'LOCKED';
+  }
+
+  isSeatAvailable(pos: SeatPosition): boolean {
+    if (!pos) return false;
+    return (pos.status === 'AVAILABLE' || !pos.status) && !this.isSeatBooked(pos) && Boolean(pos.isBookable);
   }
 
   getDeckRowNumbers(deck: DeckLayout): number[] {
@@ -2943,7 +2942,7 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
   }
 
   onSeatCellClick(pos: SeatPosition) {
-    if (pos.status === 'BOOKED' || !pos.isBookable) return;
+    if (this.isSeatBooked(pos) || !pos.isBookable) return;
     this.seatToggled.emit(pos.seatNumber);
   }
 

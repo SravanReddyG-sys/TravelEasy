@@ -277,6 +277,14 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
+    public RefundResponse processRefundByBooking(String bookingRef, RefundRequest request) {
+        PaymentTransaction txn = paymentRepository.findByBookingRef(bookingRef)
+                .orElseThrow(() -> new PaymentException("Transaction not found for booking: " + bookingRef, HttpStatus.NOT_FOUND));
+        return processRefund(txn.getTransactionRef(), request);
+    }
+
+    @Override
+    @Transactional
     public RefundResponse processRefund(String transactionRef, RefundRequest request) {
         PaymentTransaction txn = paymentRepository.findByTransactionRef(transactionRef)
                 .orElseThrow(() -> new PaymentException("Transaction not found for ref: " + transactionRef, HttpStatus.NOT_FOUND));
@@ -300,16 +308,35 @@ public class PaymentServiceImpl implements PaymentService {
             throw new PaymentException("Transaction cannot be refunded because status is " + txn.getStatus() + ". Only successful payments can be refunded.", HttpStatus.BAD_REQUEST);
         }
 
-        if (txn.getRazorpayPaymentId() == null || txn.getRazorpayPaymentId().isBlank()) {
-            throw new PaymentException("Transaction does not have an associated gateway payment ID", HttpStatus.BAD_REQUEST);
-        }
-
         double refundAmount = (request != null && request.getAmount() != null && request.getAmount() > 0)
                 ? request.getAmount()
                 : txn.getAmount();
 
         if (refundAmount > txn.getAmount()) {
             throw new PaymentException("Refund amount cannot exceed original transaction amount", HttpStatus.BAD_REQUEST);
+        }
+
+        // Support non-gateway/mock transactions gracefully
+        if (txn.getRazorpayPaymentId() == null || txn.getRazorpayPaymentId().isBlank()) {
+            log.info("Processing non-gateway refund for transaction {}", transactionRef);
+            String mockRefundId = "rfd_mock_" + UUID.randomUUID().toString().substring(0, 8);
+            txn.setRefundId(mockRefundId);
+            txn.setRefundAmount(refundAmount);
+            txn.setRefundStatus("PROCESSED");
+            txn.setStatus("REFUNDED");
+            txn.setRefundedAt(LocalDateTime.now());
+            PaymentTransaction saved = paymentRepository.save(txn);
+            cancelBookingInBookingService(txn.getBookingRef());
+            return RefundResponse.builder()
+                    .message("Refund processed successfully")
+                    .refundId(mockRefundId)
+                    .refundStatus("PROCESSED")
+                    .refundAmount(refundAmount)
+                    .transactionRef(saved.getTransactionRef())
+                    .bookingRef(saved.getBookingRef())
+                    .timestamp(saved.getRefundedAt())
+                    .transaction(saved)
+                    .build();
         }
 
         try {

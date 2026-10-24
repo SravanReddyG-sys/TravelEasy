@@ -21,6 +21,12 @@ public class BookingController {
     private final com.traveleasy.booking.service.BookingSecurityService securityService;
     private final RestTemplate restTemplate = new RestTemplate();
 
+    @org.springframework.beans.factory.annotation.Value("${bus.service.url:http://localhost:8082}")
+    private String busServiceUrl;
+
+    @org.springframework.beans.factory.annotation.Value("${payment.service.url:http://localhost:8085}")
+    private String paymentServiceUrl;
+
     @PostMapping
     public ResponseEntity<?> createBooking(@RequestBody Booking booking,
                                            @RequestHeader(value = "Authorization", required = false) String authHeader) {
@@ -97,8 +103,9 @@ public class BookingController {
     public ResponseEntity<?> confirmBooking(@PathVariable Long id) {
         return bookingRepository.findById(id).map(bkg -> {
             bkg.setStatus("CONFIRMED");
-            bookingRepository.save(bkg);
-            return ResponseEntity.ok(Map.of("message", "Booking confirmed", "booking", bkg));
+            Booking saved = bookingRepository.save(bkg);
+            confirmSeatsInBusService(saved);
+            return ResponseEntity.ok(Map.of("message", "Booking confirmed", "booking", saved));
         }).orElse(ResponseEntity.notFound().build());
     }
 
@@ -109,8 +116,111 @@ public class BookingController {
                 return ResponseEntity.badRequest().body(Map.of("message", "Booking is already cancelled"));
             }
             bkg.setStatus("CANCELLED");
-            bookingRepository.save(bkg);
-            return ResponseEntity.ok(Map.of("message", "Booking cancelled successfully", "booking", bkg));
+            Booking saved = bookingRepository.save(bkg);
+
+            // 1. Authoritatively release physical seats in bus-service
+            List<String> releasedSeats = releaseSeatsInBusService(saved);
+
+            // 2. Trigger automated gateway refund via payment-service
+            Map<String, Object> refund = processRefundInPaymentService(saved.getBookingRef(), saved.getTotalAmount());
+
+            Map<String, Object> response = new java.util.HashMap<>();
+            response.put("message", "Booking cancelled successfully. Reserved inventory has been released.");
+            response.put("booking", saved);
+            response.put("releasedSeats", releasedSeats);
+            if (refund != null) {
+                response.put("refund", refund);
+            }
+            return ResponseEntity.ok(response);
         }).orElse(ResponseEntity.notFound().build());
+    }
+
+    private List<String> extractSeatNumbers(String detailsJson) {
+        List<String> seats = new java.util.ArrayList<>();
+        if (detailsJson == null || detailsJson.isBlank()) {
+            return seats;
+        }
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("Seats:\\s*([^|\\n]+)", java.util.regex.Pattern.CASE_INSENSITIVE);
+        java.util.regex.Matcher matcher = pattern.matcher(detailsJson);
+        if (matcher.find()) {
+            String seatsStr = matcher.group(1).trim();
+            for (String s : seatsStr.split(",")) {
+                String clean = s.trim();
+                if (!clean.isEmpty()) {
+                    seats.add(clean);
+                }
+            }
+        }
+        return seats;
+    }
+
+    private void confirmSeatsInBusService(Booking booking) {
+        if (!"BUS".equalsIgnoreCase(booking.getServiceType()) || booking.getServiceId() == null) {
+            return;
+        }
+        List<String> seats = extractSeatNumbers(booking.getDetailsJson());
+        if (seats.isEmpty()) {
+            return;
+        }
+        try {
+            String url = busServiceUrl + "/api/buses/schedules/" + booking.getServiceId() + "/confirm-seats";
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.set("X-Internal-Service", "booking-service");
+            org.springframework.http.HttpEntity<List<String>> entity = new org.springframework.http.HttpEntity<>(seats, headers);
+            restTemplate.exchange(url, org.springframework.http.HttpMethod.PUT, entity, Map.class);
+            org.slf4j.LoggerFactory.getLogger(BookingController.class).info("Confirmed seats {} for schedule {} via bus-service", seats, booking.getServiceId());
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(BookingController.class).warn("Failed to confirm seats in bus-service: {}", e.getMessage());
+        }
+    }
+
+    private List<String> releaseSeatsInBusService(Booking booking) {
+        if (!"BUS".equalsIgnoreCase(booking.getServiceType()) || booking.getServiceId() == null) {
+            return java.util.Collections.emptyList();
+        }
+        List<String> seats = extractSeatNumbers(booking.getDetailsJson());
+        if (seats.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        try {
+            String url = busServiceUrl + "/api/buses/schedules/" + booking.getServiceId() + "/release-seats";
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.set("X-Internal-Service", "booking-service");
+            org.springframework.http.HttpEntity<List<String>> entity = new org.springframework.http.HttpEntity<>(seats, headers);
+            restTemplate.exchange(url, org.springframework.http.HttpMethod.PUT, entity, Map.class);
+            org.slf4j.LoggerFactory.getLogger(BookingController.class).info("Released seats {} for schedule {} via bus-service", seats, booking.getServiceId());
+            return seats;
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(BookingController.class).error("Failed to release seats in bus-service: {}", e.getMessage());
+            return java.util.Collections.emptyList();
+        }
+    }
+
+    private Map<String, Object> processRefundInPaymentService(String bookingRef, Double totalAmount) {
+        if (bookingRef == null || bookingRef.isBlank()) {
+            return null;
+        }
+        try {
+            String url = paymentServiceUrl + "/api/payments/refund/booking/" + bookingRef;
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.set("X-Internal-Service", "booking-service");
+            Map<String, Object> reqBody = new java.util.HashMap<>();
+            if (totalAmount != null) {
+                reqBody.put("amount", totalAmount);
+            }
+            reqBody.put("reason", "Cancelled by traveller");
+            org.springframework.http.HttpEntity<Map<String, Object>> entity = new org.springframework.http.HttpEntity<>(reqBody, headers);
+            org.springframework.http.ResponseEntity<Map> resp = restTemplate.exchange(url, org.springframework.http.HttpMethod.POST, entity, Map.class);
+            if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
+                org.slf4j.LoggerFactory.getLogger(BookingController.class).info("Refund processed successfully for booking {}: {}", bookingRef, resp.getBody());
+                return (Map<String, Object>) resp.getBody();
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(BookingController.class).warn("Payment refund not applicable or service call returned: {}", e.getMessage());
+        }
+        return null;
     }
 }
