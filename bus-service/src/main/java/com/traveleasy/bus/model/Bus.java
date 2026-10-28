@@ -27,4 +27,6 @@ public class Bus {
     private String facilityType; // "AC", "NON_AC"
     private String busConfiguration; // "SINGLE_DECK", "DOUBLE_DECK"
     private String templateId; // references SeatLayoutTemplate.id
+    @Builder.Default
+    private String status = "ACTIVE";
 }

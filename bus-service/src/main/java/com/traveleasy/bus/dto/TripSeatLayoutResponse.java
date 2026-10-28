@@ -35,6 +35,14 @@ public class TripSeatLayoutResponse {
     private String boardingPoints;
     private String droppingPoints;
 
+    private Integer fromOrder;
+    private Integer toOrder;
+    private String fromStopName;
+    private String toStopName;
+
+    @Builder.Default
+    private List<ScheduleStopDto> stops = new ArrayList<>();
+
     @Builder.Default
     private List<DeckLayoutDto> decks = new ArrayList<>();
 }

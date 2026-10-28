@@ -20,6 +20,7 @@ import org.springframework.web.client.RestTemplate;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -289,11 +290,30 @@ public class PaymentServiceImpl implements PaymentService {
         PaymentTransaction txn = paymentRepository.findByTransactionRef(transactionRef)
                 .orElseThrow(() -> new PaymentException("Transaction not found for ref: " + transactionRef, HttpStatus.NOT_FOUND));
 
-        // Idempotency check: Already refunded
+        String idempotencyKey = (request != null && request.getIdempotencyKey() != null && !request.getIdempotencyKey().isBlank())
+                ? request.getIdempotencyKey().trim()
+                : null;
+
+        // Idempotency check 1: Already refunded
         if ("REFUNDED".equalsIgnoreCase(txn.getStatus())) {
             log.info("Transaction {} already refunded with refundId {}", transactionRef, txn.getRefundId());
             return RefundResponse.builder()
                     .message("Transaction has already been fully refunded")
+                    .refundId(txn.getRefundId())
+                    .refundStatus(txn.getRefundStatus())
+                    .refundAmount(txn.getRefundAmount())
+                    .transactionRef(txn.getTransactionRef())
+                    .bookingRef(txn.getBookingRef())
+                    .timestamp(txn.getRefundedAt())
+                    .transaction(txn)
+                    .build();
+        }
+
+        // Idempotency check 2: Idempotency key match on existing recorded refund
+        if (idempotencyKey != null && idempotencyKey.equalsIgnoreCase(txn.getIdempotencyKey()) && txn.getRefundId() != null) {
+            log.info("Transaction {} matched idempotencyKey {} with refundId {}", transactionRef, idempotencyKey, txn.getRefundId());
+            return RefundResponse.builder()
+                    .message("Refund already processed for idempotency key: " + idempotencyKey)
                     .refundId(txn.getRefundId())
                     .refundStatus(txn.getRefundStatus())
                     .refundAmount(txn.getRefundAmount())
@@ -325,6 +345,9 @@ public class PaymentServiceImpl implements PaymentService {
             txn.setRefundStatus("PROCESSED");
             txn.setStatus("REFUNDED");
             txn.setRefundedAt(LocalDateTime.now());
+            if (idempotencyKey != null) {
+                txn.setIdempotencyKey(idempotencyKey);
+            }
             PaymentTransaction saved = paymentRepository.save(txn);
             cancelBookingInBookingService(txn.getBookingRef());
             return RefundResponse.builder()
@@ -339,15 +362,69 @@ public class PaymentServiceImpl implements PaymentService {
                     .build();
         }
 
+        // ==================== GATEWAY RECONCILIATION PROTOCOL ====================
+        // Before creating a new refund, check Razorpay to see if a refund was already accepted
+        // on the gateway (e.g. if a previous request timed out after gateway execution).
+        long targetPaise = Math.round(refundAmount * 100);
+        try {
+            List<Refund> existingGatewayRefunds = razorpayClient.payments.fetchAllRefunds(txn.getRazorpayPaymentId());
+            if (existingGatewayRefunds != null && !existingGatewayRefunds.isEmpty()) {
+                for (Refund r : existingGatewayRefunds) {
+                    Number rAmt = r.get("amount");
+                    if (rAmt != null && rAmt.longValue() == targetPaise) {
+                        String refId = r.get("id");
+                        String refStatus = r.get("status");
+                        log.info("Gateway reconciliation: Found existing Razorpay refund {} with status {} for payment {}",
+                                refId, refStatus, txn.getRazorpayPaymentId());
+
+                        txn.setRefundId(refId);
+                        txn.setRefundAmount(refundAmount);
+                        txn.setRefundStatus(refStatus != null ? refStatus.toUpperCase() : "PROCESSED");
+                        txn.setStatus("processed".equalsIgnoreCase(refStatus) ? "REFUNDED" : "REFUND_INITIATED");
+                        txn.setRefundedAt(LocalDateTime.now());
+                        if (idempotencyKey != null) {
+                            txn.setIdempotencyKey(idempotencyKey);
+                        }
+                        PaymentTransaction saved = paymentRepository.save(txn);
+                        cancelBookingInBookingService(txn.getBookingRef());
+
+                        return RefundResponse.builder()
+                                .message("Refund reconciled with existing Razorpay refund")
+                                .refundId(refId)
+                                .refundStatus(saved.getRefundStatus())
+                                .refundAmount(refundAmount)
+                                .transactionRef(saved.getTransactionRef())
+                                .bookingRef(saved.getBookingRef())
+                                .timestamp(saved.getRefundedAt())
+                                .transaction(saved)
+                                .build();
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("Gateway reconciliation lookup failed for payment {}: {}", txn.getRazorpayPaymentId(), ex.getMessage());
+            // Proceed to refund execution
+        }
+
+        // Pre-commit attempt: mark REFUND_INITIATED and persist idempotencyKey
+        txn.setStatus("REFUND_INITIATED");
+        if (idempotencyKey != null) {
+            txn.setIdempotencyKey(idempotencyKey);
+        }
+        paymentRepository.save(txn);
+
         try {
             JSONObject refundRequest = new JSONObject();
-            refundRequest.put("amount", Math.round(refundAmount * 100)); // in paise
+            refundRequest.put("amount", targetPaise); // in paise
+            JSONObject notes = new JSONObject();
             if (request != null && request.getReason() != null) {
-                JSONObject notes = new JSONObject();
                 notes.put("reason", request.getReason());
-                notes.put("bookingRef", txn.getBookingRef());
-                refundRequest.put("notes", notes);
             }
+            notes.put("bookingRef", txn.getBookingRef());
+            if (idempotencyKey != null) {
+                notes.put("idempotencyKey", idempotencyKey);
+            }
+            refundRequest.put("notes", notes);
 
             Refund refund = razorpayClient.payments.refund(txn.getRazorpayPaymentId(), refundRequest);
             String refundId = refund.get("id");
@@ -376,7 +453,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .build();
 
         } catch (Exception e) {
-            log.error("Failed to process refund: {}", e.getMessage(), e);
+            log.error("Failed to process refund for txn {}: {}", transactionRef, e.getMessage(), e);
             throw new PaymentException("Gateway refund request failed: " + e.getMessage(), HttpStatus.BAD_GATEWAY);
         }
     }
@@ -462,6 +539,11 @@ public class PaymentServiceImpl implements PaymentService {
             String lookupUrl = razorpayConfig.getBookingServiceUrl() + "/api/bookings/ref/" + bookingRef;
             ResponseEntity<Map> lookup = restTemplate.getForEntity(lookupUrl, Map.class);
             if (lookup.getStatusCode().is2xxSuccessful() && lookup.getBody() != null) {
+                Object statusObj = lookup.getBody().get("status");
+                if ("CANCELLED".equalsIgnoreCase(String.valueOf(statusObj))) {
+                    log.info("Booking {} is already CANCELLED in booking-service", bookingRef);
+                    return;
+                }
                 Object idObj = lookup.getBody().get("id");
                 if (idObj != null) {
                     Long bookingId = Long.parseLong(idObj.toString());

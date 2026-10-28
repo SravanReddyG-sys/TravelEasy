@@ -20,12 +20,17 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
+import java.util.Map;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -112,7 +117,7 @@ public class PaymentServiceTest {
         assertEquals("CREATED", response.getStatus());
 
         ArgumentCaptor<PaymentTransaction> captor = ArgumentCaptor.forClass(PaymentTransaction.class);
-        verify(paymentRepository).save(captor.capture());
+        verify(paymentRepository, atLeastOnce()).save(captor.capture());
         PaymentTransaction saved = captor.getValue();
         assertEquals("BK-1001", saved.getBookingRef());
         assertEquals("order_test_9999", saved.getRazorpayOrderId());
@@ -189,7 +194,7 @@ public class PaymentServiceTest {
         assertEquals(paymentId, response.getPaymentId());
 
         ArgumentCaptor<PaymentTransaction> captor = ArgumentCaptor.forClass(PaymentTransaction.class);
-        verify(paymentRepository).save(captor.capture());
+        verify(paymentRepository, atLeastOnce()).save(captor.capture());
         PaymentTransaction saved = captor.getValue();
         assertEquals("SUCCESS", saved.getStatus());
         assertEquals(paymentId, saved.getRazorpayPaymentId());
@@ -226,7 +231,7 @@ public class PaymentServiceTest {
         assertTrue(ex.getMessage().contains("signature verification failed"));
 
         ArgumentCaptor<PaymentTransaction> captor = ArgumentCaptor.forClass(PaymentTransaction.class);
-        verify(paymentRepository).save(captor.capture());
+        verify(paymentRepository, atLeastOnce()).save(captor.capture());
         PaymentTransaction saved = captor.getValue();
         assertEquals("FAILED", saved.getStatus());
         assertEquals("SIGNATURE_MISMATCH", saved.getErrorCode());
@@ -302,7 +307,7 @@ public class PaymentServiceTest {
         paymentService.processWebhook(rawPayload, validWebhookSignature);
 
         ArgumentCaptor<PaymentTransaction> captor = ArgumentCaptor.forClass(PaymentTransaction.class);
-        verify(paymentRepository).save(captor.capture());
+        verify(paymentRepository, atLeastOnce()).save(captor.capture());
         PaymentTransaction saved = captor.getValue();
         assertEquals("SUCCESS", saved.getStatus());
         assertEquals(paymentId, saved.getRazorpayPaymentId());
@@ -404,7 +409,7 @@ public class PaymentServiceTest {
         assertEquals(txnRef, response.getTransactionRef());
 
         ArgumentCaptor<PaymentTransaction> captor = ArgumentCaptor.forClass(PaymentTransaction.class);
-        verify(paymentRepository).save(captor.capture());
+        verify(paymentRepository, atLeastOnce()).save(captor.capture());
         PaymentTransaction saved = captor.getValue();
         assertEquals("REFUNDED", saved.getStatus());
         assertEquals("rfnd_test_999", saved.getRefundId());
@@ -462,5 +467,181 @@ public class PaymentServiceTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
         assertTrue(ex.getMessage().contains("Only successful payments can be refunded"));
+    }
+
+    // ==================== UNIT 3.3: RECONCILIATION & IDEMPOTENCY TESTS ====================
+
+    @Test
+    @DisplayName("Unit 3.3: Gateway Reconciliation - Adopts existing Razorpay refund without duplicate gateway execution")
+    void testProcessRefund_GatewayReconciliation_AdoptsExistingRefund() throws Exception {
+        String txnRef = "TXN-TIMEOUT-RECOVER";
+        String paymentId = "pay_timeout_recover_123";
+        PaymentTransaction transaction = PaymentTransaction.builder()
+                .id(99L)
+                .transactionRef(txnRef)
+                .bookingRef("BK-RECOVER-1")
+                .amount(2500.0)
+                .razorpayPaymentId(paymentId)
+                .status("REFUND_INITIATED")
+                .idempotencyKey("rfnd_BK-RECOVER-1_10")
+                .build();
+
+        when(paymentRepository.findByTransactionRef(txnRef)).thenReturn(Optional.of(transaction));
+        when(paymentRepository.save(any(PaymentTransaction.class))).thenAnswer(i -> i.getArgument(0));
+
+        com.razorpay.PaymentClient mockPaymentClient = mock(com.razorpay.PaymentClient.class);
+        razorpayClient.payments = mockPaymentClient;
+
+        JSONObject existingRefundJson = new JSONObject();
+        existingRefundJson.put("id", "rfnd_already_created_001");
+        existingRefundJson.put("payment_id", paymentId);
+        existingRefundJson.put("amount", 250000L); // 2500 INR in paise
+        existingRefundJson.put("status", "processed");
+        Refund mockExistingRefund = new Refund(existingRefundJson);
+
+        when(mockPaymentClient.fetchAllRefunds(eq(paymentId))).thenReturn(List.of(mockExistingRefund));
+
+        RefundRequest request = RefundRequest.builder()
+                .amount(2500.0)
+                .idempotencyKey("rfnd_BK-RECOVER-1_10")
+                .reason("Retry after socket timeout")
+                .build();
+
+        RefundResponse response = paymentService.processRefund(txnRef, request);
+
+        assertNotNull(response);
+        assertEquals("rfnd_already_created_001", response.getRefundId());
+        assertEquals("PROCESSED", response.getRefundStatus());
+        assertEquals(2500.0, response.getRefundAmount());
+        assertTrue(response.getMessage().contains("reconciled with existing Razorpay refund"));
+
+        // Critical: Verify that refund() was NEVER called again! Zero duplicate refund created!
+        verify(mockPaymentClient, never()).refund(anyString(), any(JSONObject.class));
+
+        ArgumentCaptor<PaymentTransaction> captor = ArgumentCaptor.forClass(PaymentTransaction.class);
+        verify(paymentRepository, atLeastOnce()).save(captor.capture());
+        PaymentTransaction saved = captor.getValue();
+        assertEquals("REFUNDED", saved.getStatus());
+        assertEquals("rfnd_already_created_001", saved.getRefundId());
+    }
+
+    @Test
+    @DisplayName("Unit 3.3: Idempotency Key - Matching key on already completed refund returns existing response")
+    void testProcessRefund_IdempotencyKey_AlreadyProcessed() {
+        String txnRef = "TXN-IDEMP-TEST";
+        String idempKey = "rfnd_BK-IDEMP_123";
+        PaymentTransaction transaction = PaymentTransaction.builder()
+                .transactionRef(txnRef)
+                .bookingRef("BK-IDEMP")
+                .status("REFUND_INITIATED")
+                .idempotencyKey(idempKey)
+                .refundId("rfnd_idemp_999")
+                .refundStatus("PROCESSED")
+                .refundAmount(500.0)
+                .build();
+
+        when(paymentRepository.findByTransactionRef(txnRef)).thenReturn(Optional.of(transaction));
+
+        RefundRequest request = RefundRequest.builder()
+                .amount(500.0)
+                .idempotencyKey(idempKey)
+                .build();
+
+        RefundResponse response = paymentService.processRefund(txnRef, request);
+
+        assertNotNull(response);
+        assertEquals("rfnd_idemp_999", response.getRefundId());
+        assertEquals("PROCESSED", response.getRefundStatus());
+        assertTrue(response.getMessage().contains("already processed for idempotency key"));
+        verify(paymentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Unit 3.3: Gateway Timeout - Pre-commits REFUND_INITIATED state and throws 502 Bad Gateway")
+    void testProcessRefund_GatewayTimeout_PreCommitPersisted() throws Exception {
+        String txnRef = "TXN-GATEWAY-FAIL";
+        String paymentId = "pay_fail_123";
+        PaymentTransaction transaction = PaymentTransaction.builder()
+                .id(101L)
+                .transactionRef(txnRef)
+                .bookingRef("BK-GATEWAY-FAIL")
+                .amount(1500.0)
+                .razorpayPaymentId(paymentId)
+                .status("SUCCESS")
+                .build();
+
+        when(paymentRepository.findByTransactionRef(txnRef)).thenReturn(Optional.of(transaction));
+        when(paymentRepository.save(any(PaymentTransaction.class))).thenAnswer(i -> i.getArgument(0));
+
+        com.razorpay.PaymentClient mockPaymentClient = mock(com.razorpay.PaymentClient.class);
+        razorpayClient.payments = mockPaymentClient;
+
+        // No existing refund found on gateway
+        when(mockPaymentClient.fetchAllRefunds(eq(paymentId))).thenReturn(Collections.emptyList());
+        // Gateway throws exception during refund attempt
+        when(mockPaymentClient.refund(eq(paymentId), any(JSONObject.class)))
+                .thenThrow(new com.razorpay.RazorpayException("Socket timeout talking to gateway"));
+
+        RefundRequest request = RefundRequest.builder()
+                .amount(1500.0)
+                .idempotencyKey("rfnd_BK-GATEWAY-FAIL_10")
+                .reason("Gateway timeout test")
+                .build();
+
+        PaymentException ex = assertThrows(PaymentException.class, () -> paymentService.processRefund(txnRef, request));
+        assertEquals(HttpStatus.BAD_GATEWAY, ex.getStatus());
+
+        // Verify pre-commit attempt was saved as REFUND_INITIATED with the idempotency key!
+        ArgumentCaptor<PaymentTransaction> captor = ArgumentCaptor.forClass(PaymentTransaction.class);
+        verify(paymentRepository).save(captor.capture());
+        PaymentTransaction saved = captor.getValue();
+        assertEquals("REFUND_INITIATED", saved.getStatus());
+        assertEquals("rfnd_BK-GATEWAY-FAIL_10", saved.getIdempotencyKey());
+    }
+
+    @Test
+    @DisplayName("Process Refund: Does not make cyclical cancel PUT call when booking is already CANCELLED in booking-service")
+    void testProcessRefund_AlreadyCancelledInBookingService_NoCyclicCall() throws Exception {
+        String txnRef = "TXN-ALREADY-CANCELLED";
+        String paymentId = "pay_already_cancel_123";
+        PaymentTransaction transaction = PaymentTransaction.builder()
+                .id(202L)
+                .transactionRef(txnRef)
+                .bookingRef("BK-ALREADY-CANCELLED")
+                .amount(1200.0)
+                .razorpayPaymentId(paymentId)
+                .status("SUCCESS")
+                .build();
+
+        when(paymentRepository.findByTransactionRef(txnRef)).thenReturn(Optional.of(transaction));
+        when(paymentRepository.save(any(PaymentTransaction.class))).thenAnswer(i -> i.getArgument(0));
+
+        com.razorpay.PaymentClient mockPaymentClient = mock(com.razorpay.PaymentClient.class);
+        razorpayClient.payments = mockPaymentClient;
+
+        when(mockPaymentClient.fetchAllRefunds(eq(paymentId))).thenReturn(Collections.emptyList());
+
+        JSONObject refundJson = new JSONObject();
+        refundJson.put("id", "rfnd_already_cancel_999");
+        refundJson.put("payment_id", paymentId);
+        refundJson.put("amount", 120000L);
+        refundJson.put("status", "processed");
+        Refund mockRefund = new Refund(refundJson);
+        when(mockPaymentClient.refund(eq(paymentId), any(JSONObject.class))).thenReturn(mockRefund);
+
+        // Mock booking-service returning already CANCELLED
+        when(restTemplate.getForEntity(contains("/api/bookings/ref/BK-ALREADY-CANCELLED"), eq(Map.class)))
+                .thenReturn(new ResponseEntity<>(Map.of("id", 10L, "status", "CANCELLED"), HttpStatus.OK));
+
+        RefundRequest request = RefundRequest.builder()
+                .amount(1200.0)
+                .build();
+
+        RefundResponse response = paymentService.processRefund(txnRef, request);
+        assertNotNull(response);
+        assertEquals("rfnd_already_cancel_999", response.getRefundId());
+
+        // Verify restTemplate.exchange (the cancel PUT) was NEVER called because booking was already CANCELLED
+        verify(restTemplate, never()).exchange(contains("/api/bookings/"), eq(HttpMethod.PUT), any(), eq(Map.class));
     }
 }

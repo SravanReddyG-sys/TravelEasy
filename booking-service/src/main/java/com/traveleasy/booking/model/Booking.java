@@ -41,4 +41,10 @@ public class Booking {
 
     @Builder.Default
     private LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(15);
+
+    @Builder.Default
+    private String refundStatus = "NOT_APPLICABLE";
+    private String refundId;
+    private Double refundAmount;
+    private String refundAttemptKey;
 }

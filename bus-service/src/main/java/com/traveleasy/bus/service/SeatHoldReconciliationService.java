@@ -28,6 +28,7 @@ public class SeatHoldReconciliationService {
     private final SeatRepository seatRepository;
     private final BusScheduleRepository scheduleRepository;
     private final RestTemplate restTemplate;
+    private final SeatSegmentReservationService seatSegmentReservationService;
 
     @Value("${booking.service.url:http://localhost:8084}")
     private String bookingServiceUrl;
@@ -43,6 +44,8 @@ public class SeatHoldReconciliationService {
     @Transactional
     public void reconcileExpiredHolds() {
         LocalDateTime now = LocalDateTime.now();
+        if (seatSegmentReservationService != null) { seatSegmentReservationService.reconcileExpiredSegmentHolds(now); }
+
         List<Seat> expiredSeats = seatRepository.findByStatusInAndHoldExpiresAtBefore(List.of("LOCKED", "BOOKED"), now);
 
         if (expiredSeats.isEmpty()) {

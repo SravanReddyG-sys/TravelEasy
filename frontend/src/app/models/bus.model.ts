@@ -1,5 +1,6 @@
 export interface Bus {
   id: number;
+  operatorId?: number;
   busNumber: string;
   operatorName: string;
   busType: string;
@@ -7,10 +8,12 @@ export interface Bus {
   hasAc: boolean;
   isSleeper: boolean;
   amenities: string[];
+  status?: string;
 }
 
 export interface Schedule {
   id: number;
+  operatorId?: number;
   busId: number;
   origin: string;
   destination: string;
@@ -28,6 +31,7 @@ export interface Schedule {
   amenities?: string[];
   hasAc?: boolean;
   isSleeper?: boolean;
+  status?: string;
 }
 
 export interface Seat {
@@ -93,6 +97,19 @@ export interface DeckLayout {
   positions: SeatPosition[];
 }
 
+export interface ScheduleStop {
+  id?: number;
+  scheduleId?: number;
+  stopOrder: number;
+  stopName: string;
+  stopType?: string;
+  arrivalTime?: string;
+  departureTime?: string;
+  distanceKm?: number;
+  consecutiveFare?: number;
+  haltMinutes?: number;
+}
+
 export interface TripSeatLayout {
   scheduleId: number;
   busId: number;
@@ -116,4 +133,62 @@ export interface TripSeatLayout {
   boardingPoints?: string;
   droppingPoints?: string;
   decks: DeckLayout[];
+  fromOrder?: number;
+  toOrder?: number;
+  fromStopName?: string;
+  toStopName?: string;
+  stops?: ScheduleStop[];
+}
+
+export interface RoutePoint {
+  id?: number;
+  routeId?: number;
+  routeStopId?: number;
+  pointName: string;
+  pointType: 'BOARDING' | 'DROPPING';
+  address?: string;
+  timeSlot?: string;
+  active?: boolean;
+}
+
+export interface RouteStop {
+  id?: number;
+  routeId?: number;
+  stopOrder: number;
+  stopName: string;
+  stopType: 'ORIGIN' | 'INTERMEDIATE' | 'DESTINATION';
+  distanceKm?: number;
+  boardingPoints: RoutePoint[];
+  droppingPoints: RoutePoint[];
+}
+
+export interface Route {
+  id: number;
+  operatorId: number;
+  routeCode: string;
+  routeName: string;
+  origin: string;
+  destination: string;
+  description?: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'DRAFT' | string;
+  createdAt: string;
+  updatedAt: string;
+  stops?: RouteStop[];
+  scheduleCount?: number;
+}
+
+export interface CreateRouteRequest {
+  routeCode?: string;
+  routeName: string;
+  origin: string;
+  destination: string;
+  description?: string;
+  status?: string;
+  stops: {
+    stopOrder: number;
+    stopName: string;
+    distanceKm?: number;
+    boardingPoints: { pointName: string; address?: string; timeSlot?: string }[];
+    droppingPoints: { pointName: string; address?: string; timeSlot?: string }[];
+  }[];
 }

@@ -15,6 +15,7 @@ import { CustomerDashboardComponent } from './components/customer-dashboard/cust
 import { BusOperatorDashboardComponent } from './components/bus-operator-dashboard/bus-operator-dashboard.component';
 import { HotelManagerDashboardComponent } from './components/hotel-manager-dashboard/hotel-manager-dashboard.component';
 import { AdminDashboardComponent } from './components/admin-dashboard/admin-dashboard.component';
+import { roleGuard } from './guards/role.guard';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -40,7 +41,12 @@ export const routes: Routes = [
   { path: 'customer/profile', component: CustomerDashboardComponent },
   { path: 'customer/settings', component: CustomerDashboardComponent },
   { path: 'customer/support', component: CustomerDashboardComponent },
-  { path: 'bus-operator', component: BusOperatorDashboardComponent },
+  {
+    path: 'bus-operator',
+    component: BusOperatorDashboardComponent,
+    canActivate: [roleGuard],
+    data: { roles: ['ROLE_BUS_OPERATOR', 'ROLE_ADMIN'] }
+  },
   { path: 'hotel-manager', component: HotelManagerDashboardComponent },
   { path: 'admin', component: AdminDashboardComponent },
   { path: '**', redirectTo: 'home' }

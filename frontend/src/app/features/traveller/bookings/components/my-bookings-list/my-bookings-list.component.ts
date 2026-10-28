@@ -227,6 +227,12 @@ import { FormsModule } from '@angular/forms';
                 <span class="badge-status-pill" [ngClass]="b.statusBadgeClass">
                   {{ b.statusDisplay }}
                 </span>
+                <span *ngIf="b.status === 'CANCELLED' && b.refundStatus === 'PROCESSED'" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 smaller px-2 py-1 rounded-pill">
+                  <i class="fa-solid fa-check me-1"></i>Refunded
+                </span>
+                <span *ngIf="b.status === 'CANCELLED' && b.refundStatus === 'FAILED_RETRYABLE'" class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 smaller px-2 py-1 rounded-pill">
+                  <i class="fa-solid fa-clock-rotate-left me-1"></i>Refund Pending
+                </span>
                 <div class="booking-card-price">
                   ₹{{ b.totalAmount | number }}
                 </div>

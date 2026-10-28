@@ -2240,7 +2240,7 @@ export class CustomerDashboardComponent implements OnInit {
   onSeatPickerProceedToPayment(payload: any) {
     this.checkoutServiceType = 'BUS';
     this.checkoutServiceId = payload.schedule.id;
-    this.checkoutProviderId = payload.schedule.busId || 1;
+    this.checkoutProviderId = payload.schedule.operatorId || payload.schedule.busId || 1;
     this.checkoutServiceTitle = `${payload.schedule.operatorName} (${payload.schedule.origin || this.busOrigin} to ${payload.schedule.destination || this.busDestination})`;
 
     const passList = (payload.passengers || []).map((p: any) => `${p.name} (Seat ${p.seatNumber}, Age: ${p.age}, ${p.gender})`).join('; ');
@@ -2263,7 +2263,7 @@ export class CustomerDashboardComponent implements OnInit {
   proceedToBusCheckout(schedule: any) {
     this.checkoutServiceType = 'BUS';
     this.checkoutServiceId = schedule.id;
-    this.checkoutProviderId = schedule.busId || 1;
+    this.checkoutProviderId = schedule.operatorId || schedule.busId || 1;
     this.checkoutServiceTitle = `${schedule.operatorName} (${schedule.origin} to ${schedule.destination})`;
     this.checkoutDetails = `Seats: ${this.selectedSeatNumbers.join(', ')} | Journey Date: ${schedule.travelDate || this.busDate}`;
     this.checkoutAmount = this.selectedSeatNumbers.length * schedule.fare;
@@ -2656,6 +2656,9 @@ export class CustomerDashboardComponent implements OnInit {
       isCancellable: b.status === 'CONFIRMED',
       isCompleted: b.status === 'COMPLETED',
       isConfirmed: b.status === 'CONFIRMED',
+      refundStatus: b.refundStatus,
+      refundId: b.refundId,
+      refundAmount: b.refundAmount,
       rawBookingDate: b.bookingDate,
       detailsJson: b.detailsJson
     };
@@ -2801,6 +2804,8 @@ export class CustomerDashboardComponent implements OnInit {
           const rfdId = refundInfo.refundId || refundInfo.id;
           const amt = refundInfo.refundAmount || res?.booking?.totalAmount;
           msg += `\nRefund of ₹${amt} processed via Razorpay (Refund ID: ${rfdId}).`;
+        } else if (res?.booking?.refundStatus === 'FAILED_RETRYABLE') {
+          msg += `\nNote: Payment was verified, but gateway refund is temporarily queued. It will be retried automatically.`;
         }
         alert(msg);
         this.loadMyBookings();

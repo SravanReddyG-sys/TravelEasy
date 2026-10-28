@@ -39,9 +39,15 @@ public class BookingSecurityService {
         Claims claims = extractClaims(token);
         Object userIdObj = claims.get("userId");
         if (userIdObj instanceof Number) {
-            return ((Number) userIdObj).longValue();
+            long val = ((Number) userIdObj).longValue();
+            return val > 0 ? val : null;
         } else if (userIdObj != null) {
-            return Long.parseLong(userIdObj.toString());
+            try {
+                long val = Long.parseLong(userIdObj.toString().trim());
+                return val > 0 ? val : null;
+            } catch (Exception e) {
+                return null;
+            }
         }
         return null;
     }
