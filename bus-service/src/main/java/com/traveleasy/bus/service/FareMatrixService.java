@@ -113,6 +113,72 @@ public class FareMatrixService {
     }
 
     /**
+     * Previews the complete Origin-Destination (OD) fare matrix in memory for a proposed
+     * route stops configuration and optional manual fare overrides.
+     * Generates all N*(N-1)/2 pairs with calculated elementary sums and effective fares.
+     */
+    public ScheduleFareMatrixResponse previewFareMatrix(List<ScheduleStopDto> stops, List<FareOverrideItemDto> overrides) {
+        if (stops == null || stops.size() < 2) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least 2 stops are required to preview a fare matrix");
+        }
+
+        int n = stops.size();
+        int totalPairs = (n * (n - 1)) / 2;
+
+        Map<String, Double> overrideMap = new HashMap<>();
+        if (overrides != null) {
+            for (FareOverrideItemDto ov : overrides) {
+                if (ov.getFromStopOrder() != null && ov.getToStopOrder() != null && ov.getCustomFare() != null && ov.getCustomFare() > 0) {
+                    overrideMap.put(ov.getFromStopOrder() + "-" + ov.getToStopOrder(), ov.getCustomFare());
+                }
+            }
+        }
+
+        List<FareMatrixEntryDto> matrix = new ArrayList<>(totalPairs);
+        for (int i = 0; i < n - 1; i++) {
+            ScheduleStopDto fromStop = stops.get(i);
+            double runningSum = 0.0;
+
+            for (int j = i + 1; j < n; j++) {
+                ScheduleStopDto toStop = stops.get(j);
+                Double segFare = stops.get(j - 1).getConsecutiveFare();
+                runningSum += (segFare != null ? segFare : 0.0);
+
+                Double distance = null;
+                if (fromStop.getDistanceKm() != null && toStop.getDistanceKm() != null) {
+                    distance = Math.max(0.0, toStop.getDistanceKm() - fromStop.getDistanceKm());
+                }
+
+                String pairKey = i + "-" + j;
+                Double customFare = overrideMap.get(pairKey);
+                double effectiveFare = (customFare != null) ? customFare : runningSum;
+                boolean isOverridden = (customFare != null);
+
+                matrix.add(FareMatrixEntryDto.builder()
+                        .fromStopOrder(i)
+                        .fromStopName(fromStop.getStopName())
+                        .toStopOrder(j)
+                        .toStopName(toStop.getStopName())
+                        .distanceKm(distance)
+                        .calculatedFare(runningSum)
+                        .customFare(customFare)
+                        .effectiveFare(effectiveFare)
+                        .isOverridden(isOverridden)
+                        .segmentCount(j - i)
+                        .build());
+            }
+        }
+
+        return ScheduleFareMatrixResponse.builder()
+                .scheduleId(null)
+                .totalStops(n)
+                .totalPairs(totalPairs)
+                .stops(stops)
+                .matrix(matrix)
+                .build();
+    }
+
+    /**
      * Resolves the effective price for a journey segment between two stops.
      */
     public Double getEffectiveFare(Long scheduleId, Integer fromStopOrder, Integer toStopOrder) {

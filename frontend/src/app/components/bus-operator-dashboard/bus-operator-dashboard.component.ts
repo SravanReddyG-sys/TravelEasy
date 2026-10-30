@@ -6,7 +6,32 @@ import { AuthService } from '../../services/auth.service';
 import { BusService } from '../../services/bus.service';
 import { BookingService } from '../../services/booking.service';
 import { User } from '../../models/user.model';
-import { Route, RouteStop, RoutePoint, CreateRouteRequest, ScheduleStop } from '../../models/bus.model';
+import { Route, RouteStop, RoutePoint, CreateRouteRequest, ScheduleStop, Schedule, Bus, BusBasicDetailsForm } from '../../models/bus.model';
+
+export interface WizardSegmentFareItem {
+  segmentIndex: number;
+  fromStopOrder: number;
+  toStopOrder: number;
+  fromStopName: string;
+  toStopName: string;
+  distanceKm: number;
+  fare: number | null;
+  fareError?: string | null;
+}
+
+export interface WizardJourneyFareItem {
+  journeyIndex: number;
+  fromStopOrder: number;
+  toStopOrder: number;
+  fromStopName: string;
+  toStopName: string;
+  distanceKm: number;
+  calculatedFare: number;
+  operatorFare: number | null;
+  isOverridden: boolean;
+  status: 'Auto' | 'Overridden';
+  fareError?: string | null;
+}
 
 interface StopFormItem {
   stopOrder: number;
@@ -206,10 +231,10 @@ interface TrendDay {
             </div>
 
             <!-- Summary Cards Row (4 Cards) -->
-            <div class="row g-3 mb-4">
+            <div class="row g-3 g-xl-4 mb-4">
               <!-- Card 1: Total Buses -->
               <div class="col-xl-3 col-sm-6">
-                <div class="metric-card">
+                <div class="metric-card h-100">
                   <div class="metric-icon-box" style="background-color: #e0f2fe; color: #0284c7;">
                     <i class="fa-solid fa-bus"></i>
                   </div>
@@ -222,7 +247,7 @@ interface TrendDay {
 
               <!-- Card 2: Active Routes -->
               <div class="col-xl-3 col-sm-6">
-                <div class="metric-card">
+                <div class="metric-card h-100">
                   <div class="metric-icon-box" style="background-color: #dcfce7; color: #16a34a;">
                     <i class="fa-solid fa-route"></i>
                   </div>
@@ -235,7 +260,7 @@ interface TrendDay {
 
               <!-- Card 3: Total Bookings -->
               <div class="col-xl-3 col-sm-6">
-                <div class="metric-card">
+                <div class="metric-card h-100">
                   <div class="metric-icon-box" style="background-color: #ffedd5; color: #ea580c;">
                     <i class="fa-solid fa-file-invoice"></i>
                   </div>
@@ -248,7 +273,7 @@ interface TrendDay {
 
               <!-- Card 4: Revenue (This Month) -->
               <div class="col-xl-3 col-sm-6">
-                <div class="metric-card">
+                <div class="metric-card h-100">
                   <div class="metric-icon-box" style="background-color: #f3e8ff; color: #9333ea;">
                     <i class="fa-solid fa-chart-line"></i>
                   </div>
@@ -266,7 +291,7 @@ interface TrendDay {
               <div class="row g-3">
                 <!-- Action 1: Add New Bus -->
                 <div class="col-md-4">
-                  <div class="quick-action-card" (click)="showAddBusModal = true" role="button">
+                  <div class="quick-action-card" (click)="activeNav = 'buses'; startAddBusWizard()" role="button">
                     <div class="d-flex align-items-center">
                       <div class="qa-icon-box">
                         <i class="fa-solid fa-bus"></i>
@@ -462,46 +487,680 @@ interface TrendDay {
 
           </div>
 
-          <!-- ==================== VIEW 2: REGISTERED BUSES ==================== -->
+          <!-- ==================== VIEW 2: REGISTERED BUSES / ADD BUS WIZARD ==================== -->
           <div *ngIf="activeNav === 'buses'">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-              <div>
-                <h4 class="fw-bold text-dark mb-1"><i class="fa-solid fa-bus text-primary me-2"></i>Registered Fleet</h4>
-                <p class="text-muted small mb-0">Manage operator buses and seating layout templates</p>
+            
+            <!-- SUBVIEW 1: Fleet List -->
+            <div *ngIf="busViewMode === 'list'">
+              <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                  <h4 class="fw-bold text-dark mb-1"><i class="fa-solid fa-bus text-primary me-2"></i>Registered Fleet</h4>
+                  <p class="text-muted small mb-0">Manage operator buses and seating layout templates</p>
+                </div>
+                <button class="btn btn-primary rounded-pill fw-bold" (click)="startAddBusWizard()">
+                  <i class="fa-solid fa-plus me-1"></i> Add New Bus
+                </button>
               </div>
-              <button class="btn btn-primary rounded-pill fw-bold" (click)="showAddBusModal = true">
-                <i class="fa-solid fa-plus me-1"></i> Add New Bus
-              </button>
+
+              <div class="row g-3">
+                <div *ngFor="let bus of myBuses" class="col-md-6">
+                  <div class="card p-3 shadow-sm border-start border-4 border-primary">
+                    <div class="d-flex justify-content-between align-items-start">
+                      <div>
+                        <h5 class="fw-bold mb-1">{{ bus.operatorName }}</h5>
+                        <div class="mb-2">
+                          <span class="badge bg-secondary me-1">{{ bus.busType }}</span>
+                          <span *ngIf="bus.facilityType" class="badge bg-info text-dark me-1">{{ bus.facilityType }}</span>
+                          <span *ngIf="bus.templateId" class="badge bg-primary">{{ bus.templateId }}</span>
+                          <span class="badge" [class.bg-success]="bus.status === 'ACTIVE'" [class.bg-danger]="bus.status === 'INACTIVE'">
+                            {{ bus.status || 'ACTIVE' }}
+                          </span>
+                        </div>
+                        <p class="mb-1 text-muted small"><i class="fa-solid fa-id-card me-1"></i> Bus Reg: <strong>{{ bus.busNumber }}</strong></p>
+                        <p class="mb-1 text-muted small"><i class="fa-solid fa-chair me-1"></i> Total Capacity: {{ bus.totalSeats }} Seats</p>
+                        <p class="mb-0 text-primary small"><i class="fa-solid fa-wifi me-1"></i> {{ bus.amenities }}</p>
+                      </div>
+                      <button class="btn btn-outline-success btn-sm rounded-pill" (click)="openAddScheduleModal(bus)">
+                        + Schedule Trip
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div *ngIf="myBuses.length === 0" class="col-12 text-center py-5">
+                  <p class="text-muted">No buses registered yet. Click "Add New Bus" to get started.</p>
+                </div>
+              </div>
             </div>
 
-            <div class="row g-3">
-              <div *ngFor="let bus of myBuses" class="col-md-6">
-                <div class="card p-3 shadow-sm border-start border-4 border-primary">
-                  <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                      <h5 class="fw-bold mb-1">{{ bus.operatorName }}</h5>
-                      <div class="mb-2">
-                        <span class="badge bg-secondary me-1">{{ bus.busType }}</span>
-                        <span *ngIf="bus.facilityType" class="badge bg-info text-dark me-1">{{ bus.facilityType }}</span>
-                        <span *ngIf="bus.templateId" class="badge bg-primary">{{ bus.templateId }}</span>
-                        <span class="badge" [class.bg-success]="bus.status === 'ACTIVE'" [class.bg-danger]="bus.status === 'INACTIVE'">
-                          {{ bus.status || 'ACTIVE' }}
-                        </span>
-                      </div>
-                      <p class="mb-1 text-muted small"><i class="fa-solid fa-id-card me-1"></i> Bus Reg: <strong>{{ bus.busNumber }}</strong></p>
-                      <p class="mb-1 text-muted small"><i class="fa-solid fa-chair me-1"></i> Total Capacity: {{ bus.totalSeats }} Seats</p>
-                      <p class="mb-0 text-primary small"><i class="fa-solid fa-wifi me-1"></i> {{ bus.amenities }}</p>
+            <!-- SUBVIEW 2: Add Bus Wizard -->
+            <div *ngIf="busViewMode === 'wizard'">
+              
+              <!-- Back to My Buses navigation link -->
+              <div class="mb-3">
+                <a class="text-primary fw-semibold text-decoration-none d-inline-flex align-items-center gap-2 cursor-pointer"
+                   (click)="cancelAddBusWizard()"
+                   role="button">
+                  <i class="fa-solid fa-arrow-left"></i> Back to My Buses
+                </a>
+              </div>
+
+              <!-- Page Heading -->
+              <div class="mb-4">
+                <h2 class="fw-bold text-dark mb-1">Register New Bus</h2>
+                <p class="text-muted mb-0">Add a new bus to your fleet. Fill in the details and configure the seat layout.</p>
+              </div>
+
+              <!-- 4-Step Progress Indicator -->
+              <div class="card p-3 mb-4 rounded-4 border-0 shadow-sm add-bus-stepper-card">
+                <div class="d-flex align-items-center justify-content-between px-md-3">
+                  <!-- Step 1: Basic Details -->
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="add-bus-step-circle"
+                         [class.active]="addBusWizardStep === 1"
+                         [class.completed]="addBusWizardStep > 1">
+                      <i *ngIf="addBusWizardStep > 1" class="fa-solid fa-check"></i>
+                      <span *ngIf="addBusWizardStep <= 1">1</span>
                     </div>
-                    <button class="btn btn-outline-success btn-sm rounded-pill" (click)="openAddScheduleModal(bus)">
-                      + Schedule Trip
-                    </button>
+                    <div class="add-bus-step-label fw-bold"
+                         [class.text-primary]="addBusWizardStep === 1"
+                         [class.text-dark]="addBusWizardStep > 1"
+                         [class.text-muted]="addBusWizardStep < 1">
+                      Basic Details
+                    </div>
+                  </div>
+
+                  <div class="add-bus-step-line flex-grow-1 mx-3" [class.completed]="addBusWizardStep > 1"></div>
+
+                  <!-- Step 2: Seat Layout -->
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="add-bus-step-circle"
+                         [class.active]="addBusWizardStep === 2"
+                         [class.completed]="addBusWizardStep > 2"
+                         [class.upcoming]="addBusWizardStep < 2">
+                      <i *ngIf="addBusWizardStep > 2" class="fa-solid fa-check"></i>
+                      <span *ngIf="addBusWizardStep <= 2">2</span>
+                    </div>
+                    <div class="add-bus-step-label"
+                         [class.fw-bold]="addBusWizardStep === 2"
+                         [class.text-primary]="addBusWizardStep === 2"
+                         [class.text-dark]="addBusWizardStep > 2"
+                         [class.text-muted]="addBusWizardStep < 2">
+                      Seat Layout
+                    </div>
+                  </div>
+
+                  <div class="add-bus-step-line flex-grow-1 mx-3" [class.completed]="addBusWizardStep > 2"></div>
+
+                  <!-- Step 3: Documents -->
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="add-bus-step-circle"
+                         [class.active]="addBusWizardStep === 3"
+                         [class.completed]="addBusWizardStep > 3"
+                         [class.upcoming]="addBusWizardStep < 3">
+                      <i *ngIf="addBusWizardStep > 3" class="fa-solid fa-check"></i>
+                      <span *ngIf="addBusWizardStep <= 3">3</span>
+                    </div>
+                    <div class="add-bus-step-label"
+                         [class.fw-bold]="addBusWizardStep === 3"
+                         [class.text-primary]="addBusWizardStep === 3"
+                         [class.text-dark]="addBusWizardStep > 3"
+                         [class.text-muted]="addBusWizardStep < 3">
+                      Documents
+                    </div>
+                  </div>
+
+                  <div class="add-bus-step-line flex-grow-1 mx-3" [class.completed]="addBusWizardStep > 3"></div>
+
+                  <!-- Step 4: Review & Submit -->
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="add-bus-step-circle"
+                         [class.active]="addBusWizardStep === 4"
+                         [class.upcoming]="addBusWizardStep < 4">
+                      <span>4</span>
+                    </div>
+                    <div class="add-bus-step-label"
+                         [class.fw-bold]="addBusWizardStep === 4"
+                         [class.text-primary]="addBusWizardStep === 4"
+                         [class.text-muted]="addBusWizardStep < 4">
+                      Review & Submit
+                    </div>
                   </div>
                 </div>
               </div>
-              <div *ngIf="myBuses.length === 0" class="col-12 text-center py-5">
-                <p class="text-muted">No buses registered yet. Click "Add New Bus" to get started.</p>
+
+              <!-- ==================== STEP 1: BASIC DETAILS ==================== -->
+              <div *ngIf="addBusWizardStep === 1">
+                <div class="row g-4 mb-4">
+                  
+                  <!-- Left Column: Basic Details Form -->
+                  <div class="col-lg-7 col-xl-7">
+                    <div class="card p-4 rounded-4 border-0 shadow-sm h-100 add-bus-form-card">
+                      
+                      <!-- Section Header -->
+                      <div class="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom">
+                        <div class="add-bus-icon-box bg-primary bg-opacity-10 text-primary rounded-3 d-flex align-items-center justify-content-center">
+                          <i class="fa-solid fa-bus"></i>
+                        </div>
+                        <div>
+                          <h5 class="fw-bold text-dark mb-0">Basic Details</h5>
+                          <small class="text-muted">Enter the registration and technical details of the bus.</small>
+                        </div>
+                      </div>
+
+                      <div class="row g-3">
+                        
+                        <!-- 1. Registration Number -->
+                        <div class="col-md-6">
+                          <label class="form-label fw-bold text-dark small mb-1">
+                            Registration Number <span class="text-danger">*</span>
+                          </label>
+                          <div class="position-relative">
+                            <input type="text"
+                                   class="form-control text-uppercase"
+                                   [class.is-invalid]="busFormErrors['busNumber']"
+                                   [class.is-valid]="registrationAvailabilityStatus === 'available'"
+                                   placeholder="KA-01-AB-1234"
+                                   [(ngModel)]="busForm.busNumber"
+                                   (input)="onRegistrationNumberInput()"
+                                   (blur)="onRegistrationNumberBlur()">
+                            <span *ngIf="isCheckingRegistration" class="position-absolute end-0 top-50 translate-middle-y me-3 spinner-border spinner-border-sm text-primary"></span>
+                            <i *ngIf="!isCheckingRegistration && registrationAvailabilityStatus === 'available'" class="fa-solid fa-circle-check position-absolute end-0 top-50 translate-middle-y me-3 text-success"></i>
+                          </div>
+                          <div *ngIf="busFormErrors['busNumber']" class="text-danger small mt-1">
+                            {{ busFormErrors['busNumber'] }}
+                          </div>
+                          <div *ngIf="!busFormErrors['busNumber'] && registrationAvailabilityStatus === 'available'" class="text-success small mt-1">
+                            Registration number is valid and available.
+                          </div>
+                          <div *ngIf="!busFormErrors['busNumber'] && registrationAvailabilityStatus !== 'available'" class="text-muted small mt-1">
+                            Format: KA01AB1234 or KA-01-AB-1234
+                          </div>
+                        </div>
+
+                        <!-- 2. Bus Name (Optional) -->
+                        <div class="col-md-6">
+                          <label class="form-label fw-bold text-dark small mb-1">
+                            Bus Name <span class="text-muted fw-normal">(Optional)</span>
+                          </label>
+                          <input type="text"
+                                 class="form-control"
+                                 [class.is-invalid]="busFormErrors['busName']"
+                                 placeholder="TravelEasy Express"
+                                 [(ngModel)]="busForm.busName"
+                                 maxlength="50"
+                                 (input)="onFieldChange('busName')">
+                          <div *ngIf="busFormErrors['busName']" class="text-danger small mt-1">
+                            {{ busFormErrors['busName'] }}
+                          </div>
+                          <div *ngIf="!busFormErrors['busName']" class="text-muted small mt-1">
+                            A display name to identify this bus
+                          </div>
+                        </div>
+
+                        <!-- 3. Manufacturer -->
+                        <div class="col-md-6">
+                          <label class="form-label fw-bold text-dark small mb-1">
+                            Manufacturer <span class="text-danger">*</span>
+                          </label>
+                          <select class="form-select"
+                                  [class.is-invalid]="busFormErrors['manufacturer']"
+                                  [(ngModel)]="busForm.manufacturer"
+                                  (change)="onFieldChange('manufacturer')">
+                            <option value="" disabled>Select Manufacturer</option>
+                            <option *ngFor="let m of manufacturerCatalog" [value]="m">{{ m }}</option>
+                          </select>
+                          <div *ngIf="busFormErrors['manufacturer']" class="text-danger small mt-1">
+                            {{ busFormErrors['manufacturer'] }}
+                          </div>
+                        </div>
+
+                        <!-- 4. Model -->
+                        <div class="col-md-6">
+                          <label class="form-label fw-bold text-dark small mb-1">
+                            Model <span class="text-danger">*</span>
+                          </label>
+                          <input type="text"
+                                 class="form-control"
+                                 [class.is-invalid]="busFormErrors['model']"
+                                 placeholder="Volvo 9600"
+                                 [(ngModel)]="busForm.model"
+                                 maxlength="60"
+                                 (input)="onFieldChange('model')">
+                          <div *ngIf="busFormErrors['model']" class="text-danger small mt-1">
+                            {{ busFormErrors['model'] }}
+                          </div>
+                          <div *ngIf="!busFormErrors['model']" class="text-muted small mt-1">
+                            Enter the model name (e.g., 9600, 9400, etc.)
+                          </div>
+                        </div>
+
+                        <!-- 5. Bus Type -->
+                        <div class="col-md-6">
+                          <label class="form-label fw-bold text-dark small mb-1">
+                            Bus Type <span class="text-danger">*</span>
+                          </label>
+                          <select class="form-select"
+                                  [class.is-invalid]="busFormErrors['busType']"
+                                  [(ngModel)]="busForm.busType"
+                                  (change)="onFieldChange('busType')">
+                            <option value="" disabled>Select Bus Type</option>
+                            <option *ngFor="let bt of busTypeCatalog" [value]="bt">{{ bt }}</option>
+                          </select>
+                          <div *ngIf="busFormErrors['busType']" class="text-danger small mt-1">
+                            {{ busFormErrors['busType'] }}
+                          </div>
+                        </div>
+
+                        <!-- 6. Fuel Type -->
+                        <div class="col-md-6">
+                          <label class="form-label fw-bold text-dark small mb-1">
+                            Fuel Type <span class="text-danger">*</span>
+                          </label>
+                          <select class="form-select"
+                                  [class.is-invalid]="busFormErrors['fuelType']"
+                                  [(ngModel)]="busForm.fuelType"
+                                  (change)="onFieldChange('fuelType')">
+                            <option value="" disabled>Select Fuel Type</option>
+                            <option *ngFor="let ft of fuelTypeCatalog" [value]="ft">{{ ft }}</option>
+                          </select>
+                          <div *ngIf="busFormErrors['fuelType']" class="text-danger small mt-1">
+                            {{ busFormErrors['fuelType'] }}
+                          </div>
+                        </div>
+
+                        <!-- 7. Chassis Number -->
+                        <div class="col-md-6">
+                          <label class="form-label fw-bold text-dark small mb-1">
+                            Chassis Number <span class="text-danger">*</span>
+                          </label>
+                          <input type="text"
+                                 class="form-control text-uppercase"
+                                 [class.is-invalid]="busFormErrors['chassisNumber']"
+                                 placeholder="YV3T2EU527N1234567"
+                                 [(ngModel)]="busForm.chassisNumber"
+                                 maxlength="17"
+                                 (input)="onChassisInput()"
+                                 (blur)="onChassisBlur()">
+                          <div *ngIf="busFormErrors['chassisNumber']" class="text-danger small mt-1">
+                            {{ busFormErrors['chassisNumber'] }}
+                          </div>
+                          <div *ngIf="!busFormErrors['chassisNumber']" class="text-muted small mt-1">
+                            17 characters (exclude I, O, Q)
+                          </div>
+                        </div>
+
+                        <!-- 8. Year of Manufacturing -->
+                        <div class="col-md-6">
+                          <label class="form-label fw-bold text-dark small mb-1">
+                            Year of Manufacturing <span class="text-danger">*</span>
+                          </label>
+                          <div class="input-group">
+                            <input type="number"
+                                   class="form-control"
+                                   [class.is-invalid]="busFormErrors['yearOfManufacturing']"
+                                   placeholder="2022"
+                                   [(ngModel)]="busForm.yearOfManufacturing"
+                                   min="1980"
+                                   [max]="currentCalendarYear"
+                                   (input)="onFieldChange('yearOfManufacturing')">
+                            <span class="input-group-text bg-white border-start-0 text-muted">
+                              <i class="fa-solid fa-calendar"></i>
+                            </span>
+                          </div>
+                          <div *ngIf="busFormErrors['yearOfManufacturing']" class="text-danger small mt-1">
+                            {{ busFormErrors['yearOfManufacturing'] }}
+                          </div>
+                        </div>
+
+                        <!-- 9. Engine Number -->
+                        <div class="col-md-6">
+                          <label class="form-label fw-bold text-dark small mb-1">
+                            Engine Number <span class="text-danger">*</span>
+                          </label>
+                          <input type="text"
+                                 class="form-control text-uppercase"
+                                 [class.is-invalid]="busFormErrors['engineNumber']"
+                                 placeholder="D13K520123456"
+                                 [(ngModel)]="busForm.engineNumber"
+                                 maxlength="25"
+                                 (input)="onEngineInput()"
+                                 (blur)="onEngineBlur()">
+                          <div *ngIf="busFormErrors['engineNumber']" class="text-danger small mt-1">
+                            {{ busFormErrors['engineNumber'] }}
+                          </div>
+                          <div *ngIf="!busFormErrors['engineNumber']" class="text-muted small mt-1">
+                            5–25 characters (letters, numbers, / and - allowed)
+                          </div>
+                        </div>
+
+                        <!-- 10. Emission Standard -->
+                        <div class="col-md-6">
+                          <label class="form-label fw-bold text-dark small mb-1">
+                            Emission Standard <span class="text-danger">*</span>
+                          </label>
+                          <select class="form-select"
+                                  [class.is-invalid]="busFormErrors['emissionStandard']"
+                                  [(ngModel)]="busForm.emissionStandard"
+                                  (change)="onFieldChange('emissionStandard')">
+                            <option value="" disabled>Select Emission Standard</option>
+                            <option *ngFor="let es of emissionStandardCatalog" [value]="es">{{ es }}</option>
+                          </select>
+                          <div *ngIf="busFormErrors['emissionStandard']" class="text-danger small mt-1">
+                            {{ busFormErrors['emissionStandard'] }}
+                          </div>
+                        </div>
+
+                        <!-- 11. Color -->
+                        <div class="col-md-4">
+                          <label class="form-label fw-bold text-dark small mb-1">
+                            Color <span class="text-danger">*</span>
+                          </label>
+                          <select class="form-select"
+                                  [class.is-invalid]="busFormErrors['color']"
+                                  [(ngModel)]="busForm.color"
+                                  (change)="onFieldChange('color')">
+                            <option value="" disabled>Select Color</option>
+                            <option *ngFor="let c of colorCatalog" [value]="c">{{ c }}</option>
+                          </select>
+                          <div *ngIf="busFormErrors['color']" class="text-danger small mt-1">
+                            {{ busFormErrors['color'] }}
+                          </div>
+                        </div>
+
+                        <!-- 12. Bus Category -->
+                        <div class="col-md-4">
+                          <label class="form-label fw-bold text-dark small mb-1">
+                            Bus Category <span class="text-danger">*</span>
+                          </label>
+                          <select class="form-select"
+                                  [class.is-invalid]="busFormErrors['busCategory']"
+                                  [(ngModel)]="busForm.busCategory"
+                                  (change)="onFieldChange('busCategory')">
+                            <option value="" disabled>Select Bus Category</option>
+                            <option *ngFor="let cat of busCategoryCatalog" [value]="cat">{{ cat }}</option>
+                          </select>
+                          <div *ngIf="busFormErrors['busCategory']" class="text-danger small mt-1">
+                            {{ busFormErrors['busCategory'] }}
+                          </div>
+                        </div>
+
+                        <!-- 13. Air Conditioning -->
+                        <div class="col-md-4">
+                          <label class="form-label fw-bold text-dark small mb-1">
+                            Air Conditioning <span class="text-danger">*</span>
+                          </label>
+                          <select class="form-select"
+                                  [class.is-invalid]="busFormErrors['facilityType']"
+                                  [(ngModel)]="busForm.facilityType"
+                                  (change)="onFieldChange('facilityType')">
+                            <option value="AC">Yes (AC)</option>
+                            <option value="NON_AC">No (Non-AC)</option>
+                          </select>
+                          <div *ngIf="busFormErrors['facilityType']" class="text-danger small mt-1">
+                            {{ busFormErrors['facilityType'] }}
+                          </div>
+                        </div>
+
+                        <!-- 14. Amenities (Optional) -->
+                        <div class="col-12 mt-4">
+                          <label class="form-label fw-bold text-dark small mb-1">
+                            Amenities <span class="text-muted fw-normal">(Optional)</span>
+                          </label>
+                          <div class="text-muted small mb-2">
+                            Add amenities available in this bus. You can add multiple amenities.
+                          </div>
+
+                          <div class="input-group mb-2">
+                            <span class="input-group-text bg-white border-end-0 text-muted">
+                              <i class="fa-solid fa-magnifying-glass"></i>
+                            </span>
+                            <select class="form-select border-start-0"
+                                    [(ngModel)]="selectedAmenityCandidate">
+                              <option value="" disabled selected>Search and select amenity (e.g., WiFi, Charging Point, ...)</option>
+                              <optgroup *ngFor="let group of groupedAmenities" [label]="group.category">
+                                <option *ngFor="let item of group.items" [value]="item">{{ item }}</option>
+                              </optgroup>
+                            </select>
+                            <button type="button"
+                                    class="btn btn-primary px-3 fw-bold"
+                                    (click)="addAmenity()">
+                              + Add
+                            </button>
+                          </div>
+
+                          <!-- Selected Amenity Chips -->
+                          <div class="d-flex flex-wrap gap-2 mt-2">
+                            <span *ngFor="let a of busForm.amenities"
+                                  class="add-bus-amenity-chip">
+                              <span>{{ a }}</span>
+                              <i class="fa-solid fa-xmark chip-remove-btn"
+                                 (click)="removeAmenity(a)"
+                                 title="Remove amenity"></i>
+                            </span>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Right Column: Bus Images -->
+                  <div class="col-lg-5 col-xl-5">
+                    <div class="card p-4 rounded-4 border-0 shadow-sm h-100 add-bus-images-card">
+                      
+                      <!-- Section Header -->
+                      <div class="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom">
+                        <div class="add-bus-icon-box bg-primary bg-opacity-10 text-primary rounded-3 d-flex align-items-center justify-content-center">
+                          <i class="fa-solid fa-image"></i>
+                        </div>
+                        <div>
+                          <h5 class="fw-bold text-dark mb-0">
+                            Bus Images <span class="text-danger small fw-semibold">(Required)</span>
+                          </h5>
+                          <small class="text-muted">Upload one exterior image and one interior image of this bus.</small>
+                        </div>
+                      </div>
+
+                      <!-- Two Images Side-by-Side (Row) -->
+                      <div class="row g-3">
+                        
+                        <!-- Image 1: Exterior Image -->
+                        <div class="col-sm-6">
+                          <label class="form-label fw-bold text-dark small mb-2">
+                            Exterior Image <span class="text-danger">*</span>
+                          </label>
+
+                          <!-- Image Preview Box -->
+                          <div *ngIf="busForm.exteriorImagePreview" class="add-bus-preview-box mb-2">
+                            <img [src]="busForm.exteriorImagePreview" alt="Exterior Image" class="w-100 h-100 object-fit-cover rounded-3">
+                            <button type="button"
+                                    class="add-bus-delete-img-btn"
+                                    (click)="removeBusImage('exterior')"
+                                    title="Remove exterior image">
+                              <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                            <div *ngIf="isUploadingImage['exterior']" class="position-absolute top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex align-items-center justify-content-center rounded-3">
+                              <div class="spinner-border spinner-border-sm text-white" role="status"></div>
+                            </div>
+                          </div>
+
+                          <!-- Dropzone if no image -->
+                          <div *ngIf="!busForm.exteriorImagePreview"
+                               class="add-bus-dropzone mb-2"
+                               (click)="triggerFileInput('exterior')">
+                            <i class="fa-solid fa-cloud-arrow-up text-primary fs-3 mb-2"></i>
+                            <div class="fw-bold text-dark small">Upload Exterior</div>
+                            <small class="text-muted" style="font-size: 11px;">JPG, PNG, WebP</small>
+                            <small class="text-muted" style="font-size: 11px;">Max 1.5 MB</small>
+                            <div *ngIf="isUploadingImage['exterior']" class="mt-2 spinner-border spinner-border-sm text-primary"></div>
+                          </div>
+
+                          <!-- Replace Button -->
+                          <button type="button"
+                                  class="add-bus-replace-btn"
+                                  (click)="triggerFileInput('exterior')">
+                            <div class="d-flex align-items-center justify-content-center gap-1 fw-bold small">
+                              <i class="fa-solid fa-arrow-up-from-bracket"></i> Replace Exterior Image
+                            </div>
+                            <small class="text-muted d-block" style="font-size: 10.5px;">JPG, JPEG, PNG, WebP &bull; Max size: 1.5 MB</small>
+                          </button>
+
+                          <input id="exteriorImageInput"
+                                 type="file"
+                                 accept="image/jpeg,image/png,image/webp"
+                                 class="d-none"
+                                 (change)="onFileSelected($event, 'exterior')">
+
+                          <div *ngIf="uploadImageError['exterior']" class="text-danger small mt-1">
+                            {{ uploadImageError['exterior'] }}
+                          </div>
+                          <div *ngIf="busFormErrors['exteriorImage']" class="text-danger small mt-1">
+                            {{ busFormErrors['exteriorImage'] }}
+                          </div>
+                        </div>
+
+                        <!-- Image 2: Interior Image -->
+                        <div class="col-sm-6">
+                          <label class="form-label fw-bold text-dark small mb-2">
+                            Interior Image <span class="text-danger">*</span>
+                          </label>
+
+                          <!-- Image Preview Box -->
+                          <div *ngIf="busForm.interiorImagePreview" class="add-bus-preview-box mb-2">
+                            <img [src]="busForm.interiorImagePreview" alt="Interior Image" class="w-100 h-100 object-fit-cover rounded-3">
+                            <button type="button"
+                                    class="add-bus-delete-img-btn"
+                                    (click)="removeBusImage('interior')"
+                                    title="Remove interior image">
+                              <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                            <div *ngIf="isUploadingImage['interior']" class="position-absolute top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-flex align-items-center justify-content-center rounded-3">
+                              <div class="spinner-border spinner-border-sm text-white" role="status"></div>
+                            </div>
+                          </div>
+
+                          <!-- Dropzone if no image -->
+                          <div *ngIf="!busForm.interiorImagePreview"
+                               class="add-bus-dropzone mb-2"
+                               (click)="triggerFileInput('interior')">
+                            <i class="fa-solid fa-cloud-arrow-up text-primary fs-3 mb-2"></i>
+                            <div class="fw-bold text-dark small">Upload Interior</div>
+                            <small class="text-muted" style="font-size: 11px;">JPG, PNG, WebP</small>
+                            <small class="text-muted" style="font-size: 11px;">Max 1.5 MB</small>
+                            <div *ngIf="isUploadingImage['interior']" class="mt-2 spinner-border spinner-border-sm text-primary"></div>
+                          </div>
+
+                          <!-- Replace Button -->
+                          <button type="button"
+                                  class="add-bus-replace-btn"
+                                  (click)="triggerFileInput('interior')">
+                            <div class="d-flex align-items-center justify-content-center gap-1 fw-bold small">
+                              <i class="fa-solid fa-arrow-up-from-bracket"></i> Replace Interior Image
+                            </div>
+                            <small class="text-muted d-block" style="font-size: 10.5px;">JPG, JPEG, PNG, WebP &bull; Max size: 1.5 MB</small>
+                          </button>
+
+                          <input id="interiorImageInput"
+                                 type="file"
+                                 accept="image/jpeg,image/png,image/webp"
+                                 class="d-none"
+                                 (change)="onFileSelected($event, 'interior')">
+
+                          <div *ngIf="uploadImageError['interior']" class="text-danger small mt-1">
+                            {{ uploadImageError['interior'] }}
+                          </div>
+                          <div *ngIf="busFormErrors['interiorImage']" class="text-danger small mt-1">
+                            {{ busFormErrors['interiorImage'] }}
+                          </div>
+                        </div>
+
+                      </div>
+
+                      <!-- Image Guidelines Alert Box -->
+                      <div class="add-bus-guidelines-box mt-4 p-3 rounded-3 d-flex align-items-start gap-3">
+                        <div class="text-primary fs-5 mt-1">
+                          <i class="fa-solid fa-circle-info"></i>
+                        </div>
+                        <div>
+                          <div class="fw-bold text-dark small mb-1">Image Guidelines</div>
+                          <ul class="mb-0 ps-3 small text-muted" style="line-height: 1.6;">
+                            <li>Both exterior and interior images are required.</li>
+                            <li>Supported formats: JPG, JPEG, PNG, WebP.</li>
+                            <li>Maximum file size: less than 1.5 MB per image.</li>
+                            <li>Upload clear and well-lit images.</li>
+                          </ul>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+
+                </div>
+
+                <!-- Bottom Navigation Bar -->
+                <div class="d-flex justify-content-between align-items-center pt-3 mt-4 border-top">
+                  <button type="button"
+                          class="btn btn-outline-secondary px-4 py-2 rounded-3 fw-bold"
+                          (click)="cancelAddBusWizard()">
+                    Cancel
+                  </button>
+                  <button type="button"
+                          class="btn btn-primary px-4 py-2 rounded-3 fw-bold d-flex align-items-center gap-2 shadow-sm"
+                          (click)="nextStepToSeatLayout()">
+                    <span>Next: Seat Layout</span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                  </button>
+                </div>
               </div>
+
+              <!-- ==================== STEP 2: SEAT LAYOUT PLACEHOLDER ==================== -->
+              <div *ngIf="addBusWizardStep === 2" class="card p-5 text-center rounded-4 border-0 shadow-sm">
+                <div class="mb-3">
+                  <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-inline-flex align-items-center justify-content-center" style="width: 72px; height: 72px; font-size: 32px;">
+                    <i class="fa-solid fa-couch"></i>
+                  </div>
+                </div>
+                <h4 class="fw-bold text-dark mb-2">Step 2: Seat Layout Configuration</h4>
+                <p class="text-muted mx-auto" style="max-width: 580px;">
+                  Basic details for <strong>{{ busForm.busNumber }}</strong> ({{ busForm.manufacturer }} {{ busForm.model }}) have been validated and saved in the wizard session. Physical seat template assignment will be configured in this step.
+                </p>
+                <div class="d-flex justify-content-center gap-3 mt-4">
+                  <button type="button" class="btn btn-outline-primary px-4 py-2 rounded-3 fw-bold" (click)="addBusWizardStep = 1">
+                    <i class="fa-solid fa-arrow-left me-1"></i> Back to Basic Details
+                  </button>
+                </div>
+              </div>
+
+              <!-- Cancel Add Bus Confirmation Modal -->
+              <div *ngIf="showCancelAddBusModal" class="modal fade show d-block bg-dark bg-opacity-50" tabindex="-1">
+                <div class="modal-dialog modal-dialog-centered">
+                  <div class="modal-content rounded-4 border-0 shadow">
+                    <div class="modal-header border-bottom px-4 py-3">
+                      <h5 class="modal-title fw-bold text-dark d-flex align-items-center gap-2">
+                        <i class="fa-solid fa-triangle-exclamation text-warning"></i>
+                        <span>Discard Bus Details?</span>
+                      </h5>
+                      <button type="button" class="btn-close" (click)="showCancelAddBusModal = false"></button>
+                    </div>
+                    <div class="modal-body p-4">
+                      <p class="text-muted mb-0">
+                        You have unsaved changes in this bus registration form. If you leave now, all entered details and uploaded images will be discarded. Are you sure you want to exit?
+                      </p>
+                    </div>
+                    <div class="modal-footer border-top px-4 py-3 bg-light rounded-bottom-4">
+                      <button type="button" class="btn btn-outline-secondary px-4 py-2 rounded-3 fw-semibold" (click)="showCancelAddBusModal = false">
+                        Continue Editing
+                      </button>
+                      <button type="button" class="btn btn-danger px-4 py-2 rounded-3 fw-bold" (click)="confirmCancelAddBusWizard()">
+                        Discard & Exit
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </div>
+
           </div>
 
           <!-- ==================== VIEW 3: REUSABLE ROUTES ==================== -->
@@ -522,10 +1181,10 @@ interface TrendDay {
             </div>
 
             <!-- 4 Summary Cards -->
-            <div class="row g-3 mb-4">
+            <div class="row g-3 g-xl-4 mb-4">
               <!-- Card 1: Total Routes -->
               <div class="col-xl-3 col-sm-6">
-                <div class="metric-card">
+                <div class="metric-card h-100">
                   <div class="metric-icon-box" style="background-color: #e0f2fe; color: #0284c7;">
                     <i class="fa-solid fa-route"></i>
                   </div>
@@ -538,7 +1197,7 @@ interface TrendDay {
 
               <!-- Card 2: Active Routes -->
               <div class="col-xl-3 col-sm-6">
-                <div class="metric-card">
+                <div class="metric-card h-100">
                   <div class="metric-icon-box" style="background-color: #dcfce7; color: #16a34a;">
                     <i class="fa-solid fa-circle"></i>
                   </div>
@@ -551,7 +1210,7 @@ interface TrendDay {
 
               <!-- Card 3: Draft Routes -->
               <div class="col-xl-3 col-sm-6">
-                <div class="metric-card">
+                <div class="metric-card h-100">
                   <div class="metric-icon-box" style="background-color: #fef3c7; color: #d97706;">
                     <i class="fa-solid fa-clock"></i>
                   </div>
@@ -564,7 +1223,7 @@ interface TrendDay {
 
               <!-- Card 4: Inactive Routes -->
               <div class="col-xl-3 col-sm-6">
-                <div class="metric-card">
+                <div class="metric-card h-100">
                   <div class="metric-icon-box" style="background-color: #f1f5f9; color: #64748b;">
                     <i class="fa-solid fa-circle-pause"></i>
                   </div>
@@ -2256,57 +2915,2149 @@ interface TrendDay {
             </div>
           </div>
 
-          <!-- ==================== VIEW 4: SCHEDULES ==================== -->
+          <!-- ==================== VIEW 4: SCHEDULES DASHBOARD (PHASE 6.2A & 6.2B) ==================== -->
           <div *ngIf="activeNav === 'schedules'">
-            <div class="d-flex justify-content-between align-items-center mb-4">
+            <!-- List View (Phase 6.2A) -->
+            <div *ngIf="scheduleViewMode === 'list'" class="schedules-dashboard-container">
+            <!-- Header Section -->
+            <div class="schedules-dashboard-header d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
               <div>
-                <h4 class="fw-bold text-dark mb-1"><i class="fa-solid fa-calendar-days text-primary me-2"></i>Trip Schedules</h4>
-                <p class="text-muted small mb-0">Active and upcoming departures published for passenger booking</p>
+                <h2 class="schedules-title mb-1">Schedules</h2>
+                <p class="schedules-subtitle mb-0">Create, manage and monitor your bus schedules</p>
               </div>
-              <button class="btn btn-success rounded-pill fw-bold" (click)="openAddScheduleModal()">
-                <i class="fa-solid fa-plus me-1"></i> + Schedule New Trip
-              </button>
+              <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-export d-flex align-items-center gap-2" (click)="exportSchedulesToCsv()">
+                  <i class="fa-solid fa-download"></i>
+                  <span>Export</span>
+                </button>
+                <button class="btn btn-create-schedule d-flex align-items-center gap-2" (click)="handleCreateScheduleClick()">
+                  <i class="fa-solid fa-plus"></i>
+                  <span>Create Schedule</span>
+                </button>
+              </div>
             </div>
 
-            <div class="table-responsive bg-white rounded shadow-sm">
-              <table class="table table-hover align-middle mb-0">
-                <thead class="table-dark">
-                  <tr>
-                    <th>Sched ID</th>
-                    <th>Route / Journey</th>
-                    <th>Bus Number</th>
-                    <th>Travel Date</th>
-                    <th>Departure - Arrival</th>
-                    <th>Base Fare</th>
-                    <th>Available Seats</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr *ngFor="let s of mySchedules">
-                    <td><strong>#{{ s.id }}</strong></td>
-                    <td>
-                      <span *ngIf="s.routeId" class="badge bg-info text-dark me-1">Route #{{ s.routeId }}</span>
-                      <strong>{{ s.origin }}</strong> <i class="fa-solid fa-arrow-right mx-1 text-muted small"></i> <strong>{{ s.destination }}</strong>
-                    </td>
-                    <td><span class="badge bg-secondary">{{ s.busNumber }}</span></td>
-                    <td>{{ s.travelDate }}</td>
-                    <td>{{ s.departureTime }} - {{ s.arrivalTime }}</td>
-                    <td class="fw-bold text-success">₹{{ s.fare }}</td>
-                    <td>{{ s.availableSeats }}</td>
-                    <td>
-                      <span class="badge" [class.bg-success]="s.status === 'SCHEDULED'" [class.bg-danger]="s.status === 'CANCELLED'">
-                        {{ s.status }}
+            <!-- 5 Metric Summary Cards Row -->
+            <div class="row g-3 mb-4 schedules-metrics-row">
+              <!-- Card 1: Total Schedules -->
+              <div class="col-12 col-sm-6 col-xl">
+                <div class="schedules-stat-card"
+                     [class.active-filter]="selectedScheduleStatusFilter === 'ALL'"
+                     (click)="setScheduleStatusFilter('ALL')"
+                     role="button">
+                  <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="stat-label">Total Schedules</span>
+                    <div class="stat-icon-wrapper total-icon">
+                      <i class="fa-solid fa-calendar"></i>
+                    </div>
+                  </div>
+                  <div class="stat-value mb-2">{{ scheduleMetrics.total }}</div>
+                  <div class="stat-trend text-success d-flex align-items-center gap-1">
+                    <i class="fa-solid fa-arrow-trend-up"></i>
+                    <span>+12% vs last 30 days</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 2: Upcoming -->
+              <div class="col-12 col-sm-6 col-xl">
+                <div class="schedules-stat-card"
+                     [class.active-filter]="selectedScheduleStatusFilter === 'UPCOMING'"
+                     (click)="setScheduleStatusFilter('UPCOMING')"
+                     role="button">
+                  <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="stat-label">Upcoming</span>
+                    <div class="stat-icon-wrapper upcoming-icon">
+                      <i class="fa-solid fa-circle-play"></i>
+                    </div>
+                  </div>
+                  <div class="stat-value mb-2">{{ scheduleMetrics.upcoming }}</div>
+                  <div class="stat-progress-section">
+                    <div class="stat-percentage text-muted">{{ scheduleMetrics.upcomingPct }}%</div>
+                    <div class="progress stat-progress-bar">
+                      <div class="progress-bar bg-success" [style.width.%]="scheduleMetrics.upcomingPct"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 3: Ongoing -->
+              <div class="col-12 col-sm-6 col-xl">
+                <div class="schedules-stat-card"
+                     [class.active-filter]="selectedScheduleStatusFilter === 'ONGOING'"
+                     (click)="setScheduleStatusFilter('ONGOING')"
+                     role="button">
+                  <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="stat-label">Ongoing</span>
+                    <div class="stat-icon-wrapper ongoing-icon">
+                      <i class="fa-solid fa-bus"></i>
+                    </div>
+                  </div>
+                  <div class="stat-value mb-2">{{ scheduleMetrics.ongoing }}</div>
+                  <div class="stat-progress-section">
+                    <div class="stat-percentage text-muted">{{ scheduleMetrics.ongoingPct }}%</div>
+                    <div class="progress stat-progress-bar">
+                      <div class="progress-bar bg-primary" [style.width.%]="scheduleMetrics.ongoingPct"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 4: Completed Today -->
+              <div class="col-12 col-sm-6 col-xl">
+                <div class="schedules-stat-card"
+                     [class.active-filter]="selectedScheduleStatusFilter === 'COMPLETED'"
+                     (click)="setScheduleStatusFilter('COMPLETED')"
+                     role="button">
+                  <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="stat-label">Completed Today</span>
+                    <div class="stat-icon-wrapper completed-icon">
+                      <i class="fa-solid fa-clock-rotate-left"></i>
+                    </div>
+                  </div>
+                  <div class="stat-value mb-2">{{ scheduleMetrics.completed }}</div>
+                  <div class="stat-progress-section">
+                    <div class="stat-percentage text-muted">{{ scheduleMetrics.completedPct }}%</div>
+                    <div class="progress stat-progress-bar">
+                      <div class="progress-bar bg-warning" [style.width.%]="scheduleMetrics.completedPct"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 5: Cancelled Today -->
+              <div class="col-12 col-sm-6 col-xl">
+                <div class="schedules-stat-card"
+                     [class.active-filter]="selectedScheduleStatusFilter === 'CANCELLED'"
+                     (click)="setScheduleStatusFilter('CANCELLED')"
+                     role="button">
+                  <div class="d-flex justify-content-between align-items-start mb-2">
+                    <span class="stat-label">Cancelled Today</span>
+                    <div class="stat-icon-wrapper cancelled-icon">
+                      <i class="fa-solid fa-ban"></i>
+                    </div>
+                  </div>
+                  <div class="stat-value mb-2">{{ scheduleMetrics.cancelled }}</div>
+                  <div class="stat-progress-section">
+                    <div class="stat-percentage text-muted">{{ scheduleMetrics.cancelledPct }}%</div>
+                    <div class="progress stat-progress-bar">
+                      <div class="progress-bar bg-danger" [style.width.%]="scheduleMetrics.cancelledPct"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Filter Card -->
+            <div class="card border-0 shadow-sm rounded-3 mb-4 schedules-filter-card">
+              <div class="card-body p-3">
+                <div class="row g-3 align-items-end">
+                  <!-- Search Schedule Field -->
+                  <div class="col-12 col-md-4">
+                    <label class="form-label small fw-semibold text-secondary mb-1">Search Schedule</label>
+                    <div class="input-group search-input-group">
+                      <span class="input-group-text bg-transparent border-end-0 text-muted">
+                        <i class="fa-solid fa-magnifying-glass"></i>
                       </span>
-                    </td>
-                  </tr>
-                  <tr *ngIf="mySchedules.length === 0">
-                    <td colspan="8" class="text-center py-4 text-muted">No trip schedules published yet.</td>
-                  </tr>
-                </tbody>
-              </table>
+                      <input type="text"
+                             class="form-control border-start-0 ps-0"
+                             placeholder="Search route, bus number, or schedule ID..."
+                             aria-label="Search Schedule"
+                             [(ngModel)]="schedulesSearchTerm"
+                             (input)="onScheduleFilterChange()">
+                      <button *ngIf="schedulesSearchTerm"
+                              class="btn btn-outline-secondary border-start-0 border-end"
+                              type="button"
+                              (click)="schedulesSearchTerm = ''; onScheduleFilterChange()"
+                              title="Clear search">
+                        <i class="fa-solid fa-xmark"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Route Filter Field -->
+                  <div class="col-12 col-sm-6 col-md-2">
+                    <label class="form-label small fw-semibold text-secondary mb-1">Route</label>
+                    <select class="form-select"
+                            aria-label="Select Route"
+                            [(ngModel)]="selectedScheduleRouteFilter"
+                            (change)="onScheduleFilterChange()">
+                      <option value="ALL">All Routes</option>
+                      <option *ngFor="let opt of scheduleRouteOptions" [value]="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </div>
+
+                  <!-- Bus Filter Field -->
+                  <div class="col-12 col-sm-6 col-md-2">
+                    <label class="form-label small fw-semibold text-secondary mb-1">Assigned Bus</label>
+                    <select class="form-select"
+                            aria-label="Select Assigned Bus"
+                            [(ngModel)]="selectedScheduleBusFilter"
+                            (change)="onScheduleFilterChange()">
+                      <option value="ALL">All Buses</option>
+                      <option *ngFor="let opt of scheduleBusOptions" [value]="opt.value">{{ opt.label }}</option>
+                    </select>
+                  </div>
+
+                  <!-- Status Filter Field -->
+                  <div class="col-12 col-sm-6 col-md-2">
+                    <label class="form-label small fw-semibold text-secondary mb-1">Trip Status</label>
+                    <select class="form-select"
+                            aria-label="Select Trip Status"
+                            [(ngModel)]="selectedScheduleStatusFilter"
+                            (change)="onScheduleFilterChange()">
+                      <option value="ALL">All Statuses</option>
+                      <option value="UPCOMING">Upcoming</option>
+                      <option value="ONGOING">Ongoing</option>
+                      <option value="COMPLETED">Completed</option>
+                      <option value="CANCELLED">Cancelled</option>
+                    </select>
+                  </div>
+
+                  <!-- Travel Date Filter Field -->
+                  <div class="col-12 col-sm-6 col-md-2">
+                    <label class="form-label small fw-semibold text-secondary mb-1">Travel Date</label>
+                    <div class="input-group">
+                      <input type="date"
+                             class="form-control"
+                             aria-label="Select Travel Date"
+                             [(ngModel)]="selectedScheduleDateFilter"
+                             (change)="onScheduleFilterChange()">
+                      <button *ngIf="selectedScheduleDateFilter"
+                              class="btn btn-outline-secondary"
+                              type="button"
+                              (click)="selectedScheduleDateFilter = ''; onScheduleFilterChange()"
+                              title="Clear date">
+                        <i class="fa-solid fa-xmark"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Active Filter Tags (if any active) -->
+                <div *ngIf="hasActiveScheduleFilters()" class="d-flex align-items-center justify-content-between pt-2 mt-3 border-top">
+                  <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <small class="text-muted fw-semibold">Active filters:</small>
+                    <span *ngIf="schedulesSearchTerm" class="badge bg-light text-dark border">
+                      Search: "{{ schedulesSearchTerm }}"
+                      <i class="fa-solid fa-xmark ms-1 cursor-pointer" (click)="schedulesSearchTerm = ''; onScheduleFilterChange()"></i>
+                    </span>
+                    <span *ngIf="selectedScheduleRouteFilter !== 'ALL'" class="badge bg-light text-dark border">
+                      Route: {{ getSelectedRouteFilterLabel() }}
+                      <i class="fa-solid fa-xmark ms-1 cursor-pointer" (click)="selectedScheduleRouteFilter = 'ALL'; onScheduleFilterChange()"></i>
+                    </span>
+                    <span *ngIf="selectedScheduleBusFilter !== 'ALL'" class="badge bg-light text-dark border">
+                      Bus: {{ getSelectedBusFilterLabel() }}
+                      <i class="fa-solid fa-xmark ms-1 cursor-pointer" (click)="selectedScheduleBusFilter = 'ALL'; onScheduleFilterChange()"></i>
+                    </span>
+                    <span *ngIf="selectedScheduleStatusFilter !== 'ALL'" class="badge bg-light text-dark border">
+                      Status: {{ selectedScheduleStatusFilter | titlecase }}
+                      <i class="fa-solid fa-xmark ms-1 cursor-pointer" (click)="selectedScheduleStatusFilter = 'ALL'; onScheduleFilterChange()"></i>
+                    </span>
+                    <span *ngIf="selectedScheduleDateFilter" class="badge bg-light text-dark border">
+                      Travel Date: {{ formatScheduleDate(selectedScheduleDateFilter) }}
+                      <i class="fa-solid fa-xmark ms-1 cursor-pointer" (click)="selectedScheduleDateFilter = ''; onScheduleFilterChange()"></i>
+                    </span>
+                  </div>
+                  <button class="btn btn-link btn-sm text-decoration-none text-danger p-0" (click)="clearScheduleFilters()">
+                    <i class="fa-solid fa-arrow-rotate-left me-1"></i>Reset all
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Table Subheader Controls -->
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+              <div class="text-muted small fw-medium">
+                Showing <span class="text-dark fw-semibold">{{ schedulesPaginationStart }}–{{ schedulesPaginationEnd }}</span> of <span class="text-dark fw-semibold">{{ filteredSchedules.length }}</span> schedules
+              </div>
+              <div class="d-flex align-items-center gap-3">
+                <div class="d-flex align-items-center gap-2">
+                  <label class="small text-muted mb-0 text-nowrap">Sort:</label>
+                  <select class="form-select form-select-sm" [(ngModel)]="schedulesSortBy" style="width: auto;">
+                    <option value="DEP_EARLIEST">Departure (Earliest)</option>
+                    <option value="DEP_LATEST">Departure (Latest)</option>
+                    <option value="DATE_NEWEST">Travel Date (Newest)</option>
+                    <option value="FARE_ASC">Fare (Low to High)</option>
+                    <option value="FARE_DESC">Fare (High to Low)</option>
+                    <option value="SEATS_DESC">Available Seats</option>
+                  </select>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                  <label class="small text-muted mb-0 text-nowrap">Show:</label>
+                  <select class="form-select form-select-sm" [(ngModel)]="schedulesPageSize" (change)="schedulesCurrentPage = 1" style="width: auto;">
+                    <option [ngValue]="10">10 per page</option>
+                    <option [ngValue]="25">25 per page</option>
+                    <option [ngValue]="50">50 per page</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Schedules Table Card -->
+            <div class="card border-0 shadow-sm rounded-3 overflow-hidden mb-4">
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 schedules-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th style="min-width: 110px;" class="ps-3">SCHEDULE ID</th>
+                      <th style="min-width: 200px;">ROUTE</th>
+                      <th style="min-width: 170px;">BUS</th>
+                      <th style="min-width: 140px;">DEPARTURE</th>
+                      <th style="min-width: 140px;">ARRIVAL</th>
+                      <th style="min-width: 90px;">DURATION</th>
+                      <th style="min-width: 120px;">FARE (STARTING)</th>
+                      <th style="min-width: 100px;">SEATS</th>
+                      <th style="min-width: 110px;">STATUS</th>
+                      <th style="width: 50px;" class="text-center pe-3">ACTIONS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let s of pagedSchedules">
+                      <td class="ps-3">
+                        <span class="sched-id-badge">SCH-{{ s.id }}</span>
+                      </td>
+                      <td>
+                        <div class="d-flex align-items-center gap-2">
+                          <div class="route-icon-badge">
+                            <i class="fa-solid fa-route"></i>
+                          </div>
+                          <div>
+                            <div class="fw-semibold text-dark text-nowrap">
+                              {{ s.origin }} <span class="text-muted mx-1">&rarr;</span> {{ s.destination }}
+                            </div>
+                            <small *ngIf="s.routeId" class="text-muted">Route #{{ s.routeId }}</small>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <div class="fw-semibold text-dark">{{ s.busNumber || getBusNumber(s.busId) }}</div>
+                        <small class="text-muted d-block">{{ s.busType || getBusType(s.busId) }} ({{ s.capacity || getBusCapacity(s.busId) }} seats)</small>
+                      </td>
+                      <td>
+                        <div class="text-dark">{{ formatScheduleDate(s.travelDate) }}</div>
+                        <div class="fw-bold text-dark">{{ formatScheduleTime(s.departureTime) }}</div>
+                      </td>
+                      <td>
+                        <div class="text-dark d-flex align-items-center gap-1">
+                          <span>{{ formatScheduleDate(getArrivalDate(s)) }}</span>
+                          <span *ngIf="isOvernightSchedule(s)" class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-1" style="font-size: 10px;">+1d</span>
+                        </div>
+                        <div class="fw-bold text-dark">{{ formatScheduleTime(s.arrivalTime) }}</div>
+                      </td>
+                      <td>
+                        <span class="duration-text">{{ calculateDuration(s) }}</span>
+                      </td>
+                      <td>
+                        <span class="fare-text">₹ {{ s.fare | number:'1.0-0' }}</span>
+                      </td>
+                      <td>
+                        <span class="seats-text" [ngClass]="getSeatsClass(s)">
+                          {{ s.availableSeats }} / {{ s.capacity || getBusCapacity(s.busId) }}
+                        </span>
+                      </td>
+                      <td>
+                        <span class="sched-pill" [ngClass]="getScheduleStatusPillClass(s)">
+                          <span class="pill-dot"></span>
+                          {{ getScheduleComputedStatus(s) | titlecase }}
+                        </span>
+                      </td>
+                      <td class="text-center pe-3 position-relative">
+                        <button class="btn btn-sm btn-icon rounded-circle"
+                                (click)="toggleScheduleActionMenu(s.id, $event)"
+                                title="Actions">
+                          <i class="fa-solid fa-ellipsis-vertical text-muted"></i>
+                        </button>
+
+                        <!-- Action Dropdown Menu -->
+                        <div *ngIf="activeScheduleActionMenuId === s.id"
+                             class="sched-action-dropdown shadow rounded-3 border"
+                             (click)="$event.stopPropagation()">
+                          <button class="dropdown-item d-flex align-items-center gap-2 py-2 px-3"
+                                  (click)="openScheduleDetails(s)">
+                            <i class="fa-solid fa-eye text-primary"></i>
+                            <span>View Details</span>
+                          </button>
+                          <button class="dropdown-item d-flex align-items-center gap-2 py-2 px-3"
+                                  (click)="handleCreateSimilarSchedule(s)">
+                            <i class="fa-solid fa-copy text-info"></i>
+                            <span>Create Similar</span>
+                          </button>
+                          <button class="dropdown-item d-flex align-items-center gap-2 py-2 px-3"
+                                  (click)="viewScheduleBookings(s)">
+                            <i class="fa-solid fa-ticket text-secondary"></i>
+                            <span>Download Ticket List / View Bookings</span>
+                          </button>
+                          <button class="dropdown-item d-flex align-items-center gap-2 py-2 px-3 text-muted disabled cursor-not-allowed"
+                                  disabled>
+                            <i class="fa-solid fa-pen-to-square"></i>
+                            <span>Edit (Coming Soon)</span>
+                          </button>
+                          <hr class="dropdown-divider my-1">
+                          <button class="dropdown-item d-flex align-items-center gap-2 py-2 px-3 text-danger"
+                                  [disabled]="s.status === 'CANCELLED'"
+                                  (click)="openCancelScheduleModal(s)">
+                            <i class="fa-solid fa-ban"></i>
+                            <span>Cancel Schedule</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+
+                    <!-- Empty State -->
+                    <tr *ngIf="filteredSchedules.length === 0">
+                      <td colspan="10" class="text-center py-5">
+                        <div class="empty-state-wrapper py-4">
+                          <div class="empty-icon-circle mx-auto mb-3">
+                            <i class="fa-solid fa-calendar-xmark fa-2x text-muted"></i>
+                          </div>
+                          <h6 class="fw-bold text-dark mb-1">No schedules found</h6>
+                          <p class="text-muted small mb-3">
+                            {{ hasActiveScheduleFilters() ? 'No trip schedules match your selected filters.' : 'You have not published any schedules yet.' }}
+                          </p>
+                          <button *ngIf="hasActiveScheduleFilters()"
+                                  class="btn btn-outline-primary btn-sm rounded-pill"
+                                  (click)="clearScheduleFilters()">
+                            <i class="fa-solid fa-arrow-rotate-left me-1"></i> Clear Filters
+                          </button>
+                          <button *ngIf="!hasActiveScheduleFilters()"
+                                  class="btn btn-primary btn-sm rounded-pill"
+                                  (click)="handleCreateScheduleClick()">
+                            <i class="fa-solid fa-plus me-1"></i> Create Schedule
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Pagination Footer -->
+              <div *ngIf="filteredSchedules.length > 0"
+                   class="card-footer bg-white border-top d-flex flex-wrap justify-content-between align-items-center py-3 px-3">
+                <div class="text-muted small">
+                  Showing {{ schedulesPaginationStart }} to {{ schedulesPaginationEnd }} of {{ filteredSchedules.length }} results
+                </div>
+                <nav *ngIf="totalSchedulePages > 1" aria-label="Schedules pagination">
+                  <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item" [class.disabled]="schedulesCurrentPage === 1">
+                      <button class="page-link" (click)="goToSchedulePage(schedulesCurrentPage - 1)">Previous</button>
+                    </li>
+                    <li *ngFor="let p of getSchedulePageNumbers()"
+                        class="page-item"
+                        [class.active]="schedulesCurrentPage === p">
+                      <button class="page-link" (click)="goToSchedulePage(p)">{{ p }}</button>
+                    </li>
+                    <li class="page-item" [class.disabled]="schedulesCurrentPage === totalSchedulePages">
+                      <button class="page-link" (click)="goToSchedulePage(schedulesCurrentPage + 1)">Next</button>
+                    </li>
+                  </ul>
+                </nav>
+              </div>
+            </div>
+          </div> <!-- /schedules-dashboard-container -->
+
+          <!-- ==================== CREATE SCHEDULE WIZARD (PHASE 6.2B) ==================== -->
+          <div *ngIf="scheduleViewMode === 'create'" class="create-schedule-wizard-container pb-5">
+            <!-- Wizard Page Header -->
+            <div class="mb-4" *ngIf="scheduleWizardStep < 6">
+              <h2 class="wizard-heading mb-1">Create New Schedule</h2>
+              <p class="wizard-subheading mb-0" *ngIf="scheduleWizardStep === 1">Set up a new bus schedule for one of your existing routes</p>
+              <p class="wizard-subheading mb-0" *ngIf="scheduleWizardStep === 2">Assign a bus from your available fleet for the selected route</p>
+              <p class="wizard-subheading mb-0" *ngIf="scheduleWizardStep === 3">Set departure and arrival times and configure date/time for each boarding and dropping point</p>
+              <p class="wizard-subheading mb-0" *ngIf="scheduleWizardStep === 4">Set fares for each travel segment and review calculated journey fares (modifiable)</p>
+              <p class="wizard-subheading mb-0" *ngIf="scheduleWizardStep === 5">Review all details before creating the schedule</p>
+              <p class="wizard-subheading mb-0" *ngIf="scheduleWizardStep === 6">Schedule created successfully</p>
+            </div>
+
+            <!-- 6-Step Horizontal Progress Indicator Card -->
+            <div class="card wizard-progress-card rounded-4 p-4 mb-4" *ngIf="scheduleWizardStep < 6">
+              <div class="wizard-steps-horizontal d-flex align-items-center justify-content-between">
+                <!-- Step 1: Select Route -->
+                <div class="wizard-step-item" [ngClass]="{'active': scheduleWizardStep === 1, 'completed': scheduleWizardStep > 1, 'upcoming': scheduleWizardStep < 1}">
+                  <div class="wizard-step-circle">
+                    <i *ngIf="scheduleWizardStep > 1" class="fa-solid fa-check"></i>
+                    <span *ngIf="scheduleWizardStep <= 1">1</span>
+                  </div>
+                  <div class="wizard-step-info">
+                    <span class="wizard-step-title">Select Route</span>
+                    <span class="wizard-step-desc">{{ scheduleWizardStep > 1 && wizardSelectedRoute ? (wizardSelectedRoute.origin + ' → ' + wizardSelectedRoute.destination) : 'Choose an existing route' }}</span>
+                  </div>
+                </div>
+                <div class="wizard-step-connector" [ngClass]="{'completed': scheduleWizardStep > 1}"></div>
+
+                <!-- Step 2: Assign Bus -->
+                <div class="wizard-step-item" [ngClass]="{'active': scheduleWizardStep === 2, 'completed': scheduleWizardStep > 2, 'upcoming': scheduleWizardStep < 2}">
+                  <div class="wizard-step-circle">
+                    <i *ngIf="scheduleWizardStep > 2" class="fa-solid fa-check"></i>
+                    <span *ngIf="scheduleWizardStep <= 2">2</span>
+                  </div>
+                  <div class="wizard-step-info">
+                    <span class="wizard-step-title">Assign Bus</span>
+                    <span class="wizard-step-desc">{{ scheduleWizardStep > 2 && wizardSelectedBus ? (wizardSelectedBus.busNumber + (wizardSelectedBus.model && wizardSelectedBus.model !== 'Not available' ? ' (' + (wizardSelectedBus.manufacturer && wizardSelectedBus.manufacturer !== 'Not available' ? wizardSelectedBus.manufacturer + ' ' : '') + wizardSelectedBus.model + ')' : '')) : 'Select an available bus' }}</span>
+                  </div>
+                </div>
+                <div class="wizard-step-connector" [ngClass]="{'completed': scheduleWizardStep > 2}"></div>
+
+                <!-- Step 3: Configure Timings -->
+                <div class="wizard-step-item" [ngClass]="{'active': scheduleWizardStep === 3, 'completed': scheduleWizardStep > 3, 'upcoming': scheduleWizardStep < 3}">
+                  <div class="wizard-step-circle">
+                    <i *ngIf="scheduleWizardStep > 3" class="fa-solid fa-check"></i>
+                    <span *ngIf="scheduleWizardStep <= 3">3</span>
+                  </div>
+                  <div class="wizard-step-info">
+                    <span class="wizard-step-title">Configure Timings</span>
+                    <span class="wizard-step-desc">{{ scheduleWizardStep > 3 ? (formatDisplayDate(wizardTripStartDate) + ', ' + formatDisplayTime(wizardTripStartTime)) : 'Set departure, arrival &amp; stop times' }}</span>
+                  </div>
+                </div>
+                <div class="wizard-step-connector" [ngClass]="{'completed': scheduleWizardStep > 3}"></div>
+
+                <!-- Step 4: Configure Fares -->
+                <div class="wizard-step-item" [ngClass]="{'active': scheduleWizardStep === 4, 'completed': scheduleWizardStep > 4, 'upcoming': scheduleWizardStep < 4}">
+                  <div class="wizard-step-circle">
+                    <i *ngIf="scheduleWizardStep > 4" class="fa-solid fa-check"></i>
+                    <span *ngIf="scheduleWizardStep <= 4">4</span>
+                  </div>
+                  <div class="wizard-step-info">
+                    <span class="wizard-step-title">Configure Fares</span>
+                    <span class="wizard-step-desc">{{ scheduleWizardStep > 4 ? 'Segments & Journeys' : 'Set segment fares' }}</span>
+                  </div>
+                </div>
+                <div class="wizard-step-connector" [ngClass]="{'completed': scheduleWizardStep > 4}"></div>
+
+                <!-- Step 5: Review & Create -->
+                <div class="wizard-step-item" [ngClass]="{'active': scheduleWizardStep === 5, 'completed': scheduleWizardStep > 5, 'upcoming': scheduleWizardStep < 5}">
+                  <div class="wizard-step-circle">
+                    <i *ngIf="scheduleWizardStep > 5" class="fa-solid fa-check"></i>
+                    <span *ngIf="scheduleWizardStep <= 5">5</span>
+                  </div>
+                  <div class="wizard-step-info">
+                    <span class="wizard-step-title">Review &amp; Create</span>
+                    <span class="wizard-step-desc">Verify details</span>
+                  </div>
+                </div>
+                <div class="wizard-step-connector" [ngClass]="{'completed': scheduleWizardStep > 5}"></div>
+
+                <!-- Step 6: Confirmation -->
+                <div class="wizard-step-item" [ngClass]="{'active': scheduleWizardStep === 6, 'completed': scheduleWizardStep > 6, 'upcoming': scheduleWizardStep < 6}">
+                  <div class="wizard-step-circle">
+                    <span>6</span>
+                  </div>
+                  <div class="wizard-step-info">
+                    <span class="wizard-step-title">Confirmation</span>
+                    <span class="wizard-step-desc">Schedule created</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ==================== STEP 1 CONTENT ==================== -->
+            <div *ngIf="scheduleWizardStep === 1">
+              <!-- Select Route Workspace Card -->
+              <div class="card route-selection-workspace rounded-4 p-4 mb-4">
+                <!-- Card Header: Title + Search & Status Filter -->
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+                  <div class="d-flex align-items-center gap-3">
+                    <div class="route-panel-icon-badge">
+                      <i class="fa-solid fa-code-fork"></i>
+                    </div>
+                    <div>
+                      <h5 class="fw-bold text-dark mb-0">Select Route</h5>
+                      <p class="text-muted small mb-0">Choose an existing active route to create a schedule</p>
+                    </div>
+                  </div>
+                  <div class="d-flex align-items-center gap-3">
+                    <!-- Search Input -->
+                    <div class="input-group search-route-input-group" style="width: 320px;">
+                      <span class="input-group-text bg-white border-end-0 text-muted">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                      </span>
+                      <input type="text"
+                             class="form-control border-start-0 ps-0"
+                             placeholder="Search route (e.g. Bengaluru, Hyderabad...)"
+                             [(ngModel)]="wizardRouteSearchQuery">
+                    </div>
+                    <!-- Status Filter -->
+                    <select class="form-select route-status-select" style="width: 140px;" [(ngModel)]="wizardRouteStatusFilter">
+                      <option value="ALL">All Routes</option>
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
+                      <option value="DRAFT">Draft</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Hidden Selection Warning Banner -->
+                <div *ngIf="isWizardRouteSelectedHidden()" class="alert alert-warning d-flex align-items-center justify-content-between p-3 rounded-3 mb-3">
+                  <div class="small">
+                    <i class="fa-solid fa-triangle-exclamation me-2"></i>
+                    <span>Route <strong>{{ getSelectedRouteName() }}</strong> is currently selected, but hidden by your search or status filter.</span>
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-dark" (click)="clearWizardRouteFilters()">Clear Filters</button>
+                </div>
+
+                <!-- Routes Table -->
+                <div class="table-responsive">
+                  <table class="table route-selection-table align-middle mb-0">
+                    <thead>
+                      <tr>
+                        <th style="width: 44px;"></th>
+                        <th style="width: 110px;">Route ID</th>
+                        <th>Route Name</th>
+                        <th>Origin &rarr; Destination</th>
+                        <th>Distance</th>
+                        <th>Estimated Duration</th>
+                        <th>Status</th>
+                        <th style="width: 140px; text-align: right;">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <ng-container *ngFor="let r of filteredWizardRoutes">
+                        <!-- Main Route Row -->
+                        <tr class="route-table-row"
+                            [ngClass]="{'selected-row': wizardSelectedRouteId === r.id, 'ineligible-row': !isRouteEligibleForSchedule(r)}"
+                            (click)="selectWizardRoute(r)">
+                          <!-- Radio Selection -->
+                          <td class="text-center" (click)="$event.stopPropagation()">
+                            <input type="radio"
+                                   class="form-check-input route-radio-btn"
+                                   name="wizardRouteRadio"
+                                   [checked]="wizardSelectedRouteId === r.id"
+                                   [disabled]="!isRouteEligibleForSchedule(r)"
+                                   (change)="selectWizardRoute(r)">
+                          </td>
+
+                          <!-- Route ID -->
+                          <td>
+                            <span class="route-code-badge">{{ r.routeCode || ('RTE-' + r.id) }}</span>
+                          </td>
+
+                          <!-- Route Name -->
+                          <td>
+                            <span class="route-name-text">{{ r.routeName || 'Unnamed Route' }}</span>
+                          </td>
+
+                          <!-- Origin -> Destination -->
+                          <td>
+                            <span class="route-endpoints-text text-muted">{{ r.origin || '--' }} &rarr; {{ r.destination || '--' }}</span>
+                          </td>
+
+                          <!-- Distance -->
+                          <td>
+                            <span *ngIf="getRouteDistanceNumber(r) > 0" class="text-muted">
+                              <i class="fa-solid fa-location-dot me-1 text-primary opacity-75"></i>
+                              {{ getRouteDistanceNumber(r) }} km
+                            </span>
+                            <span *ngIf="getRouteDistanceNumber(r) <= 0" class="text-muted">
+                              --
+                            </span>
+                          </td>
+
+                          <!-- Estimated Duration -->
+                          <td>
+                            <span *ngIf="getEstimatedRouteDuration(r) !== '--'" class="text-muted">
+                              <i class="fa-regular fa-clock me-1 text-primary opacity-75"></i>
+                              {{ getEstimatedRouteDuration(r) }}
+                            </span>
+                            <span *ngIf="getEstimatedRouteDuration(r) === '--'" class="text-muted">
+                              --
+                            </span>
+                          </td>
+
+                          <!-- Status -->
+                          <td>
+                            <span class="route-status-pill"
+                                  [ngClass]="{
+                                    'status-pill-active': r.status === 'ACTIVE',
+                                    'status-pill-inactive': r.status === 'INACTIVE',
+                                    'status-pill-draft': r.status === 'DRAFT'
+                                  }">
+                              <span class="status-dot"></span>
+                              {{ r.status === 'ACTIVE' ? 'Active' : (r.status === 'INACTIVE' ? 'Inactive' : (r.status | titlecase)) }}
+                            </span>
+                          </td>
+
+                          <!-- Actions -->
+                          <td class="text-end" (click)="$event.stopPropagation()">
+                            <button type="button"
+                                    class="btn btn-view-route-details d-inline-flex align-items-center gap-2"
+                                    (click)="toggleRouteDetails(r.id, $event)">
+                              <span>View Details</span>
+                              <i class="fa-solid" [ngClass]="expandedRouteId === r.id ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                            </button>
+                          </td>
+                        </tr>
+
+                        <!-- Inline Expanded Details Row -->
+                        <tr *ngIf="expandedRouteId === r.id" class="route-expanded-details-row">
+                          <td colspan="8" class="p-0">
+                            <div class="route-expanded-details-container p-4">
+                              <!-- 3 Stat Summary Cards -->
+                              <div class="row g-3 mb-4">
+                                <div class="col-md-4">
+                                  <div class="route-stat-card p-3 rounded-3 d-flex align-items-center gap-3">
+                                    <div class="stat-card-icon-circle">
+                                      <i class="fa-solid fa-location-dot text-primary"></i>
+                                    </div>
+                                    <div>
+                                      <div class="stat-card-label">Total Distance</div>
+                                      <div class="stat-card-val">{{ getRouteDistanceNumber(r) > 0 ? (getRouteDistanceNumber(r) + ' km') : '--' }}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="col-md-4">
+                                  <div class="route-stat-card p-3 rounded-3 d-flex align-items-center gap-3">
+                                    <div class="stat-card-icon-circle">
+                                      <i class="fa-regular fa-clock text-primary"></i>
+                                    </div>
+                                    <div>
+                                      <div class="stat-card-label">Estimated Duration</div>
+                                      <div class="stat-card-val">{{ getEstimatedRouteDuration(r) }}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="col-md-4">
+                                  <div class="route-stat-card p-3 rounded-3 d-flex align-items-center gap-3">
+                                    <div class="stat-card-icon-circle">
+                                      <i class="fa-solid fa-code-fork text-primary"></i>
+                                    </div>
+                                    <div>
+                                      <div class="stat-card-label">Total Stops</div>
+                                      <div class="stat-card-val">{{ getRouteStopsCount(r) }}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <!-- Ordered Stops & Boarding/Dropping Timeline Table -->
+                              <h6 class="fw-bold text-dark mb-3">Route Stops &amp; Boarding/Dropping</h6>
+                              <div class="table-responsive bg-white rounded-3 border">
+                                <table class="table stops-timeline-table mb-0 align-middle">
+                                  <thead>
+                                    <tr>
+                                      <th style="width: 50px;">#</th>
+                                      <th>Stop Name</th>
+                                      <th>Distance from start</th>
+                                      <th>Boarding / Dropping</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr *ngFor="let stop of (r.stops || []); let i = index; let isLast = last">
+                                      <td class="text-center">
+                                        <div class="stop-timeline-wrapper">
+                                          <span *ngIf="!isLast" class="stop-timeline-line"></span>
+                                          <span class="stop-seq-circle">{{ i + 1 }}</span>
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <span class="fw-semibold text-dark">{{ getFormattedStopName(stop, i, (r.stops || []).length) }}</span>
+                                      </td>
+                                      <td class="text-muted">
+                                        {{ stop.distanceKm != null ? (stop.distanceKm + ' km') : '--' }}
+                                      </td>
+                                      <td>
+                                        <span class="stop-bd-pill" [ngClass]="getStopBoardingDroppingType(stop).cssClass">
+                                          {{ getStopBoardingDroppingType(stop).label }}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                    <tr *ngIf="getRouteStopsCount(r) === 0">
+                                      <td colspan="4" class="text-center py-4 text-muted">
+                                        <i class="fa-solid fa-circle-exclamation me-1 text-warning"></i>
+                                        No stops configured for this route.
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      </ng-container>
+
+                      <!-- Empty State: No Matching Filter Results -->
+                      <tr *ngIf="filteredWizardRoutes.length === 0 && myRoutes.length > 0">
+                        <td colspan="8" class="text-center py-5">
+                          <i class="fa-solid fa-magnifying-glass text-muted mb-3" style="font-size: 2rem;"></i>
+                          <h6 class="fw-bold text-dark mb-1">No matching routes found</h6>
+                          <p class="text-muted small mb-3">Try adjusting your search query or status filter.</p>
+                          <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" (click)="clearWizardRouteFilters()">
+                            Clear Search &amp; Filters
+                          </button>
+                        </td>
+                      </tr>
+
+                      <!-- Empty State: No Routes in Catalogue -->
+                      <tr *ngIf="myRoutes.length === 0 && !isLoadingRoutes">
+                        <td colspan="8" class="text-center py-5">
+                          <i class="fa-solid fa-route text-muted mb-3" style="font-size: 2rem;"></i>
+                          <h6 class="fw-bold text-dark mb-1">No routes configured yet</h6>
+                          <p class="text-muted small mb-3">You must create at least one route before creating a schedule.</p>
+                          <button type="button" class="btn btn-primary btn-sm rounded-pill" (click)="activeNav = 'routes'">
+                            Go to My Routes
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Bottom Action Navigation Bar -->
+              <div class="d-flex justify-content-between align-items-center mt-4 pt-2">
+                <button type="button" class="btn btn-wizard-cancel" (click)="cancelScheduleWizard()">
+                  Cancel
+                </button>
+                <button type="button"
+                        class="btn btn-wizard-continue d-inline-flex align-items-center gap-2"
+                        [disabled]="!canContinueToStep2()"
+                        (click)="continueToAssignBus()">
+                  <span>Continue to Assign Bus</span>
+                  <i class="fa-solid fa-arrow-right"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- ==================== STEP 2: ASSIGN BUS (PHASE 6.2B.2) ==================== -->
+            <div *ngIf="scheduleWizardStep === 2" class="step2-assign-bus-container">
+              <!-- Route Missing Safety Guard -->
+              <div *ngIf="!wizardSelectedRoute" class="alert alert-warning d-flex align-items-center justify-content-between p-3 rounded-3 mb-4">
+                <div class="d-flex align-items-center gap-2">
+                  <i class="fa-solid fa-triangle-exclamation text-warning fs-5"></i>
+                  <span>No route selected. You must select an active route before assigning a bus.</span>
+                </div>
+                <button type="button" class="btn btn-outline-dark btn-sm rounded-pill fw-semibold" (click)="backToSelectRoute()">
+                  Return to Step 1: Select Route
+                </button>
+              </div>
+
+              <!-- Main Selection Panel Card -->
+              <div class="card border-0 shadow-sm rounded-4 p-4 mb-4 bg-white">
+                <!-- Panel Header (Search and Filter Section) -->
+                <div class="wizard-panel-header d-flex flex-wrap justify-content-between align-items-center mb-4">
+                  <div class="d-flex align-items-center gap-3">
+                    <div class="wizard-panel-icon-circle">
+                      <i class="fa-solid fa-bus"></i>
+                    </div>
+                    <div>
+                      <h4 class="wizard-panel-title">Select Bus</h4>
+                      <p class="wizard-panel-subtitle">Choose a bus from your fleet to assign to this schedule</p>
+                    </div>
+                  </div>
+
+                  <!-- Search & Filter Controls -->
+                  <div class="wizard-search-filter-controls">
+                    <!-- Search Field -->
+                    <div class="wizard-search-input-wrapper">
+                      <i class="fa-solid fa-magnifying-glass wizard-search-icon"></i>
+                      <input type="text"
+                             class="wizard-search-input"
+                             placeholder="Search by registration number, bus name, or type..."
+                             [(ngModel)]="wizardBusSearchQuery">
+                    </div>
+
+                    <!-- Bus Type Filter Dropdown -->
+                    <div class="wizard-filter-dropdown-wrapper">
+                      <select class="wizard-filter-select" [(ngModel)]="wizardBusTypeFilter">
+                        <option value="ALL">All Bus Types</option>
+                        <option *ngFor="let t of availableBusTypes" [value]="t">{{ t }}</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Selected Bus Hidden by Filter Alert -->
+                <div *ngIf="isWizardBusSelectedHidden()" class="alert alert-light border border-primary border-opacity-25 d-flex align-items-center justify-content-between p-2 px-3 rounded-3 mb-3">
+                  <div class="small text-muted">
+                    <i class="fa-solid fa-circle-check text-primary me-2"></i>
+                    Selected Bus: <strong class="text-dark">{{ wizardSelectedBus?.busNumber }}</strong> ({{ wizardSelectedBus?.busName || wizardSelectedBus?.busType }}) is currently hidden by active filters.
+                  </div>
+                  <button type="button" class="btn btn-link btn-sm p-0 text-primary text-decoration-none fw-semibold" (click)="clearWizardBusFilters()">
+                    Reset Filters
+                  </button>
+                </div>
+
+                <!-- Loading State -->
+                <div *ngIf="isLoadingBuses" class="text-center py-5">
+                  <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">Loading fleet buses...</span>
+                  </div>
+                  <p class="text-muted small">Loading available buses from your fleet...</p>
+                </div>
+
+                <!-- Error State -->
+                <div *ngIf="busLoadError && !isLoadingBuses" class="text-center py-5">
+                  <i class="fa-solid fa-triangle-exclamation text-danger fs-1 mb-3"></i>
+                  <h6 class="fw-bold text-dark mb-1">Failed to load buses</h6>
+                  <p class="text-muted small mb-3">{{ busLoadError }}</p>
+                  <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" (click)="loadBuses()">
+                    <i class="fa-solid fa-arrow-rotate-right me-1"></i> Retry
+                  </button>
+                </div>
+
+                <!-- Horizontal Bus List with Shared CSS Grid (Eliminates Horizontal Scrolling) -->
+                <div class="bus-list-workspace" *ngIf="!isLoadingBuses && !busLoadError">
+                  <!-- Header Strip -->
+                  <div class="bus-header-strip">
+                    <div class="bus-list-grid">
+                      <div class="bus-grid-col-radio"></div>
+                      <div class="bus-grid-col-thumb"></div>
+                      <div class="bus-header-label">Registration No.</div>
+                      <div class="bus-header-label">Bus Name</div>
+                      <div class="bus-header-label">Bus Type</div>
+                      <div class="bus-header-label text-center">Total Seats</div>
+                      <div class="bus-header-label text-center">Seat Layout</div>
+                      <div class="bus-header-label text-center">Status</div>
+                      <div class="bus-header-label text-end pe-2">Actions</div>
+                    </div>
+                  </div>
+
+                  <!-- Bus Cards List -->
+                  <div class="bus-cards-list">
+                    <ng-container *ngFor="let b of filteredWizardBuses">
+                      <div class="bus-card-item"
+                           [ngClass]="{
+                             'selected-card': wizardSelectedBusId === b.id,
+                             'ineligible-card': !isBusEligibleForSchedule(b),
+                             'expanded-card': expandedBusId === b.id
+                           }"
+                           (click)="selectWizardBus(b, $event)">
+                        <!-- Main Card Row (Always Visible) -->
+                        <div class="bus-list-grid">
+                          <!-- Radio Control -->
+                          <div class="bus-grid-col-radio text-center" (click)="$event.stopPropagation()">
+                            <input type="radio"
+                                   name="wizardBusSelection"
+                                   class="form-check-input bus-radio-control"
+                                   [checked]="wizardSelectedBusId === b.id"
+                                   [disabled]="!isBusEligibleForSchedule(b)"
+                                   [title]="!isBusEligibleForSchedule(b) ? 'Inactive buses cannot be assigned' : 'Select bus'"
+                                   (change)="selectWizardBus(b, $event)">
+                          </div>
+
+                          <!-- Bus Thumbnail -->
+                          <div class="bus-grid-col-thumb text-center">
+                            <img [src]="getBusThumbnail(b)"
+                                 class="bus-row-thumbnail"
+                                 [alt]="b.busNumber"
+                                 (error)="handleImageError($event)">
+                          </div>
+
+                          <!-- Registration No. -->
+                          <div class="bus-grid-col-reg">
+                            <span class="bus-reg-no-text">{{ b.busNumber }}</span>
+                          </div>
+
+                          <!-- Bus Name -->
+                          <div class="bus-grid-col-name">
+                            <span class="bus-name-text" [title]="b.busName || (b.operatorName ? b.operatorName + ' ' + (b.model || b.busType) : '')">
+                              {{ b.busName || (b.operatorName ? b.operatorName + ' ' + (b.model || b.busType) : 'Not available') }}
+                            </span>
+                          </div>
+
+                          <!-- Bus Type Pill -->
+                          <div class="bus-grid-col-type">
+                            <span class="bus-type-badge-pill"
+                                  [ngClass]="b.facilityType === 'NON_AC' || (b.busType && b.busType.toLowerCase().includes('non-ac')) ? 'type-pill-non-ac' : 'type-pill-ac'">
+                              {{ b.busType }}
+                            </span>
+                          </div>
+
+                          <!-- Total Seats -->
+                          <div class="bus-grid-col-seats text-center">
+                            <span class="bus-seats-count">{{ b.totalSeats || b.capacity || 0 }}</span>
+                          </div>
+
+                          <!-- Seat Layout -->
+                          <div class="bus-grid-col-layout text-center">
+                            <span class="bus-layout-summary">{{ getBusSeatLayoutSummary(b) }}</span>
+                          </div>
+
+                          <!-- Status -->
+                          <div class="bus-grid-col-status text-center">
+                            <span class="bus-status-badge-pill"
+                                  [ngClass]="isBusEligibleForSchedule(b) ? 'status-pill-active' : 'status-pill-inactive'">
+                              <span class="status-indicator-dot"></span>
+                              {{ isBusEligibleForSchedule(b) ? 'Active' : 'Inactive' }}
+                            </span>
+                          </div>
+
+                          <!-- Actions -->
+                          <div class="bus-grid-col-actions" (click)="$event.stopPropagation()">
+                            <button type="button"
+                                    class="btn-bus-action-details"
+                                    (click)="toggleBusDetails(b.id, $event)">
+                              <span>View Details</span>
+                            </button>
+                            <button type="button"
+                                    class="btn-bus-action-toggle"
+                                    (click)="toggleBusDetails(b.id, $event)"
+                                    [attr.aria-label]="expandedBusId === b.id ? 'Collapse details' : 'Expand details'">
+                              <i class="fa-solid" [ngClass]="expandedBusId === b.id ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                            </button>
+                          </div>
+                        </div>
+
+                        <!-- Inline Expanded Details Panel (Directly Beneath Main Row Inside Same Card) -->
+                        <div *ngIf="expandedBusId === b.id" class="bus-expanded-panel" (click)="$event.stopPropagation()">
+                          <h6 class="bus-expanded-title">Bus Information</h6>
+
+                          <div class="bus-expanded-content">
+                            <!-- Left: Bus Photo -->
+                            <div class="bus-expanded-left">
+                              <div class="bus-photo-frame">
+                                <img [src]="getBusThumbnail(b)"
+                                     [alt]="b.busNumber"
+                                     class="bus-photo-img"
+                                     (error)="handleImageError($event)">
+                              </div>
+                            </div>
+
+                            <!-- Middle: Core Specifications Box -->
+                            <div class="bus-expanded-middle">
+                              <div class="bus-core-specs-box">
+                                <div class="bus-spec-row">
+                                  <span class="spec-label">Registration No.</span>
+                                  <span class="spec-val-bold">{{ b.busNumber }}</span>
+                                </div>
+                                <div class="bus-spec-row">
+                                  <span class="spec-label">Bus Name</span>
+                                  <span class="spec-val-semibold">{{ b.busName || (b.operatorName ? b.operatorName + ' ' + (b.model || b.busType) : 'Not available') }}</span>
+                                </div>
+                                <div class="bus-spec-row">
+                                  <span class="spec-label">Bus Type</span>
+                                  <span class="spec-val">{{ b.busType }}</span>
+                                </div>
+                                <div class="bus-spec-row">
+                                  <span class="spec-label">Total Seats</span>
+                                  <span class="spec-val-bold">{{ getBusTotalSeatsFormatted(b) }}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <!-- Vertical Divider Line -->
+                            <div class="bus-expanded-divider"></div>
+
+                            <!-- Right: Additional Specifications -->
+                            <div class="bus-expanded-right">
+                              <div class="bus-specs-list">
+                                <div class="bus-spec-row">
+                                  <span class="spec-label">Manufacturer</span>
+                                  <span class="spec-val">{{ b.manufacturer || getDerivedManufacturer(b) }}</span>
+                                </div>
+                                <div class="bus-spec-row">
+                                  <span class="spec-label">Model</span>
+                                  <span class="spec-val">{{ b.model || 'Not available' }}</span>
+                                </div>
+                                <div class="bus-spec-row">
+                                  <span class="spec-label">Year</span>
+                                  <span class="spec-val">{{ b.yearOfManufacturing || b.modelYear || 'Not available' }}</span>
+                                </div>
+                                <div class="bus-spec-row">
+                                  <span class="spec-label">Fuel Type</span>
+                                  <span class="spec-val">{{ b.fuelType || 'Diesel' }}</span>
+                                </div>
+                                <div class="bus-spec-row bus-amenities-row">
+                                  <span class="spec-label">Amenities</span>
+                                  <div class="bus-amenities-wrap">
+                                    <span *ngFor="let amenity of getBusAmenitiesList(b)" class="amenity-item">
+                                      <i [class]="getAmenityIcon(amenity)" class="amenity-icon"></i>
+                                      <span>{{ amenity }}</span>
+                                    </span>
+                                    <span *ngIf="getBusAmenitiesList(b).length === 0" class="text-muted small">None</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </ng-container>
+
+                    <!-- Empty State: No Matching Results -->
+                    <div *ngIf="filteredWizardBuses.length === 0 && myBuses.length > 0" class="text-center py-5 bg-white rounded-3 border">
+                      <i class="fa-solid fa-magnifying-glass text-muted mb-3" style="font-size: 2rem;"></i>
+                      <h6 class="fw-bold text-dark mb-1">No matching buses found</h6>
+                      <p class="text-muted small mb-3">Try adjusting your search query or bus type filter.</p>
+                      <button type="button" class="btn btn-outline-primary btn-sm rounded-pill" (click)="clearWizardBusFilters()">
+                        Clear Search &amp; Filters
+                      </button>
+                    </div>
+
+                    <!-- Empty State: No Buses in Fleet -->
+                    <div *ngIf="myBuses.length === 0 && !isLoadingBuses" class="text-center py-5 bg-white rounded-3 border">
+                      <i class="fa-solid fa-bus text-muted mb-3" style="font-size: 2rem;"></i>
+                      <h6 class="fw-bold text-dark mb-1">No buses registered in your fleet</h6>
+                      <p class="text-muted small mb-3">You must register at least one bus before scheduling a journey.</p>
+                      <button type="button" class="btn btn-primary btn-sm rounded-pill" (click)="activeNav = 'buses'">
+                        Go to Fleet / Buses
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Bottom Action Navigation Bar -->
+              <div class="d-flex justify-content-between align-items-center mt-4 pt-2">
+                <button type="button" class="btn btn-wizard-back" (click)="backToSelectRoute()">
+                  Back
+                </button>
+                <button type="button"
+                        class="btn btn-wizard-continue d-inline-flex align-items-center gap-2"
+                        [disabled]="!canContinueToStep3()"
+                        (click)="continueToConfigureTimings()">
+                  <span>Continue to Configure Timings</span>
+                  <i class="fa-solid fa-arrow-right"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- ==================== STEP 3: CONFIGURE TIMINGS (PHASE 6.3) ==================== -->
+            <div *ngIf="scheduleWizardStep === 3" class="step3-configure-timings-container mt-4">
+
+
+              <!-- Row 2: Schedule Conflict Detected Alert Banner (Conditional) -->
+              <div *ngIf="timingConflict" class="schedule-conflict-banner mb-4 d-flex align-items-center justify-content-between p-3 rounded-3">
+                <div class="d-flex align-items-start gap-3">
+                  <div class="conflict-icon-circle text-danger fs-4 mt-1">
+                    <i class="fa-solid fa-circle-exclamation"></i>
+                  </div>
+                  <div>
+                    <h6 class="fw-bold text-danger mb-1">Schedule Conflict Detected</h6>
+                    <p class="text-danger small mb-0">{{ timingConflict.message }}</p>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill fw-semibold px-3 text-nowrap ms-3" (click)="viewConflictingSchedule()">
+                  View Conflicting Schedule
+                </button>
+              </div>
+
+              <!-- Row 3: Trip Start, Trip End, and Journey Metrics Summary -->
+              <div class="row g-3 mb-4 align-items-stretch">
+                <!-- Trip Start (Departure from Origin) -->
+                <div class="col-lg-3 col-md-6">
+                  <div class="card trip-input-card h-100 p-3 rounded-4 border-0 shadow-sm bg-white">
+                    <label class="trip-input-label fw-semibold text-dark small mb-2">Trip Start (Departure from Origin)</label>
+                    <div class="row g-2">
+                      <div class="col-7">
+                        <div class="timing-input-group d-flex align-items-center px-2 py-1.5 rounded-3 border bg-light">
+                          <input type="date" class="form-control form-control-sm border-0 bg-transparent p-0 fw-semibold text-dark w-100"
+                                 [(ngModel)]="wizardTripStartDate"
+                                 (change)="onTripTimingChange()">
+                        </div>
+                      </div>
+                      <div class="col-5">
+                        <div class="timing-input-group d-flex align-items-center px-2 py-1.5 rounded-3 border bg-light">
+                          <input type="time" class="form-control form-control-sm border-0 bg-transparent p-0 fw-semibold text-dark w-100"
+                                 [(ngModel)]="wizardTripStartTime"
+                                 (change)="onTripTimingChange()">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Trip End (Arrival at Destination) -->
+                <div class="col-lg-3 col-md-6">
+                  <div class="card trip-input-card h-100 p-3 rounded-4 border-0 shadow-sm bg-white">
+                    <label class="trip-input-label fw-semibold text-dark small mb-2">Trip End (Arrival at Destination)</label>
+                    <div class="row g-2">
+                      <div class="col-7">
+                        <div class="timing-input-group d-flex align-items-center px-2 py-1.5 rounded-3 border bg-light">
+                          <input type="date" class="form-control form-control-sm border-0 bg-transparent p-0 fw-semibold text-dark w-100"
+                                 [(ngModel)]="wizardTripEndDate"
+                                 (change)="onTripTimingChange()">
+                        </div>
+                      </div>
+                      <div class="col-5">
+                        <div class="timing-input-group d-flex align-items-center px-2 py-1.5 rounded-3 border bg-light">
+                          <input type="time" class="form-control form-control-sm border-0 bg-transparent p-0 fw-semibold text-dark w-100"
+                                 [(ngModel)]="wizardTripEndTime"
+                                 (change)="onTripTimingChange()">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Horizontal Journey Metrics Summary Card -->
+                <div class="col-lg-6 col-md-12">
+                  <div class="card journey-summary-card h-100 p-3 px-4 rounded-4 border-0 shadow-sm">
+                    <div class="d-flex align-items-center justify-content-between h-100">
+                      <!-- Total Journey Duration -->
+                      <div class="d-flex align-items-center gap-3">
+                        <div class="summary-metric-icon text-primary bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                          <i class="fa-regular fa-clock fs-5"></i>
+                        </div>
+                        <div>
+                          <div class="text-muted small">Total Journey Duration</div>
+                          <div class="fw-bold text-dark fs-6">{{ wizardJourneyDurationDisplay }}</div>
+                        </div>
+                      </div>
+
+                      <!-- Total Distance -->
+                      <div class="d-flex align-items-center gap-3 border-start ps-4">
+                        <div class="summary-metric-icon text-primary bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                          <i class="fa-solid fa-route fs-5"></i>
+                        </div>
+                        <div>
+                          <div class="text-muted small">Total Distance</div>
+                          <div class="fw-bold text-dark fs-6">{{ wizardTotalDistanceKm }} km</div>
+                        </div>
+                      </div>
+
+                      <!-- Total Stops -->
+                      <div class="d-flex align-items-center gap-3 border-start ps-4">
+                        <div class="summary-metric-icon text-primary bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                          <i class="fa-solid fa-circle-nodes fs-5"></i>
+                        </div>
+                        <div>
+                          <div class="text-muted small">Total Stops</div>
+                          <div class="d-flex align-items-baseline gap-1">
+                            <span class="fw-bold text-dark fs-6">{{ wizardTotalStopsCount }}</span>
+                            <span class="text-muted small" *ngIf="wizardIntermediateStopsCount > 0">({{ wizardIntermediateStopsCount }} intermediate)</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Row 4: Stop-wise Boarding & Dropping Points Table Card -->
+              <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white stop-timings-card overflow-hidden">
+                <!-- Header with Title, Subtitle, and Toggle -->
+                <div class="p-3 px-4 border-bottom d-flex justify-content-between align-items-center bg-white">
+                  <div>
+                    <h6 class="fw-bold text-dark mb-0">Stop-wise Boarding &amp; Dropping Points</h6>
+                    <p class="text-muted small mb-0">Configure arrival, departure and halt times for each boarding and dropping point at every stop</p>
+                  </div>
+                  <div class="form-check form-switch d-flex align-items-center gap-2 mb-0">
+                    <input class="form-check-input cursor-pointer" type="checkbox" id="stopSummaryToggle" [(ngModel)]="showStopSummaryOnly">
+                    <label class="form-check-label text-muted small fw-semibold cursor-pointer user-select-none" for="stopSummaryToggle">
+                      Show stop summary only
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Table Container -->
+                <div class="table-responsive">
+                  <table class="table stop-timings-table mb-0 align-middle">
+                    <thead>
+                      <tr>
+                        <th style="width: 45px;" class="text-center">#</th>
+                        <th style="width: 220px;">Stop Name</th>
+                        <th style="width: 150px;">Distance from Origin</th>
+                        <th style="width: 260px;">Boarding / Dropping Points</th>
+                        <th style="width: 230px;">Arrival Date &amp; Time</th>
+                        <th style="width: 230px;">Departure Date &amp; Time</th>
+                        <th style="width: 120px;" class="text-center">Halt Duration</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <!-- Iterate each stop group -->
+                      <ng-container *ngFor="let stop of wizardStopTimings; let stopIdx = index">
+                        <!-- Stop Header / Summary Row when showStopSummaryOnly is true -->
+                        <tr *ngIf="showStopSummaryOnly" class="stop-summary-row border-bottom">
+                          <td class="text-center">
+                            <div class="stop-number-circle">{{ stopIdx + 1 }}</div>
+                          </td>
+                          <td>
+                            <div class="fw-bold text-dark">{{ stop.stopName }}</div>
+                          </td>
+                          <td>
+                            <span class="text-muted">{{ stop.distanceKm }} km</span>
+                          </td>
+                          <td>
+                            <span class="badge px-2.5 py-1 rounded-pill small fw-medium"
+                                  [ngClass]="stop.stopType === 'ORIGIN' ? 'stop-badge-boarding' : (stop.stopType === 'DESTINATION' ? 'stop-badge-dropping' : 'stop-badge-both')">
+                              {{ stop.points.length }} {{ stop.stopType === 'ORIGIN' ? 'Boarding Points' : (stop.stopType === 'DESTINATION' ? 'Dropping Points' : 'Boarding & Dropping Points') }}
+                            </span>
+                          </td>
+                          <td>
+                            <div *ngIf="stop.stopType === 'ORIGIN'" class="timing-disabled-box">&mdash;</div>
+                            <div *ngIf="stop.stopType !== 'ORIGIN'" class="timing-display-box d-flex align-items-center gap-1.5 px-2.5 py-1.5 rounded-2 border bg-light small">
+                              <i class="fa-regular fa-calendar text-muted small"></i>
+                              <span class="fw-semibold text-dark">{{ formatDisplayDate(stop.summaryArrivalDate) }}</span>
+                              <i class="fa-regular fa-clock text-muted small ms-1"></i>
+                              <span class="fw-semibold text-dark">{{ formatDisplayTime(stop.summaryArrivalTime) }}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div *ngIf="stop.stopType === 'DESTINATION'" class="timing-disabled-box">&mdash;</div>
+                            <div *ngIf="stop.stopType !== 'DESTINATION'" class="timing-display-box d-flex align-items-center gap-1.5 px-2.5 py-1.5 rounded-2 border bg-light small">
+                              <i class="fa-regular fa-calendar text-muted small"></i>
+                              <span class="fw-semibold text-dark">{{ formatDisplayDate(stop.summaryDepartureDate) }}</span>
+                              <i class="fa-regular fa-clock text-muted small ms-1"></i>
+                              <span class="fw-semibold text-dark">{{ formatDisplayTime(stop.summaryDepartureTime) }}</span>
+                            </div>
+                          </td>
+                          <td class="text-center">
+                            <div *ngIf="stop.stopType === 'ORIGIN' || stop.stopType === 'DESTINATION'" class="timing-disabled-box">&mdash;</div>
+                            <div *ngIf="stop.stopType === 'INTERMEDIATE'" class="halt-duration-pill py-1 px-2 rounded-2 border bg-light small fw-semibold">
+                              {{ stop.summaryHaltDisplay || '&mdash;' }}
+                            </div>
+                          </td>
+                        </tr>
+
+                        <!-- Normal Detailed Rows (showStopSummaryOnly is false, or stop is expanded) -->
+                        <ng-container *ngIf="!showStopSummaryOnly">
+                          <tr *ngFor="let pt of stop.points; let ptIdx = index" [ngClass]="{'stop-first-point-row': ptIdx === 0, 'stop-inner-point-row': ptIdx > 0}">
+                            <!-- Stop Number (Rowspan for all points in this stop) -->
+                            <td *ngIf="ptIdx === 0" [attr.rowspan]="stop.points.length" class="text-center align-middle border-bottom">
+                              <div class="stop-number-circle">{{ stopIdx + 1 }}</div>
+                            </td>
+
+                            <!-- Stop Name (Rowspan for all points in this stop) -->
+                            <td *ngIf="ptIdx === 0" [attr.rowspan]="stop.points.length" class="align-middle border-bottom">
+                              <div class="fw-bold text-dark">{{ stop.stopName }}</div>
+                            </td>
+
+                            <!-- Distance (Rowspan for all points in this stop) -->
+                            <td *ngIf="ptIdx === 0" [attr.rowspan]="stop.points.length" class="align-middle border-bottom">
+                              <span class="text-muted">{{ stop.distanceKm }} km</span>
+                            </td>
+
+                            <!-- Point Name & Point Badge -->
+                            <td class="border-bottom">
+                              <div class="d-flex align-items-center justify-content-between pe-3">
+                                <div class="d-flex align-items-center gap-2">
+                                  <i class="fa-solid fa-location-dot"
+                                     [ngClass]="pt.pointType === 'BOARDING' ? 'text-success' : (pt.pointType === 'DROPPING' ? 'text-warning' : 'text-primary')"></i>
+                                  <span class="fw-semibold text-dark small">{{ pt.pointName }}</span>
+                                </div>
+                                <span class="badge px-2.5 py-0.5 rounded-pill small fw-medium"
+                                      [ngClass]="pt.pointType === 'BOARDING' ? 'stop-badge-boarding' : (pt.pointType === 'DROPPING' ? 'stop-badge-dropping' : 'stop-badge-both')">
+                                  {{ pt.pointBadge }}
+                                </span>
+                              </div>
+                            </td>
+
+                            <!-- Arrival Date & Time -->
+                            <td class="border-bottom">
+                              <!-- Disabled for origin stop points -->
+                              <div *ngIf="stop.stopType === 'ORIGIN'" class="timing-disabled-box">&mdash;</div>
+
+                              <!-- Editable for intermediate & destination stop points -->
+                              <div *ngIf="stop.stopType !== 'ORIGIN'" class="timing-pill-input d-flex align-items-center gap-1.5 px-2 py-1 rounded-2 border bg-light">
+                                <input type="date" class="form-control form-control-sm border-0 bg-transparent p-0 timing-date-input"
+                                       [(ngModel)]="pt.arrivalDate"
+                                       (change)="onPointTimingChange(pt, stop)">
+                                <input type="time" class="form-control form-control-sm border-0 bg-transparent p-0 timing-time-input"
+                                       [(ngModel)]="pt.arrivalTime"
+                                       (change)="onPointTimingChange(pt, stop)">
+                              </div>
+                            </td>
+
+                            <!-- Departure Date & Time -->
+                            <td class="border-bottom">
+                              <!-- Disabled for destination stop points -->
+                              <div *ngIf="stop.stopType === 'DESTINATION'" class="timing-disabled-box">&mdash;</div>
+
+                              <!-- Editable for origin & intermediate stop points -->
+                              <div *ngIf="stop.stopType !== 'DESTINATION'" class="timing-pill-input d-flex align-items-center gap-1.5 px-2 py-1 rounded-2 border bg-light">
+                                <input type="date" class="form-control form-control-sm border-0 bg-transparent p-0 timing-date-input"
+                                       [(ngModel)]="pt.departureDate"
+                                       (change)="onPointTimingChange(pt, stop)">
+                                <input type="time" class="form-control form-control-sm border-0 bg-transparent p-0 timing-time-input"
+                                       [(ngModel)]="pt.departureTime"
+                                       (change)="onPointTimingChange(pt, stop)">
+                              </div>
+                            </td>
+
+                            <!-- Halt Duration -->
+                            <td class="text-center border-bottom">
+                              <div *ngIf="stop.stopType === 'ORIGIN' || stop.stopType === 'DESTINATION'" class="timing-disabled-box">&mdash;</div>
+                              <div *ngIf="stop.stopType === 'INTERMEDIATE'"
+                                   class="halt-duration-pill py-1 px-2 rounded-2 border small fw-semibold"
+                                   [ngClass]="pt.haltMinutes < 0 ? 'bg-danger bg-opacity-10 text-danger border-danger' : 'bg-light text-dark'">
+                                {{ pt.haltDurationDisplay || '&mdash;' }}
+                              </div>
+                            </td>
+
+                          </tr>
+                        </ng-container>
+                      </ng-container>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Informational Bottom Note -->
+              <div class="alert alert-info border-0 d-flex align-items-center gap-2 rounded-3 text-primary bg-primary bg-opacity-10 py-2.5 px-3 small mb-4">
+                <i class="fa-solid fa-circle-info fs-6"></i>
+                <span>Please ensure that all arrival and departure times are in chronological order and include the correct date for overnight stops.</span>
+              </div>
+
+              <!-- Validation Error Warning if any -->
+              <div *ngIf="timingValidationError" class="alert alert-danger border-0 d-flex align-items-center gap-2 rounded-3 text-danger bg-danger bg-opacity-10 py-2.5 px-3 small mb-4">
+                <i class="fa-solid fa-triangle-exclamation fs-6"></i>
+                <span class="fw-semibold">{{ timingValidationError }}</span>
+              </div>
+
+              <!-- Bottom Action Navigation Bar -->
+              <div class="d-flex justify-content-between align-items-center pt-2 mb-4">
+                <button type="button" class="btn btn-wizard-back" (click)="backToAssignBus()">
+                  Back
+                </button>
+                <button type="button"
+                        class="btn btn-wizard-continue d-inline-flex align-items-center gap-2"
+                        [disabled]="!canContinueToStep4()"
+                        (click)="continueToConfigureFares()">
+                  <span>Continue to Configure Fares</span>
+                  <i class="fa-solid fa-arrow-right"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Conflicting Schedule Modal -->
+            <div *ngIf="showConflictingScheduleModal && timingConflict" class="modal-backdrop fade show" style="background-color: rgba(0, 0, 0, 0.5); z-index: 1050;"></div>
+            <div *ngIf="showConflictingScheduleModal && timingConflict" class="modal fade show d-block" tabindex="-1" style="z-index: 1055;">
+              <div class="modal-dialog modal-dialog-centered" style="max-width: 580px;">
+                <div class="modal-content border-0 shadow-lg rounded-4">
+                  <div class="modal-header border-bottom pb-3 px-4 pt-4">
+                    <div class="d-flex align-items-center gap-2">
+                      <div class="rounded-circle bg-danger bg-opacity-10 p-2 text-danger d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                      </div>
+                      <div>
+                        <h5 class="modal-title fw-bold text-dark mb-0">Conflicting Schedule Details</h5>
+                        <span class="text-muted small">Schedule #{{ timingConflict.conflictingScheduleId }}</span>
+                      </div>
+                    </div>
+                    <button type="button" class="btn-close" (click)="closeConflictingScheduleModal()"></button>
+                  </div>
+                  <div class="modal-body px-4 py-3">
+                    <div class="p-3 bg-danger bg-opacity-10 rounded-3 text-danger small mb-3">
+                      <strong>Operational Overlap Warning:</strong>
+                      <div class="mt-1">{{ timingConflict.message }}</div>
+                    </div>
+                    <div class="row g-3">
+                      <div class="col-6">
+                        <div class="text-muted small">Conflicting Service Route</div>
+                        <div class="fw-bold text-dark">{{ timingConflict.origin }} &rarr; {{ timingConflict.destination }}</div>
+                      </div>
+                      <div class="col-6">
+                        <div class="text-muted small">Assigned Bus</div>
+                        <div class="fw-bold text-dark">{{ timingConflict.busNumber }} <span class="fw-normal text-muted" *ngIf="timingConflict.busName">({{ timingConflict.busName }})</span></div>
+                      </div>
+                      <div class="col-6">
+                        <div class="text-muted small">Departure Time</div>
+                        <div class="fw-bold text-dark">{{ timingConflict.existingDepartureFormatted }}</div>
+                      </div>
+                      <div class="col-6">
+                        <div class="text-muted small">Arrival Time</div>
+                        <div class="fw-bold text-dark">{{ timingConflict.existingArrivalFormatted }}</div>
+                      </div>
+                      <div class="col-12">
+                        <div class="text-muted small">Required Turnaround Buffer</div>
+                        <div class="fw-bold text-primary">{{ timingConflict.turnaroundBufferMinutes || 60 }} minutes turnaround buffer</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="modal-footer border-top px-4 py-3">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-3" (click)="closeConflictingScheduleModal()">Close</button>
+                    <button type="button" class="btn btn-primary rounded-pill px-3" (click)="backToAssignBus(); closeConflictingScheduleModal()">Assign Different Bus</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ==================== STEP 4 CONTENT: CONFIGURE FARES (PHASE 6.4) ==================== -->
+            <div *ngIf="scheduleWizardStep === 4" class="step4-configure-fares-container mt-4">
+
+              <!-- SECTION 1: Configure Segment Fares Card -->
+              <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white fare-config-card overflow-hidden">
+                <div class="p-3 px-4 border-bottom bg-white">
+                  <div class="d-flex align-items-center gap-2 mb-1">
+                    <div class="fare-step-badge">1</div>
+                    <h5 class="fw-bold text-dark mb-0 fs-6">Configure Segment Fares</h5>
+                    <span class="fare-pill-tag">Base fares for consecutive route segments</span>
+                  </div>
+                  <p class="text-muted small mb-0 ps-4 ms-2">
+                    Set the base fare for each adjacent stop-to-stop segment. These are used to calculate journey fares, which you can modify if needed.
+                  </p>
+                </div>
+
+                <div class="p-4">
+                  <div class="row g-4 align-items-start">
+                    <!-- Segment Table Column -->
+                    <div class="col-lg-8 col-12">
+                      <div class="table-responsive">
+                        <table class="table fare-table mb-0 align-middle">
+                          <thead>
+                            <tr>
+                              <th style="width: 45px;" class="text-center">#</th>
+                              <th>From Stop</th>
+                              <th>To Stop</th>
+                              <th style="width: 130px;" class="text-center">Distance (km)</th>
+                              <th style="width: 150px;" class="text-center">Segment Fare (&#8377;)</th>
+                              <th style="width: 80px;" class="text-center">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr *ngFor="let seg of wizardSegmentFares; let segIdx = index" class="border-bottom">
+                              <td class="text-center fw-semibold text-muted">{{ seg.segmentIndex }}</td>
+                              <td>
+                                <span [ngClass]="{'fw-bold text-dark': segIdx === 0}">{{ seg.fromStopName }}</span>
+                              </td>
+                              <td>
+                                <span [ngClass]="{'fw-bold text-dark': segIdx === wizardSegmentFares.length - 1}">{{ seg.toStopName }}</span>
+                              </td>
+                              <td class="text-center text-muted">{{ seg.distanceKm }}</td>
+                              <td class="text-center">
+                                <input type="number" min="1" step="1"
+                                       class="fare-input-box"
+                                       [ngClass]="{'border-danger': seg.fareError}"
+                                       [(ngModel)]="seg.fare"
+                                       (ngModelChange)="onSegmentFareChange(seg)">
+                                <div *ngIf="seg.fareError" class="text-danger small mt-1" style="font-size: 11px;">
+                                  {{ seg.fareError }}
+                                </div>
+                              </td>
+                              <td class="text-center text-muted">&mdash;</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <!-- Right Column: How it works? Card -->
+                    <div class="col-lg-4 col-12">
+                      <div class="how-it-works-panel">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                          <i class="fa-solid fa-circle-info text-primary fs-5"></i>
+                          <h6 class="fw-bold text-primary mb-0">How it works?</h6>
+                        </div>
+                        <ul class="list-unstyled mb-0 d-flex flex-column gap-2 mt-2">
+                          <li>These are fares between consecutive stops only.</li>
+                          <li>Used to auto-calculate journey fares for all valid boarding stop &rarr; dropping stop combinations.</li>
+                          <li>You can modify the final journey fares in the next section.</li>
+                          <li>Changing a segment fare will automatically update all non-overridden journey fares.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- SECTION 2: Configure Journey Fares Card -->
+              <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white fare-config-card overflow-hidden">
+                <div class="p-3 px-4 border-bottom bg-white">
+                  <div class="d-flex align-items-center gap-2 mb-1">
+                    <div class="fare-step-badge">2</div>
+                    <h5 class="fw-bold text-dark mb-0 fs-6">Configure Journey Fares</h5>
+                    <span class="fare-pill-tag">Auto-calculated (editable)</span>
+                  </div>
+                  <p class="text-muted small mb-0 ps-4 ms-2">
+                    Review and modify fares for all valid boarding stop to dropping stop combinations. Initial fares are calculated from segment fares.
+                  </p>
+                </div>
+
+                <div class="p-4">
+                  <div class="table-responsive">
+                    <table class="table fare-table mb-0 align-middle">
+                      <thead>
+                        <tr>
+                          <th style="width: 45px;" class="text-center">#</th>
+                          <th style="width: 200px;">From Stop (Boarding)</th>
+                          <th style="width: 200px;">To Stop (Dropping)</th>
+                          <th style="width: 150px;" class="text-center">Journey Distance (km)</th>
+                          <th style="width: 150px;" class="text-center">
+                            Calculated Fare (&#8377;)
+                            <i class="fa-solid fa-circle-question text-primary opacity-75 ms-1" title="Sum of consecutive segment fares"></i>
+                          </th>
+                          <th style="width: 150px;" class="text-center">
+                            Operator Fare (&#8377;)
+                            <i class="fa-solid fa-circle-question text-primary opacity-75 ms-1" title="Final fare applied for this journey"></i>
+                          </th>
+                          <th style="width: 110px;" class="text-center">Status</th>
+                          <th style="width: 100px;" class="text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let journey of wizardJourneyFares" class="border-bottom">
+                          <td class="text-center fw-semibold text-muted">{{ journey.journeyIndex }}</td>
+                          <td>
+                            <span [ngClass]="{'fw-bold text-dark': journey.fromStopOrder === 0}">{{ journey.fromStopName }}</span>
+                          </td>
+                          <td>
+                            <span [ngClass]="{'fw-bold text-dark': journey.toStopOrder === wizardStopTimings.length - 1}">{{ journey.toStopName }}</span>
+                          </td>
+                          <td class="text-center text-muted">{{ journey.distanceKm }}</td>
+                          <td class="text-center fw-semibold text-dark">
+                            {{ journey.calculatedFare | number:'1.0-0' }}
+                          </td>
+                          <td class="text-center">
+                            <input type="number" min="1" step="1"
+                                   class="fare-input-box"
+                                   [ngClass]="{'border-danger': journey.fareError}"
+                                   [(ngModel)]="journey.operatorFare"
+                                   (ngModelChange)="onJourneyFareChange(journey)">
+                            <div *ngIf="journey.fareError" class="text-danger small mt-1" style="font-size: 11px;">
+                              {{ journey.fareError }}
+                            </div>
+                          </td>
+                          <td class="text-center">
+                            <span *ngIf="journey.status === 'Auto'" class="status-badge-auto">Auto</span>
+                            <span *ngIf="journey.status === 'Overridden'" class="status-badge-overridden">Overridden</span>
+                          </td>
+                          <td class="text-center">
+                            <span *ngIf="!journey.isOverridden" class="text-muted">&mdash;</span>
+                            <button *ngIf="journey.isOverridden"
+                                    type="button"
+                                    class="btn-reset-fare"
+                                    (click)="resetJourneyFare(journey)">
+                              <i class="fa-solid fa-rotate-left"></i> Reset
+                            </button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- SECTION 3: Important Notes Banner -->
+              <div class="important-notes-banner mb-4 d-flex align-items-start gap-4">
+                <div class="important-notes-header d-flex align-items-center gap-2 flex-shrink-0">
+                  <i class="fa-solid fa-circle-info fs-5" style="color: #ea580c;"></i>
+                  <span class="fw-bold" style="color: #ea580c; font-size: 14px; white-space: nowrap;">Important notes</span>
+                </div>
+                <div class="important-notes-content flex-grow-1">
+                  <div class="row g-4">
+                    <div class="col-md-6 col-12">
+                      <ul class="important-notes-list mb-0">
+                        <li>Journey fares are initially calculated by summing the applicable segment fares.</li>
+                        <li>You can modify any journey fare. Manually overridden fares will not change when segment fares are updated.</li>
+                        <li>Use &ldquo;Reset&rdquo; to restore a journey fare to the auto-calculated value.</li>
+                      </ul>
+                    </div>
+                    <div class="col-md-6 col-12">
+                      <ul class="important-notes-list mb-0">
+                        <li>All fares must be greater than 0 and follow the allowed fare rules.</li>
+                        <li>Fares apply between stops. Multiple boarding/dropping points within a stop use the same fare.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- SECTION 4: Bottom Navigation Buttons -->
+              <div class="d-flex justify-content-between align-items-center pt-2 mb-4">
+                <button type="button" class="btn btn-outline-secondary px-4 py-2 rounded-3 fw-semibold bg-white" (click)="backToConfigureTimings()">
+                  Back
+                </button>
+                <button type="button" class="btn btn-primary px-4 py-2 rounded-3 fw-semibold d-inline-flex align-items-center gap-2"
+                        [disabled]="!isFareConfigurationValid()"
+                        (click)="continueToReviewFromFares()">
+                  Continue to Review <i class="fa-solid fa-arrow-right"></i>
+                </button>
+              </div>
+
+            </div>
+
+            <!-- ==================== STEP 5: REVIEW & CREATE ==================== -->
+            <div *ngIf="scheduleWizardStep === 5" class="step5-review-container mt-4">
+
+              <!-- Section 1: Route Overview -->
+              <div class="card review-section-card mb-3">
+                <div class="review-section-header" (click)="toggleReviewSection(1)" role="button" tabindex="0">
+                  <div class="d-flex align-items-center gap-2.5">
+                    <div class="review-icon-circle">
+                      <i class="fa-solid fa-map-location-dot"></i>
+                    </div>
+                    <span class="review-section-title">1. Route Overview</span>
+                    <span class="review-looks-good-badge">
+                      <i class="fa-solid fa-check"></i> Looks good
+                    </span>
+                  </div>
+                  <div class="review-header-summary text-muted small mx-auto d-none d-md-block">
+                    {{ getReviewRouteSummary() }}
+                  </div>
+                  <div class="review-header-toggle text-secondary">
+                    <i class="fa-solid" [ngClass]="isReviewSectionOpen(1) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                  </div>
+                </div>
+                <!-- Expanded Route Overview Table -->
+                <div *ngIf="isReviewSectionOpen(1)" class="review-section-body p-3 pt-0 border-top">
+                  <div class="table-responsive mt-3">
+                    <table class="table review-table mb-0 align-middle">
+                      <thead>
+                        <tr>
+                          <th style="width: 60px;" class="text-center">#</th>
+                          <th>Stop Name</th>
+                          <th>Distance from Origin</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let stop of wizardStopTimings; let idx = index" class="border-bottom">
+                          <td class="text-center text-muted fw-semibold">{{ idx + 1 }}</td>
+                          <td>
+                            <span [class.fw-bold]="idx === 0 || idx === wizardStopTimings.length - 1" class="text-dark">
+                              {{ getDisplayStopName(stop, idx) }}
+                            </span>
+                          </td>
+                          <td class="text-muted">{{ stop.distanceKm }} km</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 2: Bus Details -->
+              <div class="card review-section-card mb-3">
+                <div class="review-section-header" (click)="toggleReviewSection(2)" role="button" tabindex="0">
+                  <div class="d-flex align-items-center gap-2.5">
+                    <div class="review-icon-circle">
+                      <i class="fa-solid fa-bus"></i>
+                    </div>
+                    <span class="review-section-title">2. Bus Details</span>
+                    <span class="review-looks-good-badge">
+                      <i class="fa-solid fa-check"></i> Looks good
+                    </span>
+                  </div>
+                  <div class="review-header-summary text-muted small mx-auto d-none d-md-block">
+                    {{ getReviewBusSummary() }}
+                  </div>
+                  <div class="review-header-toggle text-secondary">
+                    <i class="fa-solid" [ngClass]="isReviewSectionOpen(2) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                  </div>
+                </div>
+                <!-- Expanded Bus Details -->
+                <div *ngIf="isReviewSectionOpen(2)" class="review-section-body p-3 pt-0 border-top">
+                  <div class="bus-expanded-content mt-3">
+                    <!-- Left: Bus Photo -->
+                    <div class="bus-expanded-left">
+                      <div class="bus-photo-frame">
+                        <img [src]="getBusThumbnail(wizardSelectedBus)"
+                             [alt]="wizardSelectedBus?.busNumber || 'Bus'"
+                             class="bus-photo-img"
+                             (error)="handleImageError($event)">
+                      </div>
+                    </div>
+
+                    <!-- Middle: Core Specifications Box -->
+                    <div class="bus-expanded-middle">
+                      <div class="bus-core-specs-box">
+                        <div class="bus-spec-row">
+                          <span class="spec-label">Registration No.</span>
+                          <span class="spec-val-bold">{{ wizardSelectedBus?.busNumber || '--' }}</span>
+                        </div>
+                        <div class="bus-spec-row">
+                          <span class="spec-label">Bus Name</span>
+                          <span class="spec-val-semibold">{{ wizardSelectedBus?.busName || (wizardSelectedBus?.operatorName ? wizardSelectedBus?.operatorName + ' ' + (wizardSelectedBus?.model || wizardSelectedBus?.busType) : 'Not available') }}</span>
+                        </div>
+                        <div class="bus-spec-row">
+                          <span class="spec-label">Bus Type</span>
+                          <span class="spec-val">{{ wizardSelectedBus?.busType || '--' }}</span>
+                        </div>
+                        <div class="bus-spec-row">
+                          <span class="spec-label">Total Seats</span>
+                          <span class="spec-val-bold">{{ wizardSelectedBus ? getBusTotalSeatsFormatted(wizardSelectedBus) : '--' }}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Vertical Divider Line -->
+                    <div class="bus-expanded-divider"></div>
+
+                    <!-- Right: Operational Specifications -->
+                    <div class="bus-expanded-right">
+                      <div class="bus-specs-list">
+                        <div class="bus-spec-row">
+                          <span class="spec-label">Manufacturer</span>
+                          <span class="spec-val">{{ wizardSelectedBus?.manufacturer || (wizardSelectedBus ? getDerivedManufacturer(wizardSelectedBus) : 'Not available') }}</span>
+                        </div>
+                        <div class="bus-spec-row">
+                          <span class="spec-label">Model</span>
+                          <span class="spec-val">{{ wizardSelectedBus?.model || 'Not available' }}</span>
+                        </div>
+                        <div class="bus-spec-row">
+                          <span class="spec-label">Year</span>
+                          <span class="spec-val">{{ wizardSelectedBus?.yearOfManufacturing || wizardSelectedBus?.modelYear || '2022' }}</span>
+                        </div>
+                        <div class="bus-spec-row">
+                          <span class="spec-label">Fuel Type</span>
+                          <span class="spec-val">{{ wizardSelectedBus?.fuelType || 'Diesel' }}</span>
+                        </div>
+                        <div class="bus-spec-row bus-amenities-row">
+                          <span class="spec-label">Amenities</span>
+                          <div class="bus-amenities-wrap">
+                            <span *ngFor="let amenity of (wizardSelectedBus ? getBusAmenitiesList(wizardSelectedBus) : ['AC', 'Wi-Fi', 'Charging', 'Blanket'])" class="amenity-item">
+                              <i [class]="getAmenityIcon(amenity)" class="amenity-icon"></i>
+                              <span>{{ amenity }}</span>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 3: Trip Timings & Stop-wise Boarding/Dropping Points -->
+              <div class="card review-section-card mb-3">
+                <div class="review-section-header" (click)="toggleReviewSection(3)" role="button" tabindex="0">
+                  <div class="d-flex align-items-center gap-2.5">
+                    <div class="review-icon-circle">
+                      <i class="fa-regular fa-clock"></i>
+                    </div>
+                    <span class="review-section-title">3. Trip Timings &amp; Stop-wise Boarding/Dropping Points</span>
+                    <span class="review-looks-good-badge">
+                      <i class="fa-solid fa-check"></i> Looks good
+                    </span>
+                  </div>
+                  <div class="review-header-summary text-muted small mx-auto d-none d-md-block">
+                    {{ getReviewTimingsSummary() }}
+                  </div>
+                  <div class="review-header-toggle text-secondary">
+                    <i class="fa-solid" [ngClass]="isReviewSectionOpen(3) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                  </div>
+                </div>
+                <!-- Expanded Content: Timings Table (Default Open) -->
+                <div *ngIf="isReviewSectionOpen(3)" class="review-section-body p-3 pt-0 border-top">
+                  <div class="table-responsive mt-3">
+                    <table class="table review-table mb-0 align-middle">
+                      <thead>
+                        <tr>
+                          <th style="width: 50px;" class="text-center">#</th>
+                          <th style="width: 190px;">Stop Name</th>
+                          <th style="width: 140px;">Distance from Origin</th>
+                          <th>Boarding Points (Time)</th>
+                          <th>Dropping Points (Time)</th>
+                          <th style="width: 110px;" class="text-center">Halt Duration</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let stop of wizardStopTimings; let idx = index" class="border-bottom">
+                          <td class="text-center text-muted fw-semibold">{{ idx + 1 }}</td>
+                          <td>
+                            <span [class.fw-bold]="idx === 0 || idx === wizardStopTimings.length - 1" class="text-dark">
+                              {{ getDisplayStopName(stop, idx) }}
+                            </span>
+                          </td>
+                          <td class="text-muted">{{ stop.distanceKm }} km</td>
+                          <td>
+                            <div *ngIf="getBoardingPointsForStop(stop).length === 0" class="text-muted">—</div>
+                            <div class="d-flex flex-wrap align-items-center gap-3" *ngIf="getBoardingPointsForStop(stop).length > 0">
+                              <div *ngFor="let pt of getBoardingPointsForStop(stop)" class="d-inline-flex align-items-center small">
+                                <i class="fa-solid fa-location-dot text-success me-1.5"></i>
+                                <span class="fw-semibold text-dark">{{ pt.pointName }}</span>
+                                <span class="text-muted ms-1">({{ formatDisplayTime(pt.departureTime) }})</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div *ngIf="getDroppingPointsForStop(stop).length === 0" class="text-muted">—</div>
+                            <div class="d-flex flex-wrap align-items-center gap-3" *ngIf="getDroppingPointsForStop(stop).length > 0">
+                              <div *ngFor="let pt of getDroppingPointsForStop(stop)" class="d-inline-flex align-items-center small">
+                                <i class="fa-solid fa-location-dot text-success me-1.5"></i>
+                                <span class="fw-semibold text-dark">{{ pt.pointName }}</span>
+                                <span class="text-muted ms-1">({{ formatDisplayTime(pt.arrivalTime) }})</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td class="text-center text-muted">
+                            {{ getHaltDurationForStop(stop, idx) }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 4: Segment Fares (Base Fares) -->
+              <div class="card review-section-card mb-3">
+                <div class="review-section-header" (click)="toggleReviewSection(4)" role="button" tabindex="0">
+                  <div class="d-flex align-items-center gap-2.5">
+                    <div class="review-icon-circle">
+                      <i class="fa-solid fa-indian-rupee-sign"></i>
+                    </div>
+                    <span class="review-section-title">4. Segment Fares (Base Fares)</span>
+                    <span class="review-looks-good-badge">
+                      <i class="fa-solid fa-check"></i> Looks good
+                    </span>
+                  </div>
+                  <div class="review-header-summary text-muted small mx-auto d-none d-md-block">
+                    {{ getReviewSegmentsSummary() }}
+                  </div>
+                  <div class="review-header-toggle text-secondary">
+                    <i class="fa-solid" [ngClass]="isReviewSectionOpen(4) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                  </div>
+                </div>
+                <!-- Expanded Segment Fares Table -->
+                <div *ngIf="isReviewSectionOpen(4)" class="review-section-body p-3 pt-0 border-top">
+                  <div class="table-responsive mt-3">
+                    <table class="table review-table mb-0 align-middle">
+                      <thead>
+                        <tr>
+                          <th style="width: 50px;" class="text-center">#</th>
+                          <th>From Stop</th>
+                          <th>To Stop</th>
+                          <th class="text-center" style="width: 140px;">Distance (km)</th>
+                          <th class="text-center" style="width: 160px;">Segment Fare (&#8377;)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let seg of wizardSegmentFares; let idx = index" class="border-bottom">
+                          <td class="text-center text-muted fw-semibold">{{ seg.segmentIndex }}</td>
+                          <td>
+                            <span [class.fw-bold]="idx === 0" class="text-dark">{{ seg.fromStopName }}</span>
+                          </td>
+                          <td>
+                            <span [class.fw-bold]="idx === wizardSegmentFares.length - 1" class="text-dark">{{ seg.toStopName }}</span>
+                          </td>
+                          <td class="text-center text-muted">{{ seg.distanceKm }}</td>
+                          <td class="text-center fw-semibold text-dark">{{ seg.fare | number:'1.0-0' }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 5: Journey Fares (Final Fares) -->
+              <div class="card review-section-card mb-3">
+                <div class="review-section-header" (click)="toggleReviewSection(5)" role="button" tabindex="0">
+                  <div class="d-flex align-items-center gap-2.5">
+                    <div class="review-icon-circle">
+                      <i class="fa-solid fa-indian-rupee-sign"></i>
+                    </div>
+                    <span class="review-section-title">5. Journey Fares (Final Fares)</span>
+                    <span class="review-looks-good-badge">
+                      <i class="fa-solid fa-check"></i> Looks good
+                    </span>
+                  </div>
+                  <div class="review-header-summary text-muted small mx-auto d-none d-md-block">
+                    {{ getReviewJourneysSummary() }}
+                  </div>
+                  <div class="review-header-toggle text-secondary">
+                    <i class="fa-solid" [ngClass]="isReviewSectionOpen(5) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                  </div>
+                </div>
+                <!-- Expanded Journey Fares Table -->
+                <div *ngIf="isReviewSectionOpen(5)" class="review-section-body p-3 pt-0 border-top">
+                  <div class="table-responsive mt-3">
+                    <table class="table review-table mb-0 align-middle">
+                      <thead>
+                        <tr>
+                          <th style="width: 50px;" class="text-center">#</th>
+                          <th>From Stop (Boarding)</th>
+                          <th>To Stop (Dropping)</th>
+                          <th class="text-center" style="width: 140px;">Distance (km)</th>
+                          <th class="text-center" style="width: 160px;">Calculated Fare (&#8377;)</th>
+                          <th class="text-center" style="width: 160px;">Operator Fare (&#8377;)</th>
+                          <th class="text-center" style="width: 120px;">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let journey of wizardJourneyFares; let idx = index" class="border-bottom">
+                          <td class="text-center text-muted fw-semibold">{{ journey.journeyIndex }}</td>
+                          <td>
+                            <span [class.fw-bold]="journey.fromStopOrder === 0" class="text-dark">{{ journey.fromStopName }}</span>
+                          </td>
+                          <td>
+                            <span [class.fw-bold]="journey.toStopOrder === wizardStopTimings.length - 1" class="text-dark">{{ journey.toStopName }}</span>
+                          </td>
+                          <td class="text-center text-muted">{{ journey.distanceKm }}</td>
+                          <td class="text-center text-muted">{{ journey.calculatedFare | number:'1.0-0' }}</td>
+                          <td class="text-center fw-semibold text-dark">{{ journey.operatorFare | number:'1.0-0' }}</td>
+                          <td class="text-center">
+                            <span *ngIf="!journey.isOverridden" class="badge-status-auto">Auto</span>
+                            <span *ngIf="journey.isOverridden" class="badge-status-overridden">Overridden</span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Full-Width Validation Summary Panel -->
+              <div *ngIf="isScheduleReviewValid()" class="validation-summary-card mb-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+                <div class="d-flex align-items-center gap-3">
+                  <div class="validation-summary-icon text-success">
+                    <i class="fa-solid fa-circle-check fs-2"></i>
+                  </div>
+                  <div>
+                    <div class="fw-bold text-dark fs-6">All validations passed</div>
+                    <div class="text-muted small">This schedule is ready to be created.</div>
+                  </div>
+                </div>
+                <div class="validation-summary-checks d-flex flex-wrap gap-4">
+                  <div class="validation-checks-col">
+                    <div class="d-flex align-items-center text-secondary small mb-1.5">
+                      <i class="fa-solid fa-check text-success me-2"></i>
+                      <span>No schedule conflicts (including 60-minute turnaround buffer)</span>
+                    </div>
+                    <div class="d-flex align-items-center text-secondary small">
+                      <i class="fa-solid fa-check text-success me-2"></i>
+                      <span>All stop timings are in chronological order</span>
+                    </div>
+                  </div>
+                  <div class="validation-checks-col">
+                    <div class="d-flex align-items-center text-secondary small mb-1.5">
+                      <i class="fa-solid fa-check text-success me-2"></i>
+                      <span>All required boarding and dropping point timings are configured</span>
+                    </div>
+                    <div class="d-flex align-items-center text-secondary small">
+                      <i class="fa-solid fa-check text-success me-2"></i>
+                      <span>All segment fares and journey fares are valid (greater than 0)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Validation Error Panel (if invalid) -->
+              <div *ngIf="!isScheduleReviewValid()" class="validation-summary-card-error mb-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+                <div class="d-flex align-items-center gap-3">
+                  <div class="validation-summary-icon text-danger">
+                    <i class="fa-solid fa-circle-exclamation fs-2"></i>
+                  </div>
+                  <div>
+                    <div class="fw-bold text-dark fs-6">Validation issues detected</div>
+                    <div class="text-danger small">{{ getValidationErrorMessage() }}</div>
+                  </div>
+                </div>
+                <div>
+                  <button *ngIf="hasScheduleConflict()" type="button" class="btn btn-sm btn-outline-danger" (click)="viewConflictingSchedule()">
+                    View Conflicting Schedule
+                  </button>
+                </div>
+              </div>
+
+              <!-- Error Alert Banner (e.g. from backend response) -->
+              <div *ngIf="scheduleCreationError" class="alert alert-danger alert-dismissible fade show d-flex align-items-center gap-2 mb-4" role="alert">
+                <i class="fa-solid fa-triangle-exclamation flex-shrink-0"></i>
+                <div class="flex-grow-1">{{ scheduleCreationError }}</div>
+                <button type="button" class="btn-close" (click)="scheduleCreationError = null" aria-label="Close"></button>
+              </div>
+
+              <!-- Bottom Navigation -->
+              <div class="d-flex justify-content-between align-items-center pt-2 pb-4">
+                <button type="button"
+                        class="btn btn-outline-secondary px-4 py-2 rounded-3 fw-semibold"
+                        [disabled]="isCreatingSchedule"
+                        (click)="backToConfigureFares()">
+                  Back
+                </button>
+                <button type="button"
+                        class="btn btn-primary px-4 py-2 rounded-3 fw-semibold d-inline-flex align-items-center"
+                        [disabled]="isCreatingSchedule || !isScheduleReviewValid()"
+                        (click)="submitCreateSchedule()">
+                  <span *ngIf="isCreatingSchedule" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                  <span>{{ isCreatingSchedule ? 'Creating Schedule...' : 'Create Schedule' }}</span>
+                  <i *ngIf="!isCreatingSchedule" class="fa-solid fa-arrow-right ms-2"></i>
+                </button>
+              </div>
+
+            </div>
+
+            <!-- ==================== STEP 6: CONFIRMATION (PHASE 6.6) ==================== -->
+            <div *ngIf="scheduleWizardStep === 6" class="step6-confirmation-container text-center py-4">
+              <!-- Success Illustration -->
+              <div class="schedule-success-illustration-wrap mb-3 position-relative d-inline-block">
+                <!-- SVG Decorative Background Shape -->
+                <svg class="schedule-success-blob-svg" width="360" height="190" viewBox="0 0 360 190" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <!-- Organic pale mint backdrop -->
+                  <path d="M72 120C38 106 36 62 78 48C122 34 150 56 185 46C228 32 272 38 296 65C328 98 308 132 276 139C228 150 194 132 160 138C116 146 86 132 72 120Z" fill="#ecfdf5"/>
+                  <ellipse cx="180" cy="95" rx="96" ry="50" fill="#ecfdf5"/>
+                </svg>
+
+                <!-- Confetti Elements -->
+                <!-- Top-Left Red Bar -->
+                <span class="confetti" style="position: absolute; top: 42px; left: 144px; width: 7px; height: 16px; background-color: #f43f5e; border-radius: 2px; transform: rotate(-25deg);"></span>
+                <!-- Top-Center Yellow Diamond -->
+                <span class="confetti" style="position: absolute; top: 32px; left: 210px; width: 8px; height: 8px; background-color: #f59e0b; border-radius: 1px; transform: rotate(45deg);"></span>
+                <!-- Top-Right Cyan Square -->
+                <span class="confetti" style="position: absolute; top: 50px; right: 100px; width: 8px; height: 8px; background-color: #06b6d4; border-radius: 2px; transform: rotate(18deg);"></span>
+                <!-- Far-Left Green Bar -->
+                <span class="confetti" style="position: absolute; top: 88px; left: 92px; width: 7px; height: 14px; background-color: #10b981; border-radius: 2px; transform: rotate(32deg);"></span>
+                <!-- Mid-Left Yellow Dot -->
+                <span class="confetti" style="position: absolute; top: 108px; left: 134px; width: 8px; height: 8px; background-color: #f59e0b; border-radius: 2px; transform: rotate(-10deg);"></span>
+                <!-- Mid-Right Red Bar -->
+                <span class="confetti" style="position: absolute; top: 64px; right: 118px; width: 7px; height: 16px; background-color: #f43f5e; border-radius: 2px; transform: rotate(38deg);"></span>
+                <!-- Far-Right Green Bar -->
+                <span class="confetti" style="position: absolute; top: 92px; right: 88px; width: 7px; height: 15px; background-color: #10b981; border-radius: 2px; transform: rotate(-40deg);"></span>
+                <!-- Bottom-Right Cyan Bar -->
+                <span class="confetti" style="position: absolute; top: 108px; right: 124px; width: 7px; height: 14px; background-color: #06b6d4; border-radius: 2px; transform: rotate(22deg);"></span>
+
+                <!-- Center Green Checkmark Circle -->
+                <div class="schedule-success-center-circle" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 84px; height: 84px; border-radius: 50%; background: linear-gradient(135deg, #10b981 0%, #059669 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 25px -4px rgba(16, 185, 129, 0.42); z-index: 2;">
+                  <i class="fa-solid fa-check text-white" style="font-size: 38px; line-height: 1;"></i>
+                </div>
+              </div>
+
+              <!-- Success Heading & Subtitle -->
+              <h2 class="fw-bold text-dark mt-2 mb-2" style="font-size: 32px; letter-spacing: -0.5px;">Schedule Created Successfully!</h2>
+              <p class="text-secondary fs-6 mb-4" style="color: #64748b; font-size: 16px;">
+                Your bus schedule for {{ getCreatedScheduleRouteText() }} has been created.
+              </p>
+
+              <!-- Single Horizontal Confirmation Card -->
+              <div class="schedule-confirmation-card mx-auto mb-4 text-start">
+                <div class="row align-items-center g-0">
+                  <!-- Left Section: Schedule ID, Creation Time -->
+                  <div class="col-md-6 col-12 d-flex align-items-center gap-3 p-4 schedule-conf-left">
+                    <div class="schedule-conf-cal-icon d-flex align-items-center justify-content-center text-success flex-shrink-0">
+                      <i class="fa-regular fa-calendar-days" style="font-size: 34px; color: #10b981;"></i>
+                    </div>
+                    <div>
+                      <span class="text-secondary text-uppercase fw-semibold d-block mb-1" style="font-size: 11px; letter-spacing: 0.5px; color: #64748b;">Schedule ID</span>
+                      <div class="fw-bold text-dark fs-5 mb-1" style="letter-spacing: -0.2px;">{{ getFormattedCreatedScheduleId() }}</div>
+                      <div class="text-muted small" style="font-size: 13px;">Created on {{ getCreatedScheduleTimestamp() }}</div>
+                    </div>
+                  </div>
+
+                  <!-- Subtle Divider -->
+                  <div class="d-none d-md-block col-auto schedule-conf-divider-wrap">
+                    <div class="schedule-conf-divider"></div>
+                  </div>
+
+                  <!-- Right Section: Status badge & booking message -->
+                  <div class="col-md col-12 p-4 schedule-conf-right">
+                    <div class="d-flex flex-column align-items-start">
+                      <span class="schedule-conf-status-badge d-inline-flex align-items-center gap-1.5 px-3 py-1 rounded-pill fw-semibold mb-2">
+                        <i class="fa-solid fa-check me-1" style="font-size: 11px;"></i>
+                        {{ getCreatedScheduleStatusText() }}
+                      </span>
+                      <p class="text-secondary small mb-0" style="font-size: 13px; color: #64748b;">
+                        {{ getCreatedScheduleStatusMessage() }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Further Actions: Three Buttons in Horizontal Row -->
+              <div class="d-flex align-items-center justify-content-center gap-3 flex-wrap mt-3">
+                <button type="button"
+                        class="btn btn-primary px-4 py-2.5 rounded-3 fw-semibold d-inline-flex align-items-center gap-2 shadow-sm"
+                        (click)="startNewScheduleWizard()">
+                  <i class="fa-regular fa-calendar-plus"></i>
+                  <span>Create Another Schedule</span>
+                </button>
+
+                <button type="button"
+                        class="btn btn-outline-secondary bg-white text-dark border px-4 py-2.5 rounded-3 fw-semibold d-inline-flex align-items-center gap-2 shadow-sm"
+                        (click)="finishWizardAndGoToSchedules()">
+                  <i class="fa-regular fa-file-lines text-primary"></i>
+                  <span>View All Schedules</span>
+                </button>
+
+                <button type="button"
+                        class="btn btn-outline-secondary bg-white text-dark border px-4 py-2.5 rounded-3 fw-semibold d-inline-flex align-items-center gap-2 shadow-sm"
+                        (click)="goToCreatedScheduleDetails()">
+                  <i class="fa-solid fa-bus text-primary"></i>
+                  <span>Go to Schedule Details</span>
+                </button>
+              </div>
             </div>
           </div>
+        </div> <!-- /activeNav === 'schedules' -->
 
           <!-- ==================== VIEW 5: BOOKINGS MANIFEST ==================== -->
           <div *ngIf="activeNav === 'bookings'">
@@ -3011,6 +5762,230 @@ interface TrendDay {
         </div>
       </div>
 
+      <!-- ==================== SCHEDULES TOAST NOTIFICATION ==================== -->
+      <div *ngIf="schedulesToastMessage" class="schedules-toast-container">
+        <div class="alert alert-dismissible shadow-lg border-0 d-flex align-items-center gap-3 py-3 px-4 rounded-3 text-white"
+             [class.bg-primary]="schedulesToastType === 'info'"
+             [class.bg-success]="schedulesToastType === 'success'"
+             [class.bg-danger]="schedulesToastType === 'danger'">
+          <i *ngIf="schedulesToastType === 'info'" class="fa-solid fa-circle-info fs-5"></i>
+          <i *ngIf="schedulesToastType === 'success'" class="fa-solid fa-circle-check fs-5"></i>
+          <i *ngIf="schedulesToastType === 'danger'" class="fa-solid fa-circle-exclamation fs-5"></i>
+          <div class="flex-grow-1 small fw-medium">{{ schedulesToastMessage }}</div>
+          <button type="button" class="btn-close btn-close-white" (click)="schedulesToastMessage = null"></button>
+        </div>
+      </div>
+
+      <!-- ==================== SCHEDULE DETAILS MODAL ==================== -->
+      <div *ngIf="showScheduleDetailsModal && selectedScheduleForDetails" class="modal fade show d-block bg-dark bg-opacity-50" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+          <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-header bg-light border-bottom px-4 py-3">
+              <div class="d-flex align-items-center gap-2">
+                <span class="sched-id-badge fs-6">SCH-{{ selectedScheduleForDetails.id }}</span>
+                <h5 class="modal-title fw-bold text-dark mb-0">
+                  {{ selectedScheduleForDetails.origin }} <i class="fa-solid fa-arrow-right mx-1 text-muted fs-6"></i> {{ selectedScheduleForDetails.destination }}
+                </h5>
+                <span class="sched-pill ms-2" [ngClass]="getScheduleStatusPillClass(selectedScheduleForDetails)">
+                  <span class="pill-dot"></span>
+                  {{ getScheduleComputedStatus(selectedScheduleForDetails) | titlecase }}
+                </span>
+              </div>
+              <button type="button" class="btn-close" (click)="closeScheduleDetailsModal()"></button>
+            </div>
+
+            <div class="modal-body p-4">
+              <!-- 3 Overview Cards -->
+              <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                  <div class="p-3 bg-light rounded-3 border h-100">
+                    <small class="text-muted fw-bold text-uppercase d-block mb-2" style="font-size: 11px;">
+                      <i class="fa-solid fa-bus text-primary me-1"></i> Bus Details
+                    </small>
+                    <div class="fw-bold text-dark fs-6">{{ selectedScheduleForDetails.busNumber || getBusNumber(selectedScheduleForDetails.busId) }}</div>
+                    <div class="text-secondary small">{{ selectedScheduleForDetails.busType || getBusType(selectedScheduleForDetails.busId) }}</div>
+                    <div class="text-muted small mt-1">Capacity: {{ selectedScheduleForDetails.capacity || getBusCapacity(selectedScheduleForDetails.busId) }} seats</div>
+                  </div>
+                </div>
+
+                <div class="col-md-4">
+                  <div class="p-3 bg-light rounded-3 border h-100">
+                    <small class="text-muted fw-bold text-uppercase d-block mb-2" style="font-size: 11px;">
+                      <i class="fa-solid fa-clock text-info me-1"></i> Timetable
+                    </small>
+                    <div class="small text-muted">Departure:</div>
+                    <div class="fw-bold text-dark mb-1">
+                      {{ formatScheduleDate(selectedScheduleForDetails.travelDate) }} at {{ formatScheduleTime(selectedScheduleForDetails.departureTime) }}
+                    </div>
+                    <div class="small text-muted">Arrival:</div>
+                    <div class="fw-bold text-dark">
+                      {{ formatScheduleDate(getArrivalDate(selectedScheduleForDetails)) }} at {{ formatScheduleTime(selectedScheduleForDetails.arrivalTime) }}
+                      <span *ngIf="isOvernightSchedule(selectedScheduleForDetails)" class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill ms-1" style="font-size: 10px;">+1d</span>
+                    </div>
+                    <div class="small text-primary fw-semibold mt-1">Duration: {{ calculateDuration(selectedScheduleForDetails) }}</div>
+                  </div>
+                </div>
+
+                <div class="col-md-4">
+                  <div class="p-3 bg-light rounded-3 border h-100">
+                    <small class="text-muted fw-bold text-uppercase d-block mb-2" style="font-size: 11px;">
+                      <i class="fa-solid fa-ticket text-success me-1"></i> Fare & Inventory
+                    </small>
+                    <div class="small text-muted">Starting Fare:</div>
+                    <div class="fw-bold text-success fs-5 mb-1">₹ {{ selectedScheduleForDetails.fare | number:'1.0-0' }}</div>
+                    <div class="small text-muted">Available Seats:</div>
+                    <div class="fw-bold text-dark">
+                      {{ selectedScheduleForDetails.availableSeats }} / {{ selectedScheduleForDetails.capacity || getBusCapacity(selectedScheduleForDetails.busId) }}
+                    </div>
+                    <div class="small text-muted mt-1">Occupancy: {{ getOccupancyPercent(selectedScheduleForDetails) }}%</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Stops Breakdown / Timeline -->
+              <div class="mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h6 class="fw-bold text-dark mb-0">
+                    <i class="fa-solid fa-timeline text-primary me-2"></i>Route Stops & Schedule Timetable
+                  </h6>
+                  <span *ngIf="isLoadingScheduleDetails" class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                </div>
+
+                <div class="table-responsive rounded-3 border">
+                  <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th class="ps-3" style="width: 60px;">#</th>
+                        <th>Stop Name</th>
+                        <th>Type</th>
+                        <th>Arrival</th>
+                        <th>Departure</th>
+                        <th class="pe-3 text-end">Distance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <ng-container *ngIf="selectedScheduleStops && selectedScheduleStops.length > 0; else defaultStopsTpl">
+                        <tr *ngFor="let st of selectedScheduleStops">
+                          <td class="ps-3 fw-bold text-muted">{{ st.stopOrder + 1 }}</td>
+                          <td class="fw-semibold text-dark">{{ st.stopName }}</td>
+                          <td>
+                            <span class="badge"
+                                  [class.bg-primary]="st.stopType === 'ORIGIN'"
+                                  [class.bg-secondary]="st.stopType === 'INTERMEDIATE'"
+                                  [class.bg-success]="st.stopType === 'DESTINATION'">
+                              {{ st.stopType }}
+                            </span>
+                          </td>
+                          <td>{{ formatScheduleTime(st.arrivalTime) || '—' }}</td>
+                          <td>{{ formatScheduleTime(st.departureTime) || '—' }}</td>
+                          <td class="pe-3 text-end text-muted">{{ st.distanceKm != null ? st.distanceKm + ' km' : '—' }}</td>
+                        </tr>
+                      </ng-container>
+                      <ng-template #defaultStopsTpl>
+                        <tr>
+                          <td class="ps-3 fw-bold text-muted">1</td>
+                          <td class="fw-semibold text-dark">{{ selectedScheduleForDetails.origin }}</td>
+                          <td><span class="badge bg-primary">ORIGIN</span></td>
+                          <td>—</td>
+                          <td>{{ formatScheduleTime(selectedScheduleForDetails.departureTime) }}</td>
+                          <td class="pe-3 text-end text-muted">0 km</td>
+                        </tr>
+                        <tr>
+                          <td class="ps-3 fw-bold text-muted">2</td>
+                          <td class="fw-semibold text-dark">{{ selectedScheduleForDetails.destination }}</td>
+                          <td><span class="badge bg-success">DESTINATION</span></td>
+                          <td>{{ formatScheduleTime(selectedScheduleForDetails.arrivalTime) }}</td>
+                          <td>—</td>
+                          <td class="pe-3 text-end text-muted">—</td>
+                        </tr>
+                      </ng-template>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="modal-footer bg-light px-4 py-3 justify-content-between">
+              <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill" (click)="closeScheduleDetailsModal()">
+                Close
+              </button>
+              <div class="d-flex gap-2">
+                <button class="btn btn-outline-danger btn-sm rounded-pill"
+                        *ngIf="selectedScheduleForDetails.status !== 'CANCELLED'"
+                        (click)="openCancelScheduleModal(selectedScheduleForDetails)">
+                  <i class="fa-solid fa-ban me-1"></i> Cancel Schedule
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== CANCEL SCHEDULE MODAL ==================== -->
+      <div *ngIf="showCancelScheduleModal && scheduleToCancel" class="modal fade show d-block bg-dark bg-opacity-50" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content rounded-4 border-0 shadow-lg">
+            <div class="modal-header bg-danger-subtle border-bottom px-4 py-3">
+              <div class="d-flex align-items-center gap-2 text-danger">
+                <i class="fa-solid fa-triangle-exclamation fs-5"></i>
+                <h5 class="modal-title fw-bold mb-0">Cancel Bus Schedule</h5>
+              </div>
+              <button type="button" class="btn-close" (click)="closeCancelScheduleModal()"></button>
+            </div>
+
+            <div class="modal-body p-4">
+              <p class="text-dark mb-3">
+                Are you sure you want to cancel Schedule <strong>SCH-{{ scheduleToCancel.id }}</strong>?
+              </p>
+
+              <div class="p-3 bg-light rounded-3 border mb-3">
+                <div class="small text-muted mb-1">Route & Timing:</div>
+                <div class="fw-bold text-dark">
+                  {{ scheduleToCancel.origin }} &rarr; {{ scheduleToCancel.destination }}
+                </div>
+                <div class="text-secondary small mt-1">
+                  {{ formatScheduleDate(scheduleToCancel.travelDate) }} at {{ formatScheduleTime(scheduleToCancel.departureTime) }}
+                </div>
+                <div class="text-secondary small">
+                  Bus: {{ scheduleToCancel.busNumber || getBusNumber(scheduleToCancel.busId) }}
+                </div>
+              </div>
+
+              <div class="alert alert-warning py-2 px-3 small mb-0 d-flex align-items-start gap-2">
+                <i class="fa-solid fa-circle-info mt-1"></i>
+                <div>
+                  <strong>Notice:</strong> Cancelling this schedule will immediately notify booked passengers, cancel confirmed reservations, and queue automated refunds.
+                </div>
+              </div>
+
+              <div *ngIf="cancelScheduleError" class="alert alert-danger py-2 px-3 small mt-3 mb-0">
+                <i class="fa-solid fa-circle-exclamation me-1"></i> {{ cancelScheduleError }}
+              </div>
+
+              <div *ngIf="cancelScheduleSuccess" class="alert alert-success py-2 px-3 small mt-3 mb-0">
+                <i class="fa-solid fa-circle-check me-1"></i> Schedule successfully cancelled.
+              </div>
+            </div>
+
+            <div class="modal-footer bg-light px-4 py-3">
+              <button type="button"
+                      class="btn btn-outline-secondary btn-sm rounded-pill"
+                      [disabled]="isCancellingSchedule"
+                      (click)="closeCancelScheduleModal()">
+                Keep Schedule
+              </button>
+              <button type="button"
+                      class="btn btn-danger btn-sm rounded-pill fw-semibold d-flex align-items-center gap-2"
+                      [disabled]="isCancellingSchedule || cancelScheduleSuccess"
+                      (click)="confirmCancelSchedule()">
+                <span *ngIf="isCancellingSchedule" class="spinner-border spinner-border-sm" role="status"></span>
+                <span>Confirm Cancellation</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   `,
   styles: [`
@@ -3149,43 +6124,49 @@ interface TrendDay {
     .metric-card {
       background: #ffffff;
       border: 1px solid #e2e8f0;
-      border-radius: 16px;
-      padding: 20px 22px;
+      border-radius: 18px;
+      padding: 24px 26px;
       display: flex;
       align-items: center;
-      gap: 16px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      gap: 20px;
+      min-height: 114px;
+      height: 100%;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     }
 
     .metric-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+      transform: translateY(-3px);
+      box-shadow: 0 12px 24px -4px rgba(15, 23, 42, 0.08), 0 4px 6px -2px rgba(15, 23, 42, 0.03);
+      border-color: #cbd5e1;
     }
 
     .metric-icon-box {
-      width: 52px;
-      height: 52px;
-      border-radius: 14px;
+      width: 60px;
+      height: 60px;
+      border-radius: 16px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 22px;
+      font-size: 26px;
       flex-shrink: 0;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
     }
 
     .metric-label {
-      font-size: 13px;
-      font-weight: 500;
+      font-size: 14px;
+      font-weight: 600;
       color: #64748b;
-      margin-bottom: 2px;
+      margin-bottom: 4px;
+      letter-spacing: 0.01em;
     }
 
     .metric-value {
-      font-size: 24px;
+      font-size: clamp(24px, 2vw, 30px);
       font-weight: 800;
       color: #0f172a;
-      line-height: 1.1;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
     }
 
     /* Quick Action Cards */
@@ -4394,6 +7375,1939 @@ interface TrendDay {
         width: 240px;
       }
     }
+
+    /* ==================== SCHEDULES DASHBOARD (PHASE 6.2A) ==================== */
+    .schedules-dashboard-container {
+      padding-bottom: 2rem;
+    }
+
+    .schedules-title {
+      font-size: 24px;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.02em;
+    }
+
+    .schedules-subtitle {
+      font-size: 14px;
+      color: #64748b;
+    }
+
+    .btn-export {
+      background-color: #ffffff;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-export:hover {
+      background-color: #f8fafc;
+      border-color: #94a3b8;
+      color: #0f172a;
+    }
+
+    .btn-create-schedule {
+      background-color: #2563eb;
+      color: #ffffff;
+      border: 1px solid #2563eb;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 18px;
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(37, 99, 235, 0.15);
+      transition: all 0.2s ease;
+    }
+
+    .btn-create-schedule:hover {
+      background-color: #1d4ed8;
+      border-color: #1d4ed8;
+    }
+
+    /* Metric cards */
+    .schedules-stat-card {
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .schedules-stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+      border-color: #cbd5e1;
+    }
+
+    .schedules-stat-card.active-filter {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+    }
+
+    .stat-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #64748b;
+    }
+
+    .stat-icon-wrapper {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .stat-icon-wrapper.total-icon {
+      background-color: #eff6ff;
+      color: #2563eb;
+    }
+
+    .stat-icon-wrapper.upcoming-icon {
+      background-color: #ecfdf5;
+      color: #10b981;
+    }
+
+    .stat-icon-wrapper.ongoing-icon {
+      background-color: #eff6ff;
+      color: #3b82f6;
+    }
+
+    .stat-icon-wrapper.completed-icon {
+      background-color: #fef3c7;
+      color: #d97706;
+    }
+
+    .stat-icon-wrapper.cancelled-icon {
+      background-color: #fee2e2;
+      color: #ef4444;
+    }
+
+    .stat-value {
+      font-size: 26px;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.1;
+    }
+
+    .stat-trend {
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .stat-progress-section {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stat-percentage {
+      font-size: 12px;
+      font-weight: 600;
+      text-align: right;
+    }
+
+    .stat-progress-bar {
+      height: 5px;
+      border-radius: 9999px;
+      background-color: #f1f5f9;
+      overflow: hidden;
+    }
+
+    /* Filter card */
+    .schedules-filter-card {
+      border: 1px solid #e2e8f0;
+      background-color: #ffffff;
+    }
+
+    .search-input-group .form-control {
+      font-size: 13px;
+    }
+
+    .schedules-filter-card .form-select,
+    .schedules-filter-card .form-control {
+      font-size: 13px;
+      border-color: #cbd5e1;
+      border-radius: 8px;
+    }
+
+    .schedules-filter-card .form-select:focus,
+    .schedules-filter-card .form-control:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+    }
+
+    /* Schedules Table */
+    .schedules-table {
+      font-size: 13px;
+    }
+
+    .schedules-table thead th {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: #475569;
+      background-color: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 12px 14px;
+      vertical-align: middle;
+    }
+
+    .schedules-table tbody td {
+      padding: 12px 14px;
+      vertical-align: middle;
+      border-bottom: 1px solid #f1f5f9;
+      color: #334155;
+    }
+
+    .schedules-table tbody tr:hover {
+      background-color: #f8fafc;
+    }
+
+    .sched-id-badge {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      color: #1e293b;
+      background-color: #f1f5f9;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+      white-space: nowrap;
+    }
+
+    .route-icon-badge {
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      background-color: #eff6ff;
+      color: #2563eb;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+    }
+
+    .duration-text {
+      font-weight: 600;
+      color: #475569;
+      white-space: nowrap;
+    }
+
+    .fare-text {
+      font-weight: 700;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+
+    .seats-text {
+      white-space: nowrap;
+    }
+
+    /* Status Pills */
+    .sched-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .sched-pill .pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .sched-pill.pill-upcoming {
+      background-color: #def7ec;
+      color: #03543f;
+    }
+    .sched-pill.pill-upcoming .pill-dot {
+      background-color: #0e9f6e;
+    }
+
+    .sched-pill.pill-ongoing {
+      background-color: #e1effe;
+      color: #1e429f;
+    }
+    .sched-pill.pill-ongoing .pill-dot {
+      background-color: #3f83f8;
+      box-shadow: 0 0 0 2px rgba(63, 131, 248, 0.3);
+    }
+
+    .sched-pill.pill-completed {
+      background-color: #f3f4f6;
+      color: #4b5563;
+    }
+    .sched-pill.pill-completed .pill-dot {
+      background-color: #9ca3af;
+    }
+
+    .sched-pill.pill-cancelled {
+      background-color: #fde8e8;
+      color: #9b1c1c;
+    }
+    .sched-pill.pill-cancelled .pill-dot {
+      background-color: #f05252;
+    }
+
+    .sched-pill.pill-scheduled {
+      background-color: #ede9fe;
+      color: #5521b5;
+    }
+    .sched-pill.pill-scheduled .pill-dot {
+      background-color: #7e3af2;
+    }
+
+    /* Action Dropdown Menu */
+    .sched-action-dropdown {
+      position: absolute;
+      right: 14px;
+      top: 100%;
+      background-color: #ffffff;
+      min-width: 230px;
+      z-index: 1050;
+      padding: 6px 0;
+      border-radius: 8px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.08);
+      text-align: left;
+    }
+
+    .sched-action-dropdown .dropdown-item {
+      font-size: 13px;
+      font-weight: 500;
+      color: #334155;
+      background: none;
+      border: none;
+      width: 100%;
+      cursor: pointer;
+      text-align: left;
+      transition: background-color 0.15s ease;
+    }
+
+    .sched-action-dropdown .dropdown-item:hover:not(:disabled) {
+      background-color: #f1f5f9;
+      color: #0f172a;
+    }
+
+    .sched-action-dropdown .dropdown-item:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    /* Empty state */
+    .empty-icon-circle {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background-color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Toast Container */
+    .schedules-toast-container {
+      position: fixed;
+      top: 85px;
+      right: 24px;
+      z-index: 1090;
+      max-width: 420px;
+      animation: fadeInSlide 0.3s ease;
+    }
+
+    /* ==================== CREATE SCHEDULE WIZARD (PHASE 6.2B) ==================== */
+    .create-schedule-wizard-container {
+      max-width: 1360px;
+      margin: 0 auto;
+    }
+
+    .wizard-heading {
+      font-size: 26px;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: -0.02em;
+    }
+
+    .wizard-subheading {
+      font-size: 14px;
+      color: #64748b;
+    }
+
+    /* Six-Step Progress Card */
+    .wizard-progress-card {
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    .wizard-steps-horizontal {
+      width: 100%;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .wizard-step-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .wizard-step-circle {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      transition: all 0.2s ease;
+    }
+
+    .wizard-step-item.active .wizard-step-circle {
+      background-color: #2563eb;
+      color: #ffffff;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    .wizard-step-item.completed .wizard-step-circle {
+      background-color: #2563eb;
+      color: #ffffff;
+    }
+
+    .wizard-step-item.upcoming .wizard-step-circle {
+      background-color: #ffffff;
+      border: 1.5px solid #cbd5e1;
+      color: #64748b;
+    }
+
+    .wizard-step-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .wizard-step-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .wizard-step-item.active .wizard-step-title {
+      color: #2563eb;
+      font-weight: 700;
+    }
+
+    .wizard-step-item.completed .wizard-step-title {
+      color: #0f172a;
+    }
+
+    .wizard-step-item.upcoming .wizard-step-title {
+      color: #475569;
+    }
+
+    .wizard-step-desc {
+      font-size: 11.5px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+
+    .wizard-step-connector {
+      height: 2px;
+      background-color: #e2e8f0;
+      flex-grow: 1;
+      margin: 0 16px;
+      min-width: 20px;
+    }
+
+    .wizard-step-connector.completed {
+      background-color: #2563eb;
+    }
+
+    /* Step 3: Configure Timings Styles */
+    .context-summary-card {
+      border: 1px solid #e2e8f0 !important;
+      border-radius: 14px !important;
+    }
+
+    .context-icon-circle {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .context-summary-card .metric-icon-box {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #eff6ff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+    }
+
+    .context-summary-card .metric-label {
+      font-size: 11.5px;
+      margin-bottom: 1px;
+    }
+
+    .context-summary-card .metric-value {
+      font-size: 14.5px;
+    }
+
+    .schedule-conflict-banner {
+      background: #fff5f5;
+      border: 1px solid #fed7d7;
+      border-radius: 12px;
+    }
+
+    .trip-input-card {
+      border: 1px solid #e2e8f0 !important;
+      border-radius: 14px !important;
+    }
+
+    .journey-summary-card {
+      background: #f0f7ff !important;
+      border: 1px solid #d0e1fd !important;
+      border-radius: 14px !important;
+    }
+
+        /* ==================== STEP 4: CONFIGURE FARES ==================== */
+    .fare-config-card {
+      border: 1px solid #e2e8f0 !important;
+      border-radius: 14px !important;
+    }
+
+    .fare-table thead th {
+      background-color: #f8fafc;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 12px 14px;
+      border-bottom: 1px solid #e2e8f0;
+      white-space: nowrap;
+    }
+
+    .fare-table tbody td {
+      padding: 12px 14px;
+      font-size: 13px;
+      color: #1e293b;
+      vertical-align: middle;
+    }
+
+    .fare-step-badge {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #2563eb;
+      color: white;
+      font-weight: 700;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .fare-pill-tag {
+      background-color: #ecfdf5;
+      color: #10b981;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 9999px;
+    }
+
+    .fare-input-box {
+      width: 95px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #1e293b;
+      text-align: center;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .fare-input-box:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+      outline: none;
+    }
+
+    .how-it-works-panel {
+      background-color: #f0f7ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 12px;
+      padding: 16px 20px;
+    }
+
+    .how-it-works-panel ul li {
+      position: relative;
+      padding-left: 14px;
+      color: #475569;
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+
+    .how-it-works-panel ul li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      color: #2563eb;
+      font-size: 14px;
+    }
+
+    .status-badge-auto {
+      background-color: #ecfdf5;
+      color: #16a34a;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      display: inline-block;
+    }
+
+    .status-badge-overridden {
+      background-color: #fffbeb;
+      color: #d97706;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      display: inline-block;
+    }
+
+    .btn-reset-fare {
+      color: #2563eb;
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 12.5px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .btn-reset-fare:hover {
+      color: #1d4ed8;
+      text-decoration: underline;
+    }
+
+    .important-notes-banner {
+      background-color: #fff8ee;
+      border: 1px solid #ffedd5;
+      border-radius: 10px;
+      padding: 14px 22px;
+    }
+
+    .important-notes-header {
+      padding-top: 2px;
+    }
+
+    .important-notes-list {
+      padding-left: 18px;
+      margin: 0;
+    }
+
+    .important-notes-list li {
+      color: #475569;
+      font-size: 12.5px;
+      line-height: 1.55;
+      margin-bottom: 5px;
+    }
+
+    .important-notes-list li:last-child {
+      margin-bottom: 0;
+    }
+
+    .stop-timings-card {
+      border: 1px solid #e2e8f0 !important;
+      border-radius: 14px !important;
+    }
+
+    .stop-timings-table thead th {
+      background-color: #f8fafc;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 12px 14px;
+      border-bottom: 1px solid #e2e8f0;
+      text-transform: capitalize;
+    }
+
+    .stop-timings-table tbody td {
+      padding: 12px 14px;
+      font-size: 13px;
+      color: #1e293b;
+    }
+
+    .stop-number-circle {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #3b82f6;
+      color: white;
+      font-weight: 700;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .timing-pill-input {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      max-width: 230px;
+    }
+
+    .timing-pill-input input {
+      font-size: 12px;
+      font-weight: 500;
+      color: #1e293b;
+      outline: none;
+    }
+
+    .timing-disabled-box {
+      background-color: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 6px 12px;
+      color: #94a3b8;
+      font-weight: 600;
+      text-align: center;
+      max-width: 230px;
+    }
+
+    .halt-duration-pill {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      display: inline-block;
+      min-width: 60px;
+      text-align: center;
+    }
+
+    .stop-badge-boarding {
+      background-color: rgba(37, 99, 235, 0.1) !important;
+      color: #2563eb !important;
+    }
+
+    .stop-badge-dropping {
+      background-color: rgba(245, 158, 11, 0.12) !important;
+      color: #d97706 !important;
+    }
+
+    .stop-badge-both {
+      background-color: rgba(14, 165, 233, 0.12) !important;
+      color: #0284c7 !important;
+    }
+
+    /* Select Route Workspace Card */
+    .route-selection-workspace {
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+    }
+
+    .route-panel-icon-badge {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      background-color: #eff6ff;
+      color: #2563eb;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .search-route-input-group .form-control {
+      font-size: 13px;
+      border-color: #e2e8f0;
+      border-radius: 8px;
+    }
+
+    .search-route-input-group .form-control:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+    }
+
+    .route-status-select {
+      font-size: 13px;
+      border-color: #e2e8f0;
+      border-radius: 8px;
+    }
+
+    .route-status-select:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+    }
+
+    /* Route Selection Table */
+    .route-selection-table {
+      font-size: 13px;
+    }
+
+    .route-selection-table thead th {
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #64748b;
+      background-color: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 13px 16px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    .route-table-row {
+      cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .route-table-row td {
+      padding: 14px 16px;
+      vertical-align: middle;
+      border-bottom: 1px solid #f1f5f9;
+      color: #334155;
+    }
+
+    .route-table-row:hover:not(.selected-row) {
+      background-color: #f8fafc;
+    }
+
+    .route-table-row.selected-row {
+      background-color: #f0f7ff !important;
+      position: relative;
+    }
+
+    .route-table-row.selected-row td:first-child {
+      border-left: 3px solid #2563eb;
+    }
+
+    .route-table-row.ineligible-row {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .route-radio-btn {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .route-code-badge {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      font-weight: 600;
+      color: #1e40af;
+      background-color: #eff6ff;
+      border: 1px solid #dbeafe;
+      padding: 3px 8px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+
+    .route-name-text {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .route-endpoints-text {
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    /* Route Status Pill */
+    .route-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .route-status-pill .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .status-pill-active {
+      background-color: #def7ec;
+      color: #03543f;
+    }
+    .status-pill-active .status-dot {
+      background-color: #0e9f6e;
+    }
+
+    .status-pill-inactive {
+      background-color: #f3f4f6;
+      color: #4b5563;
+    }
+    .status-pill-inactive .status-dot {
+      background-color: #9ca3af;
+    }
+
+    .status-pill-draft {
+      background-color: #e1effe;
+      color: #1e429f;
+    }
+    .status-pill-draft .status-dot {
+      background-color: #3f83f8;
+    }
+
+    .btn-view-route-details {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #2563eb;
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 5px 12px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .btn-view-route-details:hover {
+      background-color: #eff6ff;
+      border-color: #bfdbfe;
+      color: #1d4ed8;
+    }
+
+    /* Expanded Details Row */
+    .route-expanded-details-container {
+      background-color: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .route-stat-card {
+      border: 1px solid #e2e8f0;
+      background-color: #ffffff;
+    }
+
+    .stat-card-icon-circle {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background-color: #eff6ff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .stat-card-label {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #64748b;
+    }
+
+    .stat-card-val {
+      font-size: 17px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    /* Stops Timeline Table */
+    .stops-timeline-table thead th {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #475569;
+      background-color: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 10px 14px;
+    }
+
+    .stops-timeline-table tbody td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 12.5px;
+    }
+
+    .stop-timeline-wrapper {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 32px;
+    }
+
+    .stop-timeline-line {
+      position: absolute;
+      left: 11px;
+      top: 16px;
+      bottom: -22px;
+      width: 2px;
+      background-color: #2563eb;
+      z-index: 1;
+    }
+
+    .stop-seq-circle {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 1.5px solid #2563eb;
+      background-color: #ffffff;
+      color: #2563eb;
+      font-weight: 700;
+      font-size: 11.5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      z-index: 2;
+    }
+
+    .stop-bd-pill {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .stop-badge-boarding {
+      background-color: #def7ec;
+      color: #03543f;
+    }
+
+    .stop-badge-both {
+      background-color: #e1effe;
+      color: #1e429f;
+    }
+
+    .stop-badge-dropping {
+      background-color: #fef3c7;
+      color: #d97706;
+    }
+
+    .stop-badge-none {
+      background-color: #f1f5f9;
+      color: #64748b;
+      border: 1px solid #e2e8f0;
+    }
+
+    /* Bottom Navigation Buttons */
+    .btn-wizard-cancel {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #334155;
+      background-color: #ffffff;
+      border: 1px solid #cbd5e1;
+      padding: 9px 24px;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-wizard-cancel:hover {
+      background-color: #f8fafc;
+      border-color: #94a3b8;
+      color: #0f172a;
+    }
+
+    .btn-wizard-continue {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #ffffff;
+      background-color: #2563eb;
+      border: 1px solid #2563eb;
+      padding: 9px 26px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(37, 99, 235, 0.2);
+      transition: all 0.2s ease;
+    }
+
+    .btn-wizard-continue:hover:not(:disabled) {
+      background-color: #1d4ed8;
+      border-color: #1d4ed8;
+    }
+
+    .btn-wizard-continue:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Step 2 Assign Bus Styles */
+    .wizard-panel-header {
+      padding: 0;
+    }
+
+    .wizard-panel-icon-circle {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background-color: #eff6ff;
+      color: #2563eb;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      flex-shrink: 0;
+    }
+
+    .wizard-panel-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 2px;
+      line-height: 1.25;
+    }
+
+    .wizard-panel-subtitle {
+      font-size: 12.5px;
+      color: #64748b;
+      margin-bottom: 0;
+      line-height: 1.25;
+    }
+
+    .wizard-search-filter-controls {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+    }
+
+    .wizard-search-input-wrapper {
+      position: relative;
+      width: 320px;
+    }
+
+    .wizard-search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #64748b;
+      font-size: 13px;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .wizard-search-input {
+      width: 100%;
+      height: 38px;
+      padding: 0 14px 0 35px;
+      font-size: 12.5px;
+      color: #1e293b;
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      outline: none;
+      transition: all 0.15s ease;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    }
+
+    .wizard-search-input::placeholder {
+      color: #94a3b8;
+      font-size: 12.5px;
+    }
+
+    .wizard-search-input:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    .wizard-filter-dropdown-wrapper {
+      width: 140px;
+      flex-shrink: 0;
+    }
+
+    .wizard-filter-select {
+      width: 100%;
+      height: 38px;
+      padding: 0 30px 0 13px;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: #334155;
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      outline: none;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right 11px center;
+      background-size: 11px 9px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    }
+
+    .wizard-filter-select:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    .btn-wizard-back {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: #334155;
+      background-color: #ffffff;
+      border: 1px solid #cbd5e1;
+      padding: 9px 24px;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-wizard-back:hover {
+      background-color: #f8fafc;
+      border-color: #94a3b8;
+      color: #0f172a;
+    }
+
+    /* Refined Step 2 Assign Bus List & Card Styles */
+    .bus-list-workspace {
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      overflow-x: hidden;
+    }
+
+    .bus-header-strip {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 16px;
+      margin-bottom: 10px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .bus-header-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #475569;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+
+    .bus-cards-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .bus-card-item {
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px 16px;
+      transition: all 0.15s ease-in-out;
+      cursor: pointer;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .bus-card-item:hover:not(.selected-card):not(.ineligible-card) {
+      background-color: #f8fafc;
+      border-color: #cbd5e1;
+    }
+
+    .bus-card-item.selected-card {
+      background-color: #f8fbff;
+      border: 1.5px solid #3b82f6;
+      box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+    }
+
+    .bus-card-item.ineligible-card {
+      opacity: 0.55;
+      cursor: not-allowed;
+      background-color: #fafafa;
+    }
+
+    .bus-list-grid {
+      display: grid;
+      grid-template-columns: 28px 52px minmax(85px, 1.1fr) minmax(120px, 1.8fr) minmax(85px, 1fr) minmax(60px, 0.7fr) minmax(65px, 0.7fr) minmax(75px, 0.8fr) 125px;
+      align-items: center;
+      column-gap: 12px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .bus-grid-col-radio {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .bus-radio-control {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: #2563eb;
+      margin: 0;
+    }
+
+    .bus-grid-col-thumb {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .bus-row-thumbnail {
+      width: 48px;
+      height: 30px;
+      object-fit: contain;
+      background-color: transparent;
+    }
+
+    .bus-reg-no-text {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+
+    .bus-name-text {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: block;
+    }
+
+    .bus-type-badge-pill {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-weight: 600;
+      white-space: nowrap;
+      line-height: 1.3;
+    }
+
+    .type-pill-ac {
+      background-color: #e0f2fe;
+      color: #0284c7;
+    }
+
+    .type-pill-non-ac {
+      background-color: #ffedd5;
+      color: #c2410c;
+    }
+
+    .bus-seats-count {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+      white-space: nowrap;
+    }
+
+    .bus-layout-summary {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #1e293b;
+      white-space: nowrap;
+    }
+
+    .bus-status-badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-weight: 600;
+      white-space: nowrap;
+      line-height: 1.3;
+    }
+
+    .status-pill-active {
+      background-color: #dcfce7;
+      color: #15803d;
+    }
+
+    .status-pill-inactive {
+      background-color: #f1f5f9;
+      color: #64748b;
+    }
+
+    .status-indicator-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .status-pill-active .status-indicator-dot {
+      background-color: #16a34a;
+    }
+
+    .status-pill-inactive .status-indicator-dot {
+      background-color: #94a3b8;
+    }
+
+    .bus-grid-col-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .btn-bus-action-details {
+      padding: 5px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #2563eb;
+      background-color: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      transition: all 0.15s ease;
+      cursor: pointer;
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+
+    .btn-bus-action-details:hover {
+      background-color: #eff6ff;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+    }
+
+    .btn-bus-action-toggle {
+      background: none;
+      border: none;
+      padding: 4px;
+      color: #334155;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s ease;
+    }
+
+    .btn-bus-action-toggle:hover {
+      color: #0f172a;
+    }
+
+    /* Expanded Details Panel Styles */
+    .bus-expanded-panel {
+      margin-top: 14px;
+      padding-top: 12px;
+      cursor: default;
+    }
+
+    .bus-expanded-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 12px;
+    }
+
+    .bus-expanded-content {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .bus-expanded-left {
+      flex: 0 0 160px;
+      max-width: 160px;
+    }
+
+    .bus-photo-frame {
+      width: 100%;
+      height: 95px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .bus-photo-img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .bus-expanded-middle {
+      flex: 0 0 250px;
+      max-width: 260px;
+    }
+
+    .bus-core-specs-box {
+      background-color: #f0f7ff;
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .bus-spec-row {
+      display: flex;
+      align-items: baseline;
+      font-size: 12.5px;
+    }
+
+    .bus-spec-row .spec-label {
+      width: 105px;
+      flex-shrink: 0;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .bus-spec-row .spec-val {
+      font-size: 12.5px;
+      color: #0f172a;
+      font-weight: 500;
+    }
+
+    .bus-spec-row .spec-val-bold {
+      font-size: 12.5px;
+      color: #0f172a;
+      font-weight: 700;
+    }
+
+    .bus-spec-row .spec-val-semibold {
+      font-size: 12.5px;
+      color: #0f172a;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .bus-expanded-divider {
+      width: 1px;
+      height: 90px;
+      background-color: #e2e8f0;
+      flex-shrink: 0;
+    }
+
+    .bus-expanded-right {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .bus-specs-list {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .bus-amenities-row {
+      display: flex;
+      align-items: center;
+    }
+
+    .bus-amenities-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .amenity-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #334155;
+      font-size: 12.5px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .amenity-icon {
+      color: #475569;
+      font-size: 12px;
+    }
+
+
+    /* ==================== STEP 5: REVIEW & CREATE STYLING ==================== */
+    .review-section-card {
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      overflow: hidden;
+      transition: border-color 0.15s ease;
+    }
+
+    .review-section-card:hover {
+      border-color: #cbd5e1;
+    }
+
+    .review-section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.15s ease;
+    }
+
+    .review-section-header:hover {
+      background-color: #f8fafc;
+    }
+
+    .review-section-title {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .review-icon-circle {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background-color: #eff6ff;
+      color: #2563eb;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .review-looks-good-badge {
+      background-color: #ecfdf5;
+      color: #059669;
+      border: 1px solid #a7f3d0;
+      border-radius: 50rem;
+      padding: 2px 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .review-header-summary {
+      color: #475569;
+      font-size: 13px;
+      font-weight: 400;
+    }
+
+    .review-header-toggle {
+      font-size: 13px;
+      color: #64748b;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .review-table thead th {
+      background-color: #f8fafc;
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: none;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 10px 14px;
+      white-space: nowrap;
+    }
+
+    .review-table tbody td {
+      padding: 12px 14px;
+      font-size: 13px;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: middle;
+    }
+
+    .badge-status-auto {
+      background-color: #ecfdf5;
+      color: #059669;
+      border: 1px solid #a7f3d0;
+      border-radius: 50rem;
+      padding: 2px 10px;
+      font-size: 11.5px;
+      font-weight: 600;
+      display: inline-block;
+    }
+
+    .badge-status-overridden {
+      background-color: #fffbeb;
+      color: #d97706;
+      border: 1px solid #fde68a;
+      border-radius: 50rem;
+      padding: 2px 10px;
+      font-size: 11.5px;
+      font-weight: 600;
+      display: inline-block;
+    }
+
+    .validation-summary-card {
+      background-color: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      border-radius: 10px;
+      padding: 16px 24px;
+    }
+
+    .validation-summary-card-error {
+      background-color: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 10px;
+      padding: 16px 24px;
+    }
+
+    /* ==================== STEP 6 CONFIRMATION PAGE STYLES (PHASE 6.6) ==================== */
+    .step6-confirmation-container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding-top: 20px;
+    }
+
+    .schedule-success-illustration-wrap {
+      width: 360px;
+      height: 190px;
+    }
+
+    .schedule-confirmation-card {
+      max-width: 720px;
+      background-color: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+      transition: all 0.2s ease;
+    }
+
+    .schedule-conf-divider {
+      width: 1px;
+      height: 58px;
+      background-color: #bbf7d0;
+    }
+
+    .schedule-conf-status-badge {
+      background-color: #dcfce7;
+      color: #15803d;
+      border: 1px solid #86efac;
+      font-size: 13px;
+    }
+
+    .schedule-conf-cal-icon {
+      width: 48px;
+      height: 48px;
+    }
+
+    @media (max-width: 767.98px) {
+      .schedule-conf-divider {
+        width: 100%;
+        height: 1px;
+      }
+      .schedule-conf-left {
+        border-bottom: 1px solid #bbf7d0;
+      }
+      .schedule-success-illustration-wrap {
+        width: 300px;
+        height: 160px;
+      }
+      .schedule-success-blob-svg {
+        width: 300px;
+        height: 160px;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .bus-expanded-content {
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      .bus-expanded-divider {
+        display: none;
+      }
+    }
+
+    /* Add Bus Wizard (Phase 1) Styles */
+    .add-bus-stepper-card {
+      border: 1px solid #e2e8f0;
+      background: #ffffff;
+    }
+    .add-bus-step-circle {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      transition: all 0.2s ease;
+    }
+    .add-bus-step-circle.active {
+      background: #2563eb;
+      color: #ffffff;
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
+    }
+    .add-bus-step-circle.completed {
+      background: #10b981;
+      color: #ffffff;
+    }
+    .add-bus-step-circle.upcoming {
+      background: #f1f5f9;
+      color: #94a3b8;
+      border: 1.5px solid #cbd5e1;
+    }
+    .add-bus-step-line {
+      height: 2px;
+      background-color: #e2e8f0;
+      transition: background-color 0.2s;
+    }
+    .add-bus-step-line.completed {
+      background-color: #10b981;
+    }
+    .add-bus-step-label {
+      font-size: 13.5px;
+    }
+    .add-bus-form-card, .add-bus-images-card {
+      background: #ffffff;
+      border: 1px solid #f1f5f9;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+    }
+    .add-bus-icon-box {
+      width: 44px;
+      height: 44px;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    .add-bus-amenity-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background-color: #eff6ff;
+      color: #1e40af;
+      border: 1px solid #bfdbfe;
+      border-radius: 9999px;
+      padding: 5px 12px;
+      font-size: 12.5px;
+      font-weight: 500;
+      transition: all 0.15s ease;
+    }
+    .add-bus-amenity-chip .chip-remove-btn {
+      cursor: pointer;
+      opacity: 0.6;
+      transition: all 0.15s;
+      font-size: 12px;
+    }
+    .add-bus-amenity-chip .chip-remove-btn:hover {
+      opacity: 1;
+      color: #ef4444;
+    }
+    .add-bus-preview-box {
+      position: relative;
+      width: 100%;
+      height: 160px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #e2e8f0;
+      background-color: #0f172a;
+    }
+    .add-bus-preview-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .add-bus-delete-img-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #fee2e2;
+      border-radius: 6px;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ef4444;
+      cursor: pointer;
+      transition: all 0.15s;
+      z-index: 2;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .add-bus-delete-img-btn:hover {
+      background: #fee2e2;
+      color: #dc2626;
+      transform: scale(1.05);
+    }
+    .add-bus-dropzone {
+      border: 2px dashed #93c5fd;
+      background-color: #f8fafc;
+      border-radius: 12px;
+      height: 160px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      text-align: center;
+      padding: 12px;
+      transition: all 0.2s;
+    }
+    .add-bus-dropzone:hover {
+      background-color: #eff6ff;
+      border-color: #3b82f6;
+    }
+    .add-bus-replace-btn {
+      border: 1px solid #bfdbfe;
+      background-color: #eff6ff;
+      border-radius: 8px;
+      width: 100%;
+      padding: 7px 10px;
+      text-align: center;
+      color: #2563eb;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-size: 12.5px;
+    }
+    .add-bus-replace-btn:hover {
+      background-color: #dbeafe;
+    }
+    .add-bus-guidelines-box {
+      background-color: #eff6ff;
+      border: 1px solid #dbeafe;
+      border-radius: 12px;
+    }
   `]
 })
 export class BusOperatorDashboardComponent implements OnInit {
@@ -4401,10 +9315,63 @@ export class BusOperatorDashboardComponent implements OnInit {
   activeNav: 'dashboard' | 'buses' | 'routes' | 'schedules' | 'bookings' | 'profile' | 'support' = 'dashboard';
   isSidebarCollapsed = false;
 
-  myBuses: any[] = [];
+  myBuses: Bus[] = [];
   myRoutes: Route[] = [];
   mySchedules: any[] = [];
   operatorBookings: any[] = [];
+
+  // Create Schedule Wizard Step 2 State (Phase 6.2B.2: Assign Bus)
+  wizardSelectedBusId: number | null = null;
+  wizardSelectedBus: Bus | null = null;
+  expandedBusId: number | null = null;
+  wizardBusSearchQuery: string = '';
+  wizardBusTypeFilter: string = 'ALL';
+  isLoadingBuses: boolean = false;
+  busLoadError: string | null = null;
+
+  // Create Schedule Wizard Step 3 State (Phase 6.3: Configure Timings)
+  wizardTripStartDate: string = '';
+  wizardTripStartTime: string = '06:00';
+  wizardTripEndDate: string = '';
+  wizardTripEndTime: string = '01:30';
+
+  getOperationalDateKolkata(daysAhead: number = 0): string {
+    const d = new Date();
+    d.setDate(d.getDate() + daysAhead);
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  }
+  wizardJourneyDurationDisplay: string = '~ 19h 30m';
+  wizardTotalDistanceKm: number = 420;
+  wizardTotalStopsCount: number = 4;
+  wizardIntermediateStopsCount: number = 2;
+  showStopSummaryOnly: boolean = false;
+  wizardStopTimings: any[] = [];
+  timingConflict: any | null = null;
+  showConflictingScheduleModal: boolean = false;
+  isCheckingTimingConflict: boolean = false;
+  timingValidationError: string | null = null;
+  timingChronologicalError: string | null = null;
+  conflictCheckTimeout: any = null;
+
+  // Create Schedule Wizard Step 5 & 6 State (Phase 6.5: Review & Create)
+  reviewSectionExpanded: { [key: number]: boolean } = {
+    1: false,
+    2: false,
+    3: true,
+    4: false,
+    5: false
+  };
+  isCreatingSchedule: boolean = false;
+  scheduleCreationError: string | null = null;
+  scheduleCreationSuccess: boolean = false;
+  createdScheduleResult: any = null;
+
+  // Create Schedule Wizard Step 4 State (Phase 6.4: Configure Fares)
+  wizardSegmentFares: WizardSegmentFareItem[] = [];
+  wizardJourneyFares: WizardJourneyFareItem[] = [];
+  fareValidationError: string | null = null;
+  wizardTotalFare: number = 1200;
+  wizardFareOverrides: any[] = [];
 
   // Routes Listing & Filter State
   routeViewMode: 'list' | 'create' = 'list';
@@ -4474,7 +9441,7 @@ export class BusOperatorDashboardComponent implements OnInit {
   selectedTrendRange = '7';
   bookingTrends: TrendDay[] = [];
 
-  // Add Bus Modal State
+  // Add Bus Modal State (Legacy)
   showAddBusModal = false;
   newBusNumber = '';
   newBusType = 'AC 2+1 Seater (Single Deck)';
@@ -4482,6 +9449,56 @@ export class BusOperatorDashboardComponent implements OnInit {
   newBusConfiguration = 'SINGLE_DECK';
   newTotalSeats = 36;
   newAmenities = 'Wi-Fi, Charging Point, Water Bottle';
+
+  // Add Bus Wizard State (Phase 1: Basic Details)
+  busViewMode: 'list' | 'wizard' = 'list';
+  addBusWizardStep: number = 1;
+  currentCalendarYear: number = new Date().getFullYear();
+
+  busForm: BusBasicDetailsForm = this.getInitialBusForm();
+  busFormErrors: { [key: string]: string } = {};
+  isCheckingRegistration = false;
+  registrationAvailabilityStatus: 'idle' | 'checking' | 'available' | 'taken' | 'invalid' = 'idle';
+  registrationAvailabilityMessage: string = '';
+  selectedAmenityCandidate: string = '';
+  isUploadingImage: { [key: string]: boolean } = { exterior: false, interior: false };
+  uploadImageError: { [key: string]: string | null } = { exterior: null, interior: null };
+  showCancelAddBusModal = false;
+
+  // Catalogs for Basic Details
+  readonly manufacturerCatalog: string[] = [
+    'Volvo', 'Scania', 'Ashok Leyland', 'Tata Motors', 'Eicher', 'BharatBenz', 'Mercedes-Benz', 'Force Motors'
+  ];
+
+  readonly busTypeCatalog: string[] = [
+    'Seater', 'Sleeper', 'Seater Cum Sleeper'
+  ];
+
+  readonly fuelTypeCatalog: string[] = [
+    'Diesel', 'CNG', 'Electric', 'Petrol', 'LNG', 'Hybrid'
+  ];
+
+  readonly emissionStandardCatalog: string[] = [
+    'BS III', 'BS IV', 'BS VI', 'BS VI Phase 2', 'Other'
+  ];
+
+  readonly colorCatalog: string[] = [
+    'White with Blue', 'White', 'Blue', 'Red', 'Silver', 'Grey', 'Yellow', 'Green', 'Black', 'Other'
+  ];
+
+  readonly busCategoryCatalog: string[] = [
+    'Stage Carriage (Contract)', 'Stage Carriage', 'Contract Carriage', 'Tourist', 'Private Service'
+  ];
+
+  readonly groupedAmenities: { category: string; items: string[] }[] = [
+    { category: 'Climate', items: ['AC'] },
+    { category: 'Charging', items: ['USB Charging', 'Charging Point'] },
+    { category: 'Passenger Comfort', items: ['Reading Light', 'Recliner Seats', 'Footrest'] },
+    { category: 'Luggage', items: ['Luggage Space', 'Overhead Storage'] },
+    { category: 'Convenience', items: ['Water Bottle Holder', 'Curtains'] },
+    { category: 'Entertainment', items: ['Wi-Fi', 'TV', 'Music System'] },
+    { category: 'Safety', items: ['CCTV', 'GPS Tracking', 'Emergency Exit'] }
+  ];
 
   // Templates
   allTemplates: any[] = [];
@@ -4510,6 +9527,42 @@ export class BusOperatorDashboardComponent implements OnInit {
   routeStopsForm: StopFormItem[] = [];
   activePointsStopIdx = 0;
   reviewSelectedStopIdx = 0;
+
+  // Schedules Dashboard State (Phase 6.2A)
+  schedulesSearchTerm: string = '';
+  selectedScheduleRouteFilter: string = 'ALL';
+  selectedScheduleBusFilter: string = 'ALL';
+  selectedScheduleStatusFilter: string = 'ALL';
+  selectedScheduleDateFilter: string = '';
+  schedulesSortBy: 'DEP_EARLIEST' | 'DEP_LATEST' | 'DATE_NEWEST' | 'FARE_ASC' | 'FARE_DESC' | 'SEATS_DESC' = 'DEP_EARLIEST';
+  schedulesPageSize: number = 10;
+  schedulesCurrentPage: number = 1;
+  selectedScheduleIds: Set<number> = new Set<number>();
+  activeScheduleActionMenuId: number | null = null;
+  schedulesToastMessage: string | null = null;
+  schedulesToastType: 'info' | 'success' | 'danger' = 'info';
+
+  // Schedule Creation Wizard State (Phase 6.2B)
+  scheduleViewMode: 'list' | 'create' = 'list';
+  scheduleWizardStep: number = 1;
+  wizardSelectedRouteId: number | null = null;
+  wizardSelectedRoute: Route | null = null;
+  wizardRouteSearchQuery: string = '';
+  wizardRouteStatusFilter: string = 'ALL';
+  expandedRouteId: number | null = null;
+
+  // Schedule Details Modal State
+  showScheduleDetailsModal: boolean = false;
+  selectedScheduleForDetails: any = null;
+  isLoadingScheduleDetails: boolean = false;
+  selectedScheduleStops: any[] = [];
+
+  // Cancel Schedule Modal State
+  showCancelScheduleModal: boolean = false;
+  scheduleToCancel: any = null;
+  isCancellingSchedule: boolean = false;
+  cancelScheduleError: string | null = null;
+  cancelScheduleSuccess: boolean = false;
 
   // Add Schedule Modal State
   showScheduleModal = false;
@@ -5505,6 +10558,7 @@ getActiveRoutesCount(): number {
   onDocumentClick() {
     this.activeActionMenuRouteId = null;
     this.isStatusDropdownOpen = false;
+    this.activeScheduleActionMenuId = null;
   }
 
   toggleStatusDropdown(event: MouseEvent) {
@@ -5537,8 +10591,18 @@ getActiveRoutesCount(): number {
 
   loadBuses() {
     if (!this.currentUser) return;
+    this.isLoadingBuses = true;
+    this.busLoadError = null;
     this.busService.getBusesByOperator(this.currentUser.id).subscribe({
-      next: (res) => this.myBuses = res || []
+      next: (res) => {
+        this.myBuses = res || [];
+        this.isLoadingBuses = false;
+      },
+      error: (err) => {
+        console.error('Failed to load fleet buses', err);
+        this.busLoadError = 'Failed to load fleet buses. Please retry.';
+        this.isLoadingBuses = false;
+      }
     });
   }
 
@@ -5699,6 +10763,364 @@ getActiveRoutesCount(): number {
       this.newTotalSeats = this.selectedTemplate.totalInventory;
       this.newBusType = `${this.newFacilityType === 'AC' ? 'AC' : 'Non-AC'} ${this.selectedTemplate.displayName}`;
     }
+  }
+
+  // ==================== ADD BUS WIZARD METHODS (PHASE 1) ====================
+
+  getInitialBusForm(): BusBasicDetailsForm {
+    return {
+      busNumber: 'KA-01-AB-1234',
+      busName: 'TravelEasy Express',
+      manufacturer: 'Volvo',
+      model: 'Volvo 9600',
+      busType: 'Seater',
+      fuelType: 'Diesel',
+      chassisNumber: 'YV3T2EU527N123456',
+      yearOfManufacturing: 2022,
+      engineNumber: 'D13K520123456',
+      emissionStandard: 'BS VI',
+      color: 'White with Blue',
+      busCategory: 'Stage Carriage (Contract)',
+      facilityType: 'AC',
+      amenities: ['AC', 'USB Charging', 'Reading Light', 'Luggage Space', 'Water Bottle Holder'],
+      exteriorImageUrl: '',
+      interiorImageUrl: '',
+      exteriorImagePreview: 'assets/images/travel-easy-bus.png',
+      interiorImagePreview: 'assets/images/view_details_bus_information_page.png'
+    };
+  }
+
+  startAddBusWizard() {
+    this.busViewMode = 'wizard';
+    this.addBusWizardStep = 1;
+    this.busFormErrors = {};
+    this.registrationAvailabilityStatus = 'idle';
+    this.registrationAvailabilityMessage = '';
+  }
+
+  cancelAddBusWizard() {
+    if (this.isBusFormDirty()) {
+      this.showCancelAddBusModal = true;
+    } else {
+      this.resetAddBusWizard();
+    }
+  }
+
+  confirmCancelAddBusWizard() {
+    this.showCancelAddBusModal = false;
+    this.resetAddBusWizard();
+  }
+
+  resetAddBusWizard() {
+    this.busForm = this.getInitialBusForm();
+    this.busFormErrors = {};
+    this.addBusWizardStep = 1;
+    this.busViewMode = 'list';
+    this.registrationAvailabilityStatus = 'idle';
+    this.registrationAvailabilityMessage = '';
+  }
+
+  isBusFormDirty(): boolean {
+    return !!(
+      this.busForm.busNumber?.trim() ||
+      this.busForm.busName?.trim() ||
+      this.busForm.model?.trim() ||
+      this.busForm.chassisNumber?.trim() ||
+      this.busForm.engineNumber?.trim() ||
+      this.busForm.exteriorImageUrl ||
+      this.busForm.interiorImageUrl ||
+      (this.busForm.amenities && this.busForm.amenities.length > 0)
+    );
+  }
+
+  normalizeRegNumber(val: string): string {
+    if (!val) return '';
+    return val.replace(/[\s-]+/g, '').toUpperCase().trim();
+  }
+
+  isValidRegNumber(val: string): boolean {
+    const normalized = this.normalizeRegNumber(val);
+    const standardPattern = /^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{1,4}$/;
+    const bhPattern = /^[0-9]{2}BH[0-9]{4}[A-Z]{1,2}$/;
+    return standardPattern.test(normalized) || bhPattern.test(normalized);
+  }
+
+  onRegistrationNumberInput() {
+    delete this.busFormErrors['busNumber'];
+    this.registrationAvailabilityStatus = 'idle';
+    this.registrationAvailabilityMessage = '';
+  }
+
+  onRegistrationNumberBlur() {
+    const val = this.busForm.busNumber?.trim();
+    if (!val) return;
+    const normalized = this.normalizeRegNumber(val);
+    if (!this.isValidRegNumber(normalized)) {
+      this.registrationAvailabilityStatus = 'invalid';
+      this.registrationAvailabilityMessage = 'Invalid format. Use KA01AB1234 or 22BH1234AA';
+      this.busFormErrors['busNumber'] = this.registrationAvailabilityMessage;
+      return;
+    }
+
+    this.isCheckingRegistration = true;
+    this.registrationAvailabilityStatus = 'checking';
+    this.busService.checkBusRegistration(normalized).subscribe({
+      next: (res) => {
+        this.isCheckingRegistration = false;
+        if (res.available) {
+          this.registrationAvailabilityStatus = 'available';
+          this.registrationAvailabilityMessage = 'Registration number is valid and available.';
+          delete this.busFormErrors['busNumber'];
+        } else {
+          this.registrationAvailabilityStatus = 'taken';
+          this.registrationAvailabilityMessage = res.message || 'Registration number is already registered.';
+          this.busFormErrors['busNumber'] = this.registrationAvailabilityMessage;
+        }
+      },
+      error: () => {
+        this.isCheckingRegistration = false;
+        this.registrationAvailabilityStatus = 'idle';
+      }
+    });
+  }
+
+  onChassisInput() {
+    if (this.busForm.chassisNumber) {
+      this.busForm.chassisNumber = this.busForm.chassisNumber.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, '');
+    }
+    delete this.busFormErrors['chassisNumber'];
+  }
+
+  onChassisBlur() {
+    if (!this.busForm.chassisNumber || !this.busForm.chassisNumber.trim()) return;
+    if (this.busForm.chassisNumber.length !== 17) {
+      this.busFormErrors['chassisNumber'] = 'Chassis Number must be exactly 17 characters.';
+    } else {
+      delete this.busFormErrors['chassisNumber'];
+    }
+  }
+
+  onEngineInput() {
+    if (this.busForm.engineNumber) {
+      this.busForm.engineNumber = this.busForm.engineNumber.toUpperCase().replace(/[^A-Z0-9/-]/g, '');
+    }
+    delete this.busFormErrors['engineNumber'];
+  }
+
+  onEngineBlur() {
+    if (!this.busForm.engineNumber || !this.busForm.engineNumber.trim()) return;
+    if (this.busForm.engineNumber.length < 5 || this.busForm.engineNumber.length > 25) {
+      this.busFormErrors['engineNumber'] = 'Engine Number must be 5 to 25 characters.';
+    } else {
+      delete this.busFormErrors['engineNumber'];
+    }
+  }
+
+  onFieldChange(field: string) {
+    delete this.busFormErrors[field];
+  }
+
+  addAmenity() {
+    if (!this.selectedAmenityCandidate) return;
+    if (!this.busForm.amenities.includes(this.selectedAmenityCandidate)) {
+      this.busForm.amenities.push(this.selectedAmenityCandidate);
+    }
+    this.selectedAmenityCandidate = '';
+  }
+
+  removeAmenity(amenity: string) {
+    this.busForm.amenities = this.busForm.amenities.filter(a => a !== amenity);
+  }
+
+  triggerFileInput(category: 'exterior' | 'interior') {
+    const inputId = category === 'exterior' ? 'exteriorImageInput' : 'interiorImageInput';
+    const el = document.getElementById(inputId) as HTMLInputElement;
+    if (el) el.click();
+  }
+
+  onFileSelected(event: any, category: 'exterior' | 'interior') {
+    const file = event.target?.files?.[0];
+    if (!file) return;
+
+    this.uploadImageError[category] = null;
+    delete this.busFormErrors[category === 'exterior' ? 'exteriorImage' : 'interiorImage'];
+
+    // 1. Strict Size Check: < 1.5 MB (1,572,864 bytes)
+    const maxSizeBytes = 1_572_864;
+    if (file.size > maxSizeBytes) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+      this.uploadImageError[category] = `Image size (${sizeMb} MB) exceeds maximum allowed limit of 1.5 MB.`;
+      event.target.value = '';
+      return;
+    }
+
+    // 2. Format Check
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type.toLowerCase())) {
+      this.uploadImageError[category] = 'Unsupported image format. Allowed formats: JPG, JPEG, PNG, WebP.';
+      event.target.value = '';
+      return;
+    }
+
+    // 3. Instant Data URL preview
+    const reader = new FileReader();
+    reader.onload = () => {
+      const previewUrl = reader.result as string;
+      if (category === 'exterior') {
+        this.busForm.exteriorImagePreview = previewUrl;
+      } else {
+        this.busForm.interiorImagePreview = previewUrl;
+      }
+    };
+    reader.readAsDataURL(file);
+
+    // 4. Upload to local storage backend
+    this.isUploadingImage[category] = true;
+    this.busService.uploadBusImage(file, category).subscribe({
+      next: (res) => {
+        this.isUploadingImage[category] = false;
+        if (category === 'exterior') {
+          this.busForm.exteriorImageUrl = res.imageUrl;
+        } else {
+          this.busForm.interiorImageUrl = res.imageUrl;
+        }
+      },
+      error: (err) => {
+        this.isUploadingImage[category] = false;
+        const msg = err.error?.message || 'Failed to upload image to server.';
+        this.uploadImageError[category] = msg;
+      }
+    });
+
+    event.target.value = '';
+  }
+
+  removeBusImage(category: 'exterior' | 'interior') {
+    const filename = category === 'exterior' ? this.busForm.exteriorImageUrl : this.busForm.interiorImageUrl;
+    if (filename && filename.startsWith('/api/buses/images/')) {
+      const cleanName = filename.replace('/api/buses/images/', '');
+      this.busService.deleteBusImage(cleanName).subscribe({
+        next: () => {},
+        error: () => {}
+      });
+    }
+
+    if (category === 'exterior') {
+      this.busForm.exteriorImageUrl = '';
+      this.busForm.exteriorImagePreview = '';
+      this.busFormErrors['exteriorImage'] = 'Exterior image is required.';
+    } else {
+      this.busForm.interiorImageUrl = '';
+      this.busForm.interiorImagePreview = '';
+      this.busFormErrors['interiorImage'] = 'Interior image is required.';
+    }
+  }
+
+  nextStepToSeatLayout() {
+    this.busFormErrors = {};
+    const bus = this.busForm;
+
+    // 1. Registration Number
+    if (!bus.busNumber || !bus.busNumber.trim()) {
+      this.busFormErrors['busNumber'] = 'Registration Number is required.';
+    } else {
+      const normalized = this.normalizeRegNumber(bus.busNumber);
+      if (!this.isValidRegNumber(normalized)) {
+        this.busFormErrors['busNumber'] = 'Invalid format. Use KA01AB1234 or 22BH1234AA';
+      } else if (this.registrationAvailabilityStatus === 'taken') {
+        this.busFormErrors['busNumber'] = 'This registration number is already registered.';
+      }
+    }
+
+    // 2. Bus Name (max 50)
+    if (bus.busName && bus.busName.length > 50) {
+      this.busFormErrors['busName'] = 'Bus Name cannot exceed 50 characters.';
+    }
+
+    // 3. Manufacturer
+    if (!bus.manufacturer) {
+      this.busFormErrors['manufacturer'] = 'Manufacturer is required.';
+    }
+
+    // 4. Model
+    if (!bus.model || bus.model.trim().length < 2) {
+      this.busFormErrors['model'] = 'Model name is required (min 2 characters).';
+    } else if (bus.model.length > 60) {
+      this.busFormErrors['model'] = 'Model name cannot exceed 60 characters.';
+    }
+
+    // 5. Bus Type
+    if (!bus.busType) {
+      this.busFormErrors['busType'] = 'Bus Type is required.';
+    }
+
+    // 6. Fuel Type
+    if (!bus.fuelType) {
+      this.busFormErrors['fuelType'] = 'Fuel Type is required.';
+    }
+
+    // 7. Chassis Number
+    const chassisPattern = /^[A-HJ-NPR-Z0-9]{17}$/i;
+    if (!bus.chassisNumber || !bus.chassisNumber.trim()) {
+      this.busFormErrors['chassisNumber'] = 'Chassis Number is required.';
+    } else if (!chassisPattern.test(bus.chassisNumber.trim())) {
+      this.busFormErrors['chassisNumber'] = 'Chassis Number must be exactly 17 characters (exclude I, O, Q).';
+    }
+
+    // 8. Year of Manufacturing
+    if (!bus.yearOfManufacturing) {
+      this.busFormErrors['yearOfManufacturing'] = 'Year of Manufacturing is required.';
+    } else if (bus.yearOfManufacturing < 1980 || bus.yearOfManufacturing > this.currentCalendarYear) {
+      this.busFormErrors['yearOfManufacturing'] = `Year must be between 1980 and ${this.currentCalendarYear}.`;
+    }
+
+    // 9. Engine Number
+    const enginePattern = /^[A-Z0-9/-]{5,25}$/i;
+    if (!bus.engineNumber || !bus.engineNumber.trim()) {
+      this.busFormErrors['engineNumber'] = 'Engine Number is required.';
+    } else if (!enginePattern.test(bus.engineNumber.trim())) {
+      this.busFormErrors['engineNumber'] = 'Engine Number must be 5-25 alphanumeric characters (/ and - allowed).';
+    }
+
+    // 10. Emission Standard
+    if (!bus.emissionStandard) {
+      this.busFormErrors['emissionStandard'] = 'Emission Standard is required.';
+    }
+
+    // 11. Color
+    if (!bus.color) {
+      this.busFormErrors['color'] = 'Color is required.';
+    }
+
+    // 12. Bus Category
+    if (!bus.busCategory) {
+      this.busFormErrors['busCategory'] = 'Bus Category is required.';
+    }
+
+    // 13. Air Conditioning
+    if (!bus.facilityType) {
+      this.busFormErrors['facilityType'] = 'Air Conditioning selection is required.';
+    }
+
+    // 14. Exterior Image
+    if (!bus.exteriorImagePreview && !bus.exteriorImageUrl) {
+      this.busFormErrors['exteriorImage'] = 'Exterior image is required.';
+    }
+
+    // 15. Interior Image
+    if (!bus.interiorImagePreview && !bus.interiorImageUrl) {
+      this.busFormErrors['interiorImage'] = 'Interior image is required.';
+    }
+
+    if (Object.keys(this.busFormErrors).length > 0) {
+      // Scroll to top of wizard to see errors
+      window.scrollTo({ top: 150, behavior: 'smooth' });
+      return;
+    }
+
+    // Validated successfully! Advance to Step 2 (Seat Layout placeholder)
+    this.addBusWizardStep = 2;
+    window.scrollTo({ top: 150, behavior: 'smooth' });
   }
 
   submitAddBus() {
@@ -6206,6 +11628,2224 @@ getActiveRoutesCount(): number {
       error: (err) => {
         const msg = err.error?.message || 'Failed to publish schedule';
         alert('Error: ' + msg);
+      }
+    });
+  }
+
+  // ==================== SCHEDULES DASHBOARD METHODS (PHASE 6.2A) ====================
+
+  getBusNumber(busId: number): string {
+    const bus = this.myBuses.find(b => b.id === busId);
+    return bus ? bus.busNumber : `Bus #${busId}`;
+  }
+
+  getBusType(busId: number): string {
+    const bus = this.myBuses.find(b => b.id === busId);
+    return bus ? (bus.busType || 'Standard') : 'Standard';
+  }
+
+  getBusCapacity(busId: number): number {
+    const bus = this.myBuses.find(b => b.id === busId);
+    return bus ? (bus.capacity || 40) : 40;
+  }
+
+  formatScheduleDate(dateStr?: string): string {
+    if (!dateStr) return '—';
+    try {
+      const clean = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+      const d = new Date(clean + 'T00:00:00');
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  }
+
+  formatScheduleTime(timeStr?: string): string {
+    if (!timeStr) return '—';
+    try {
+      const parts = timeStr.split(':');
+      if (parts.length >= 2) {
+        let hours = parseInt(parts[0], 10);
+        const minutes = parts[1].padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        return `${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+      }
+      return timeStr;
+    } catch {
+      return timeStr;
+    }
+  }
+
+  parseTimeToMinutes(timeStr: string): number {
+    if (!timeStr) return 0;
+    const parts = timeStr.split(':');
+    const h = parseInt(parts[0], 10) || 0;
+    const m = parseInt(parts[1], 10) || 0;
+    return h * 60 + m;
+  }
+
+  getArrivalDate(s: any): string {
+    if (!s) return '';
+    if (s.arrivalDate) return s.arrivalDate;
+    if (s.arrivalDateTime) return s.arrivalDateTime.split('T')[0];
+    if (!s.travelDate) return '';
+    if (s.departureTime && s.arrivalTime) {
+      const depMins = this.parseTimeToMinutes(s.departureTime);
+      const arrMins = this.parseTimeToMinutes(s.arrivalTime);
+      if (arrMins < depMins) {
+        const d = new Date(s.travelDate + 'T00:00:00');
+        d.setDate(d.getDate() + 1);
+        return d.toISOString().split('T')[0];
+      }
+    }
+    return s.travelDate;
+  }
+
+  isOvernightSchedule(s: any): boolean {
+    if (!s) return false;
+    const arrDate = this.getArrivalDate(s);
+    return !!(arrDate && s.travelDate && arrDate !== s.travelDate);
+  }
+
+  calculateDuration(s: any): string {
+    if (!s) return '—';
+    try {
+      if (s.departureDateTime && s.arrivalDateTime) {
+        const dep = new Date(s.departureDateTime).getTime();
+        const arr = new Date(s.arrivalDateTime).getTime();
+        if (!isNaN(dep) && !isNaN(arr) && arr >= dep) {
+          const diffMs = arr - dep;
+          const totalMinutes = Math.floor(diffMs / (1000 * 60));
+          const hours = Math.floor(totalMinutes / 60);
+          const mins = totalMinutes % 60;
+          return `${hours}h ${mins}m`;
+        }
+      }
+      if (s.departureTime && s.arrivalTime) {
+        const depMins = this.parseTimeToMinutes(s.departureTime);
+        let arrMins = this.parseTimeToMinutes(s.arrivalTime);
+        if (this.isOvernightSchedule(s) || arrMins < depMins) {
+          arrMins += 24 * 60;
+        }
+        const totalMinutes = arrMins - depMins;
+        if (totalMinutes > 0) {
+          const hours = Math.floor(totalMinutes / 60);
+          const mins = totalMinutes % 60;
+          return `${hours}h ${mins}m`;
+        }
+      }
+    } catch {
+      // return fallback
+    }
+    return '—';
+  }
+
+  getScheduleComputedStatus(s: any): 'UPCOMING' | 'ONGOING' | 'COMPLETED' | 'CANCELLED' {
+    if (!s) return 'UPCOMING';
+    if (s.status === 'CANCELLED') return 'CANCELLED';
+
+    const now = new Date();
+    let depDate: Date | null = null;
+    if (s.departureDateTime) {
+      depDate = new Date(s.departureDateTime);
+    } else if (s.travelDate && s.departureTime) {
+      const t = s.departureTime.length === 5 ? s.departureTime + ':00' : s.departureTime;
+      depDate = new Date(`${s.travelDate}T${t}`);
+    }
+
+    let arrDate: Date | null = null;
+    if (s.arrivalDateTime) {
+      arrDate = new Date(s.arrivalDateTime);
+    } else {
+      const effectiveArrDate = this.getArrivalDate(s);
+      if (effectiveArrDate && s.arrivalTime) {
+        const t = s.arrivalTime.length === 5 ? s.arrivalTime + ':00' : s.arrivalTime;
+        arrDate = new Date(`${effectiveArrDate}T${t}`);
+      }
+    }
+
+    if (depDate && !isNaN(depDate.getTime())) {
+      if (now < depDate) {
+        return 'UPCOMING';
+      }
+      if (arrDate && !isNaN(arrDate.getTime())) {
+        if (now >= depDate && now <= arrDate) {
+          return 'ONGOING';
+        }
+        if (now > arrDate) {
+          return 'COMPLETED';
+        }
+      } else {
+        const sixHoursLater = new Date(depDate.getTime() + 6 * 3600 * 1000);
+        if (now <= sixHoursLater) return 'ONGOING';
+        return 'COMPLETED';
+      }
+    }
+
+    return 'UPCOMING';
+  }
+
+  getScheduleStatusPillClass(s: any): string {
+    const st = this.getScheduleComputedStatus(s);
+    switch (st) {
+      case 'UPCOMING': return 'pill-upcoming';
+      case 'ONGOING': return 'pill-ongoing';
+      case 'COMPLETED': return 'pill-completed';
+      case 'CANCELLED': return 'pill-cancelled';
+      default: return 'pill-upcoming';
+    }
+  }
+
+  getSeatsClass(s: any): string {
+    const avail = s?.availableSeats != null ? s.availableSeats : 0;
+    if (avail <= 5) return 'text-danger fw-bold';
+    if (avail <= 15) return 'text-warning fw-semibold';
+    return 'text-success fw-semibold';
+  }
+
+  getOccupancyPercent(s: any): number {
+    if (!s) return 0;
+    const total = s.capacity || this.getBusCapacity(s.busId) || 40;
+    const avail = s.availableSeats != null ? s.availableSeats : total;
+    const booked = Math.max(0, total - avail);
+    return Math.round((booked / total) * 100);
+  }
+
+  get scheduleMetrics() {
+    const total = this.mySchedules.length;
+    let upcoming = 0;
+    let ongoing = 0;
+    let completed = 0;
+    let cancelled = 0;
+
+    for (const s of this.mySchedules) {
+      const st = this.getScheduleComputedStatus(s);
+      if (st === 'UPCOMING') upcoming++;
+      else if (st === 'ONGOING') ongoing++;
+      else if (st === 'COMPLETED') completed++;
+      else if (st === 'CANCELLED') cancelled++;
+    }
+
+    return {
+      total,
+      upcoming,
+      upcomingPct: total > 0 ? Math.round((upcoming / total) * 100) : 0,
+      ongoing,
+      ongoingPct: total > 0 ? Math.round((ongoing / total) * 100) : 0,
+      completed,
+      completedPct: total > 0 ? Math.round((completed / total) * 100) : 0,
+      cancelled,
+      cancelledPct: total > 0 ? Math.round((cancelled / total) * 100) : 0
+    };
+  }
+
+  setScheduleStatusFilter(status: string) {
+    this.selectedScheduleStatusFilter = status;
+    this.schedulesCurrentPage = 1;
+  }
+
+  get scheduleRouteOptions(): { value: string; label: string }[] {
+    const optionsMap = new Map<string, string>();
+    for (const r of this.myRoutes) {
+      if (r.id) {
+        optionsMap.set(String(r.id), `${r.origin} → ${r.destination}`);
+      }
+    }
+    for (const s of this.mySchedules) {
+      if (s.routeId && !optionsMap.has(String(s.routeId))) {
+        optionsMap.set(String(s.routeId), `${s.origin} → ${s.destination}`);
+      }
+    }
+    return Array.from(optionsMap.entries()).map(([value, label]) => ({ value, label }));
+  }
+
+  get scheduleBusOptions(): { value: string; label: string }[] {
+    const optionsMap = new Map<string, string>();
+    for (const b of this.myBuses) {
+      if (b.id) {
+        optionsMap.set(String(b.id), `${b.busNumber} (${b.busType || 'Bus'})`);
+      }
+    }
+    for (const s of this.mySchedules) {
+      if (s.busId && !optionsMap.has(String(s.busId))) {
+        optionsMap.set(String(s.busId), `${s.busNumber || 'Bus #' + s.busId}`);
+      }
+    }
+    return Array.from(optionsMap.entries()).map(([value, label]) => ({ value, label }));
+  }
+
+  getSelectedRouteFilterLabel(): string {
+    const opt = this.scheduleRouteOptions.find(o => o.value === this.selectedScheduleRouteFilter);
+    return opt ? opt.label : this.selectedScheduleRouteFilter;
+  }
+
+  getSelectedBusFilterLabel(): string {
+    const opt = this.scheduleBusOptions.find(o => o.value === this.selectedScheduleBusFilter);
+    return opt ? opt.label : this.selectedScheduleBusFilter;
+  }
+
+  onScheduleFilterChange() {
+    this.schedulesCurrentPage = 1;
+  }
+
+  hasActiveScheduleFilters(): boolean {
+    return !!(
+      this.schedulesSearchTerm.trim() ||
+      this.selectedScheduleRouteFilter !== 'ALL' ||
+      this.selectedScheduleBusFilter !== 'ALL' ||
+      this.selectedScheduleStatusFilter !== 'ALL' ||
+      this.selectedScheduleDateFilter
+    );
+  }
+
+  clearScheduleFilters() {
+    this.schedulesSearchTerm = '';
+    this.selectedScheduleRouteFilter = 'ALL';
+    this.selectedScheduleBusFilter = 'ALL';
+    this.selectedScheduleStatusFilter = 'ALL';
+    this.selectedScheduleDateFilter = '';
+    this.schedulesCurrentPage = 1;
+  }
+
+  getScheduleSortTimestamp(s: any): number {
+    if (s.departureDateTime) {
+      const t = new Date(s.departureDateTime).getTime();
+      if (!isNaN(t)) return t;
+    }
+    if (s.travelDate && s.departureTime) {
+      const timeStr = s.departureTime.length === 5 ? s.departureTime + ':00' : s.departureTime;
+      const t = new Date(`${s.travelDate}T${timeStr}`).getTime();
+      if (!isNaN(t)) return t;
+    }
+    return 0;
+  }
+
+  get filteredSchedules(): any[] {
+    let list = [...this.mySchedules];
+
+    if (this.schedulesSearchTerm.trim()) {
+      const q = this.schedulesSearchTerm.trim().toLowerCase();
+      list = list.filter(s => {
+        const schedIdStr = `sch-${s.id}`.toLowerCase();
+        const rawIdStr = `${s.id}`.toLowerCase();
+        const origin = (s.origin || '').toLowerCase();
+        const destination = (s.destination || '').toLowerCase();
+        const busNum = (s.busNumber || this.getBusNumber(s.busId) || '').toLowerCase();
+        const busType = (s.busType || this.getBusType(s.busId) || '').toLowerCase();
+        const routePair = `${origin} -> ${destination}`.toLowerCase();
+        const routePairUni = `${origin} → ${destination}`.toLowerCase();
+        return (
+          schedIdStr.includes(q) ||
+          rawIdStr.includes(q) ||
+          origin.includes(q) ||
+          destination.includes(q) ||
+          busNum.includes(q) ||
+          busType.includes(q) ||
+          routePair.includes(q) ||
+          routePairUni.includes(q)
+        );
+      });
+    }
+
+    if (this.selectedScheduleRouteFilter !== 'ALL') {
+      list = list.filter(s => {
+        if (s.routeId && String(s.routeId) === this.selectedScheduleRouteFilter) return true;
+        const pair = `${s.origin} → ${s.destination}`;
+        return pair === this.selectedScheduleRouteFilter;
+      });
+    }
+
+    if (this.selectedScheduleBusFilter !== 'ALL') {
+      list = list.filter(s => {
+        return String(s.busId) === this.selectedScheduleBusFilter || s.busNumber === this.selectedScheduleBusFilter;
+      });
+    }
+
+    if (this.selectedScheduleStatusFilter !== 'ALL') {
+      list = list.filter(s => {
+        const computed = this.getScheduleComputedStatus(s);
+        if (this.selectedScheduleStatusFilter === 'UPCOMING') {
+          return computed === 'UPCOMING' || s.status === 'SCHEDULED';
+        }
+        return computed === this.selectedScheduleStatusFilter;
+      });
+    }
+
+    if (this.selectedScheduleDateFilter) {
+      list = list.filter(s => {
+        return s.travelDate === this.selectedScheduleDateFilter;
+      });
+    }
+
+    list.sort((a, b) => {
+      switch (this.schedulesSortBy) {
+        case 'DEP_EARLIEST': {
+          return this.getScheduleSortTimestamp(a) - this.getScheduleSortTimestamp(b);
+        }
+        case 'DEP_LATEST': {
+          return this.getScheduleSortTimestamp(b) - this.getScheduleSortTimestamp(a);
+        }
+        case 'DATE_NEWEST': {
+          const dateA = a.travelDate || '';
+          const dateB = b.travelDate || '';
+          return dateB.localeCompare(dateA);
+        }
+        case 'FARE_ASC': {
+          return (a.fare || 0) - (b.fare || 0);
+        }
+        case 'FARE_DESC': {
+          return (b.fare || 0) - (a.fare || 0);
+        }
+        case 'SEATS_DESC': {
+          return (b.availableSeats || 0) - (a.availableSeats || 0);
+        }
+        default:
+          return 0;
+      }
+    });
+
+    return list;
+  }
+
+  get pagedSchedules(): any[] {
+    const filtered = this.filteredSchedules;
+    const start = (this.schedulesCurrentPage - 1) * this.schedulesPageSize;
+    return filtered.slice(start, start + this.schedulesPageSize);
+  }
+
+  get totalSchedulePages(): number {
+    return Math.ceil(this.filteredSchedules.length / this.schedulesPageSize) || 1;
+  }
+
+  get schedulesPaginationStart(): number {
+    if (this.filteredSchedules.length === 0) return 0;
+    return (this.schedulesCurrentPage - 1) * this.schedulesPageSize + 1;
+  }
+
+  get schedulesPaginationEnd(): number {
+    return Math.min(this.schedulesCurrentPage * this.schedulesPageSize, this.filteredSchedules.length);
+  }
+
+  goToSchedulePage(page: number) {
+    if (page >= 1 && page <= this.totalSchedulePages) {
+      this.schedulesCurrentPage = page;
+    }
+  }
+
+  getSchedulePageNumbers(): number[] {
+    const total = this.totalSchedulePages;
+    const current = this.schedulesCurrentPage;
+    if (total <= 5) {
+      return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    let start = Math.max(1, current - 2);
+    let end = Math.min(total, start + 4);
+    if (end - start < 4) {
+      start = Math.max(1, end - 4);
+    }
+    const pages: number[] = [];
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
+  }
+
+  isScheduleSelected(scheduleId: number): boolean {
+    return this.selectedScheduleIds.has(scheduleId);
+  }
+
+  toggleScheduleSelection(scheduleId: number) {
+    if (this.selectedScheduleIds.has(scheduleId)) {
+      this.selectedScheduleIds.delete(scheduleId);
+    } else {
+      this.selectedScheduleIds.add(scheduleId);
+    }
+  }
+
+  isAllVisibleSchedulesSelected(): boolean {
+    const paged = this.pagedSchedules;
+    if (paged.length === 0) return false;
+    return paged.every(s => this.selectedScheduleIds.has(s.id));
+  }
+
+  toggleSelectAllSchedules() {
+    const paged = this.pagedSchedules;
+    if (this.isAllVisibleSchedulesSelected()) {
+      paged.forEach(s => this.selectedScheduleIds.delete(s.id));
+    } else {
+      paged.forEach(s => this.selectedScheduleIds.add(s.id));
+    }
+  }
+
+  toggleScheduleActionMenu(scheduleId: number, event: Event) {
+    event.stopPropagation();
+    if (this.activeScheduleActionMenuId === scheduleId) {
+      this.activeScheduleActionMenuId = null;
+    } else {
+      this.activeScheduleActionMenuId = scheduleId;
+    }
+  }
+
+  closeScheduleActionMenu() {
+    this.activeScheduleActionMenuId = null;
+  }
+
+  // ==================== SCHEDULE CREATION WIZARD METHODS (PHASE 6.2B) ====================
+
+  handleCreateScheduleClick() {
+    this.startScheduleCreationWizard();
+  }
+
+  startScheduleCreationWizard(preselectedRoute?: Route) {
+    this.scheduleViewMode = 'create';
+    this.scheduleWizardStep = 1;
+    this.wizardRouteSearchQuery = '';
+    this.wizardRouteStatusFilter = 'ALL';
+    this.expandedRouteId = null; // Do NOT auto-expand any route
+    this.wizardBusSearchQuery = '';
+    this.wizardBusTypeFilter = 'ALL';
+    this.expandedBusId = null;
+
+    if (!this.myRoutes || this.myRoutes.length === 0) {
+      this.loadRoutes();
+    }
+    if (!this.myBuses || this.myBuses.length === 0) {
+      this.loadBuses();
+    }
+
+    if (preselectedRoute && this.isRouteEligibleForSchedule(preselectedRoute)) {
+      this.wizardSelectedRouteId = preselectedRoute.id;
+      this.wizardSelectedRoute = preselectedRoute;
+      // Do NOT set expandedRouteId here - selection and expansion must remain decoupled
+    } else if (this.wizardSelectedRouteId) {
+      const found = (this.myRoutes || []).find(r => r.id === this.wizardSelectedRouteId);
+      if (found && this.isRouteEligibleForSchedule(found)) {
+        this.wizardSelectedRoute = found;
+      } else {
+        this.wizardSelectedRouteId = null;
+        this.wizardSelectedRoute = null;
+      }
+    }
+  }
+
+  cancelScheduleWizard() {
+    this.scheduleViewMode = 'list';
+    this.scheduleWizardStep = 1;
+    this.wizardSelectedRouteId = null;
+    this.wizardSelectedRoute = null;
+    this.wizardSelectedBusId = null;
+    this.wizardSelectedBus = null;
+    this.expandedRouteId = null;
+    this.expandedBusId = null;
+    this.wizardBusSearchQuery = '';
+    this.wizardBusTypeFilter = 'ALL';
+    this.wizardSegmentFares = [];
+    this.wizardJourneyFares = [];
+    this.fareValidationError = null;
+    this.wizardFareOverrides = [];
+  }
+
+  canContinueToStep2(): boolean {
+    return this.wizardSelectedRouteId !== null && this.isRouteEligibleForSchedule(this.wizardSelectedRoute);
+  }
+
+  continueToAssignBus() {
+    if (!this.canContinueToStep2()) {
+      this.showScheduleToast('info', 'Please select an active route to continue.');
+      return;
+    }
+    this.schedRouteId = this.wizardSelectedRouteId;
+    this.scheduleWizardStep = 2;
+    if (!this.myBuses || this.myBuses.length === 0) {
+      this.loadBuses();
+    }
+  }
+
+  backToSelectRoute() {
+    this.scheduleWizardStep = 1;
+  }
+
+  backToAssignBus() {
+    this.scheduleWizardStep = 2;
+  }
+
+  canContinueToStep3(): boolean {
+    return this.wizardSelectedBusId !== null && this.isBusEligibleForSchedule(this.wizardSelectedBus);
+  }
+
+  continueToConfigureTimings() {
+    if (!this.canContinueToStep3()) {
+      this.showScheduleToast('info', 'Please select an active bus to continue.');
+      return;
+    }
+    this.schedBusId = this.wizardSelectedBusId;
+    this.scheduleWizardStep = 3;
+    this.initStep3Timings();
+  }
+
+  isBusEligibleForSchedule(bus: Bus | null | undefined): boolean {
+    if (!bus) return false;
+    return (bus.status || '').trim().toUpperCase() === 'ACTIVE';
+  }
+
+  selectWizardBus(bus: Bus, event?: Event) {
+    if (event) {
+      event.stopPropagation();
+    }
+    if (!this.isBusEligibleForSchedule(bus)) {
+      this.showScheduleToast('info', `Bus "${bus.busNumber}" is inactive. Only active buses can be assigned to a schedule.`);
+      return;
+    }
+    this.wizardSelectedBusId = bus.id;
+    this.wizardSelectedBus = bus;
+    // Decoupled: selection does NOT automatically expand details
+  }
+
+  toggleBusDetails(busId: number, event?: Event) {
+    if (event) {
+      event.stopPropagation();
+    }
+    if (this.expandedBusId === busId) {
+      this.expandedBusId = null;
+    } else {
+      this.expandedBusId = busId;
+    }
+    // Decoupled: expanding details does NOT select the bus
+  }
+
+  get filteredWizardBuses(): Bus[] {
+    let list = this.myBuses || [];
+
+    if (this.wizardBusTypeFilter && this.wizardBusTypeFilter !== 'ALL') {
+      list = list.filter(b => (b.busType || '').toLowerCase().includes(this.wizardBusTypeFilter.toLowerCase()));
+    }
+
+    if (this.wizardBusSearchQuery && this.wizardBusSearchQuery.trim()) {
+      const q = this.wizardBusSearchQuery.trim().toLowerCase();
+      list = list.filter(b =>
+        (b.busNumber && b.busNumber.toLowerCase().includes(q)) ||
+        (b.busName && b.busName.toLowerCase().includes(q)) ||
+        (b.busType && b.busType.toLowerCase().includes(q)) ||
+        (b.model && b.model.toLowerCase().includes(q)) ||
+        (b.manufacturer && b.manufacturer.toLowerCase().includes(q))
+      );
+    }
+
+    return list;
+  }
+
+  get availableBusTypes(): string[] {
+    const set = new Set<string>();
+    (this.myBuses || []).forEach(b => {
+      if (b.busType && b.busType.trim()) {
+        set.add(b.busType.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }
+
+  clearWizardBusFilters() {
+    this.wizardBusSearchQuery = '';
+    this.wizardBusTypeFilter = 'ALL';
+  }
+
+  isWizardBusSelectedHidden(): boolean {
+    if (!this.wizardSelectedBusId) return false;
+    return !this.filteredWizardBuses.some(b => b.id === this.wizardSelectedBusId);
+  }
+
+  getBusSeatLayoutSummary(bus: Bus): string {
+    return bus.layoutSummary || '--';
+  }
+
+  getBusAmenitiesList(bus: Bus): string[] {
+    if (Array.isArray(bus.amenities)) {
+      return bus.amenities;
+    }
+    if (typeof bus.amenities === 'string' && bus.amenities.trim().length > 0) {
+      return bus.amenities.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    }
+    return [];
+  }
+
+  getBusThumbnail(bus: Bus): string {
+    return bus.imageUrl || 'assets/images/travel-easy-bus.png';
+  }
+
+  getBusTotalSeatsFormatted(bus: Bus): string {
+    const layout = this.getBusSeatLayoutSummary(bus);
+    const seats = bus.totalSeats || bus.capacity || 0;
+    return layout !== '--' ? `${seats} (${layout})` : `${seats}`;
+  }
+
+  getDerivedManufacturer(bus: Bus): string {
+    return bus.manufacturer || 'Not available';
+  }
+
+  getAmenityIcon(amenity: string): string {
+    const a = (amenity || '').toLowerCase();
+    if (a.includes('ac') || a.includes('air')) return 'fa-solid fa-snowflake';
+    if (a.includes('wifi') || a.includes('wi-fi')) return 'fa-solid fa-wifi';
+    if (a.includes('charg') || a.includes('plug') || a.includes('usb')) return 'fa-solid fa-plug';
+    if (a.includes('blanket') || a.includes('bed') || a.includes('linen') || a.includes('pillow')) return 'fa-solid fa-bed';
+    if (a.includes('water')) return 'fa-solid fa-bottle-water';
+    if (a.includes('light')) return 'fa-regular fa-lightbulb';
+    return 'fa-solid fa-circle-check';
+  }
+
+  handleImageError(event: any) {
+    event.target.src = 'assets/images/travel-easy-bus.png';
+  }
+
+  isRouteEligibleForSchedule(route: Route | null | undefined): boolean {
+    if (!route) return false;
+    return (route.status || '').trim().toUpperCase() === 'ACTIVE';
+  }
+
+  selectWizardRoute(route: Route, event?: Event) {
+    if (event) {
+      event.stopPropagation();
+    }
+    if (!this.isRouteEligibleForSchedule(route)) {
+      this.showScheduleToast('info', `Route "${route.routeName || 'Unnamed'}" (${route.routeCode || 'RTE-' + route.id}) is inactive. Only active routes can be scheduled.`);
+      return;
+    }
+    this.wizardSelectedRouteId = route.id;
+    this.wizardSelectedRoute = route;
+    // Decoupled: selection does NOT automatically expand details
+  }
+
+  toggleRouteDetails(routeId: number, event?: Event) {
+    if (event) {
+      event.stopPropagation();
+    }
+    if (this.expandedRouteId === routeId) {
+      this.expandedRouteId = null;
+    } else {
+      this.expandedRouteId = routeId;
+    }
+    // Decoupled: expanding details does NOT select the route
+  }
+
+  getRouteStopsCount(r: Route | null | undefined): number {
+    if (!r || !r.stops) return 0;
+    return r.stops.length;
+  }
+
+  get filteredWizardRoutes(): Route[] {
+    let list = this.myRoutes || [];
+
+    if (this.wizardRouteStatusFilter && this.wizardRouteStatusFilter !== 'ALL') {
+      list = list.filter(r => (r.status || '').toUpperCase() === this.wizardRouteStatusFilter.toUpperCase());
+    }
+
+    if (this.wizardRouteSearchQuery && this.wizardRouteSearchQuery.trim()) {
+      const q = this.wizardRouteSearchQuery.trim().toLowerCase();
+      list = list.filter(r =>
+        (r.routeCode && r.routeCode.toLowerCase().includes(q)) ||
+        (r.routeName && r.routeName.toLowerCase().includes(q)) ||
+        (r.origin && r.origin.toLowerCase().includes(q)) ||
+        (r.destination && r.destination.toLowerCase().includes(q))
+      );
+    }
+
+    return list;
+  }
+
+  clearWizardRouteFilters() {
+    this.wizardRouteSearchQuery = '';
+    this.wizardRouteStatusFilter = 'ALL';
+  }
+
+  isWizardRouteSelectedHidden(): boolean {
+    if (!this.wizardSelectedRouteId) return false;
+    return !this.filteredWizardRoutes.some(r => r.id === this.wizardSelectedRouteId);
+  }
+
+  getSelectedRouteName(): string {
+    return this.wizardSelectedRoute?.routeName || 'Selected Route';
+  }
+
+  getEstimatedRouteDuration(route: Route): string {
+    const dist = this.getRouteDistanceNumber(route);
+    if (!dist || dist <= 0) return '--';
+    const totalMinutes = Math.round((dist / 53) * 60 / 5) * 5;
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    return `~ ${hours}h ${mins < 10 ? '0' : ''}${mins}m`;
+  }
+
+  getStopBoardingDroppingType(stop: RouteStop | null | undefined): { type: string, label: string, cssClass: string } {
+    if (!stop) {
+      return { type: 'NONE', label: 'No points configured', cssClass: 'stop-badge-none' };
+    }
+    const hasBoarding = !!(stop.boardingPoints && stop.boardingPoints.length > 0);
+    const hasDropping = !!(stop.droppingPoints && stop.droppingPoints.length > 0);
+
+    if (hasBoarding && hasDropping) {
+      return { type: 'BOTH', label: 'Boarding & Dropping', cssClass: 'stop-badge-both' };
+    }
+    if (hasBoarding) {
+      return { type: 'BOARDING', label: 'Boarding only', cssClass: 'stop-badge-boarding' };
+    }
+    if (hasDropping) {
+      return { type: 'DROPPING', label: 'Dropping only', cssClass: 'stop-badge-dropping' };
+    }
+    return { type: 'NONE', label: 'No points configured', cssClass: 'stop-badge-none' };
+  }
+
+  getFormattedStopName(stop: RouteStop, index: number, totalStops: number): string {
+    if (!stop || !stop.stopName) return '';
+    const name = stop.stopName.trim();
+    if (totalStops > 1) {
+      if ((index === 0 || stop.stopType === 'ORIGIN') && !name.toLowerCase().includes('(start)')) {
+        return `${name} (Start)`;
+      }
+      if ((index === totalStops - 1 || stop.stopType === 'DESTINATION') && !name.toLowerCase().includes('(end)')) {
+        return `${name} (End)`;
+      }
+    }
+    return name;
+  }
+
+  handleCreateSimilarSchedule(s: any) {
+    this.closeScheduleActionMenu();
+    this.showScheduleToast('info', 'Create Similar Schedule will be available in Phase 6.2B.');
+  }
+
+  viewScheduleBookings(s: any) {
+    this.closeScheduleActionMenu();
+    this.activeNav = 'bookings';
+  }
+
+  showScheduleToast(type: 'info' | 'success' | 'danger', message: string) {
+    this.schedulesToastType = type;
+    this.schedulesToastMessage = message;
+    setTimeout(() => {
+      if (this.schedulesToastMessage === message) {
+        this.schedulesToastMessage = null;
+      }
+    }, 4500);
+  }
+
+  // ==================== WIZARD STEP 3 TIMINGS METHODS (PHASE 6.3) ====================
+
+  formatDisplayDate(isoDate: string | null | undefined): string {
+    if (!isoDate) return '--';
+    try {
+      const parts = isoDate.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${day < 10 ? '0' : ''}${day} ${months[month]} ${year}`;
+      }
+      return isoDate;
+    } catch {
+      return isoDate;
+    }
+  }
+
+  formatDisplayTime(time24: string | null | undefined): string {
+    if (!time24) return '--';
+    try {
+      const parts = time24.split(':');
+      if (parts.length >= 2) {
+        let hour = parseInt(parts[0], 10);
+        const minute = parts[1].substring(0, 2);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        hour = hour % 12;
+        if (hour === 0) hour = 12;
+        return `${hour < 10 ? '0' : ''}${hour}:${minute} ${ampm}`;
+      }
+      return time24;
+    } catch {
+      return time24;
+    }
+  }
+
+  initStep3Timings() {
+    if (this.wizardSelectedRouteId) {
+      this.busService.getRouteDetails(this.wizardSelectedRouteId).subscribe({
+        next: (fullRoute) => {
+          if (fullRoute && fullRoute.stops && fullRoute.stops.length > 0) {
+            this.wizardSelectedRoute = fullRoute;
+          }
+          this.buildWizardStopTimings();
+          this.recalculateJourneyDurationAndValidation();
+          this.checkTimingConflict();
+        },
+        error: () => {
+          this.buildWizardStopTimings();
+          this.recalculateJourneyDurationAndValidation();
+          this.checkTimingConflict();
+        }
+      });
+    } else {
+      this.buildWizardStopTimings();
+      this.recalculateJourneyDurationAndValidation();
+      this.checkTimingConflict();
+    }
+  }
+
+  buildWizardStopTimings() {
+    const route = this.wizardSelectedRoute;
+    const dist = (route && (route as any).totalDistanceKm) ? (route as any).totalDistanceKm : (this.wizardSelectedRoute ? this.getRouteDistanceNumber(this.wizardSelectedRoute) : 420);
+    this.wizardTotalDistanceKm = dist > 0 ? dist : 420;
+
+    const stops = route?.stops || [];
+    this.wizardTotalStopsCount = stops.length > 0 ? stops.length : 4;
+    this.wizardIntermediateStopsCount = Math.max(0, this.wizardTotalStopsCount - 2);
+
+    if (this.wizardStopTimings && this.wizardStopTimings.length === this.wizardTotalStopsCount) {
+      this.recalculateJourneyDurationAndValidation();
+      return;
+    }
+
+    if (!this.wizardTripStartDate) {
+      this.wizardTripStartDate = this.getOperationalDateKolkata(1);
+    }
+    if (!this.wizardTripEndDate) {
+      this.wizardTripEndDate = this.getOperationalDateKolkata(2);
+    }
+    const baseDate = this.wizardTripStartDate;
+    const nextDate = this.wizardTripEndDate;
+
+    if (!stops || stops.length === 0) {
+      this.wizardStopTimings = [
+        {
+          stopName: 'Bengaluru (Origin)',
+          stopType: 'ORIGIN',
+          distanceKm: 0,
+          isExpanded: true,
+          summaryDepartureDate: baseDate,
+          summaryDepartureTime: '06:00',
+          points: [
+            {
+              pointName: 'Majestic Bus Stand',
+              pointType: 'BOARDING',
+              pointBadge: 'Boarding only',
+              arrivalDate: null,
+              arrivalTime: null,
+              departureDate: baseDate,
+              departureTime: '06:00',
+              haltMinutes: 0,
+              haltDurationDisplay: null
+            },
+            {
+              pointName: 'Yeshwanthpur',
+              pointType: 'BOARDING',
+              pointBadge: 'Boarding only',
+              arrivalDate: null,
+              arrivalTime: null,
+              departureDate: baseDate,
+              departureTime: '06:30',
+              haltMinutes: 0,
+              haltDurationDisplay: null
+            }
+          ]
+        },
+        {
+          stopName: 'Kurnool',
+          stopType: 'INTERMEDIATE',
+          distanceKm: 210,
+          isExpanded: true,
+          summaryArrivalDate: baseDate,
+          summaryArrivalTime: '10:00',
+          summaryDepartureDate: baseDate,
+          summaryDepartureTime: '10:55',
+          summaryHaltDisplay: '55 min',
+          points: [
+            {
+              pointName: 'Kurnool Bus Stand',
+              pointType: 'BOTH',
+              pointBadge: 'Boarding & Dropping',
+              arrivalDate: baseDate,
+              arrivalTime: '10:00',
+              departureDate: baseDate,
+              departureTime: '10:20',
+              haltMinutes: 20,
+              haltDurationDisplay: '20 min'
+            },
+            {
+              pointName: 'Orvakal',
+              pointType: 'BOTH',
+              pointBadge: 'Boarding & Dropping',
+              arrivalDate: baseDate,
+              arrivalTime: '10:45',
+              departureDate: baseDate,
+              departureTime: '10:55',
+              haltMinutes: 10,
+              haltDurationDisplay: '10 min'
+            }
+          ]
+        },
+        {
+          stopName: 'Anantapur',
+          stopType: 'INTERMEDIATE',
+          distanceKm: 320,
+          isExpanded: true,
+          summaryArrivalDate: baseDate,
+          summaryArrivalTime: '14:15',
+          summaryDepartureDate: baseDate,
+          summaryDepartureTime: '15:10',
+          summaryHaltDisplay: '55 min',
+          points: [
+            {
+              pointName: 'Anantapur Bus Stand',
+              pointType: 'BOTH',
+              pointBadge: 'Boarding & Dropping',
+              arrivalDate: baseDate,
+              arrivalTime: '14:15',
+              departureDate: baseDate,
+              departureTime: '14:35',
+              haltMinutes: 20,
+              haltDurationDisplay: '20 min'
+            },
+            {
+              pointName: 'Gooty',
+              pointType: 'BOTH',
+              pointBadge: 'Boarding & Dropping',
+              arrivalDate: baseDate,
+              arrivalTime: '15:00',
+              departureDate: baseDate,
+              departureTime: '15:10',
+              haltMinutes: 10,
+              haltDurationDisplay: '10 min'
+            }
+          ]
+        },
+        {
+          stopName: 'Hyderabad (Destination)',
+          stopType: 'DESTINATION',
+          distanceKm: 420,
+          isExpanded: true,
+          summaryArrivalDate: nextDate,
+          summaryArrivalTime: this.wizardTripEndTime || '01:30',
+          points: [
+            {
+              pointName: 'MGBS (Jubilee Bus Station)',
+              pointType: 'DROPPING',
+              pointBadge: 'Dropping only',
+              arrivalDate: nextDate,
+              arrivalTime: '01:00',
+              departureDate: null,
+              departureTime: null,
+              haltMinutes: 0,
+              haltDurationDisplay: null
+            },
+            {
+              pointName: 'Uppal',
+              pointType: 'DROPPING',
+              pointBadge: 'Dropping only',
+              arrivalDate: nextDate,
+              arrivalTime: this.wizardTripEndTime || '01:30',
+              departureDate: null,
+              departureTime: null,
+              haltMinutes: 0,
+              haltDurationDisplay: null
+            }
+          ]
+        }
+      ];
+      this.wizardStopTimings.forEach((st, idx) => this.syncStopSummaryTimings(st, idx));
+    } else {
+      const result: any[] = [];
+      const total = stops.length;
+
+      for (let i = 0; i < total; i++) {
+        const rs = stops[i];
+        const isOrigin = i === 0 || rs.stopType === 'ORIGIN';
+        const isDest = i === total - 1 || rs.stopType === 'DESTINATION';
+        const stopType = isOrigin ? 'ORIGIN' : (isDest ? 'DESTINATION' : 'INTERMEDIATE');
+
+        const stopNameFormatted = this.getFormattedStopName(rs, i, total);
+        const distKm = rs.distanceKm !== undefined && rs.distanceKm !== null ? rs.distanceKm : (i === 0 ? 0 : Math.round((this.wizardTotalDistanceKm / (total - 1)) * i));
+
+        const pointsList: any[] = [];
+        const seenNames = new Set<string>();
+
+        const bPoints = rs.boardingPoints || [];
+        const dPoints = rs.droppingPoints || [];
+
+        const bNames = new Set(bPoints.map((p: any) => p.pointName?.trim()));
+        const dNames = new Set(dPoints.map((p: any) => p.pointName?.trim()));
+
+        bPoints.forEach((p: any) => {
+          const name = p.pointName?.trim();
+          if (name && !seenNames.has(name)) {
+            seenNames.add(name);
+            const inBoth = dNames.has(name);
+            pointsList.push({
+              pointName: name,
+              pointType: inBoth ? 'BOTH' : 'BOARDING',
+              pointBadge: inBoth ? 'Boarding & Dropping' : 'Boarding only'
+            });
+          }
+        });
+
+        dPoints.forEach((p: any) => {
+          const name = p.pointName?.trim();
+          if (name && !seenNames.has(name)) {
+            seenNames.add(name);
+            pointsList.push({
+              pointName: name,
+              pointType: 'DROPPING',
+              pointBadge: 'Dropping only'
+            });
+          }
+        });
+
+        if (pointsList.length === 0) {
+          pointsList.push({
+            pointName: rs.stopName,
+            pointType: isOrigin ? 'BOARDING' : (isDest ? 'DROPPING' : 'BOTH'),
+            pointBadge: isOrigin ? 'Boarding only' : (isDest ? 'Dropping only' : 'Boarding & Dropping')
+          });
+        }
+
+        pointsList.forEach((pt: any, ptIdx: number) => {
+          if (isOrigin) {
+            pt.arrivalDate = null;
+            pt.arrivalTime = null;
+            pt.departureDate = baseDate;
+            pt.departureTime = ptIdx === 0 ? this.wizardTripStartTime : '06:30';
+            pt.haltMinutes = 0;
+            pt.haltDurationDisplay = null;
+          } else if (isDest) {
+            pt.arrivalDate = nextDate;
+            pt.arrivalTime = ptIdx === pointsList.length - 1 ? (this.wizardTripEndTime || '01:30') : '01:00';
+            pt.departureDate = null;
+            pt.departureTime = null;
+            pt.haltMinutes = 0;
+            pt.haltDurationDisplay = null;
+          } else {
+            const hoursFromStart = Math.max(1, Math.round((distKm / 55) * 2) / 2);
+            const arrHour = 6 + Math.floor(hoursFromStart);
+            const arrMin = Math.round((hoursFromStart % 1) * 60) + (ptIdx * 20);
+            const normArrHour = (arrHour + Math.floor(arrMin / 60)) % 24;
+            const normArrMin = arrMin % 60;
+            const depHour = (normArrHour + Math.floor((normArrMin + 20) / 60)) % 24;
+            const depMin = (normArrMin + 20) % 60;
+
+            pt.arrivalDate = baseDate;
+            pt.arrivalTime = `${normArrHour < 10 ? '0' : ''}${normArrHour}:${normArrMin < 10 ? '0' : ''}${normArrMin}`;
+            pt.departureDate = baseDate;
+            pt.departureTime = `${depHour < 10 ? '0' : ''}${depHour}:${depMin < 10 ? '0' : ''}${depMin}`;
+            pt.haltMinutes = 20;
+            pt.haltDurationDisplay = '20 min';
+          }
+        });
+
+        result.push({
+          stopName: stopNameFormatted,
+          stopType: stopType,
+          distanceKm: distKm,
+          isExpanded: true,
+          points: pointsList,
+          summaryArrivalDate: isOrigin ? null : (isDest ? (this.wizardTripEndDate || nextDate) : pointsList[0]?.arrivalDate),
+          summaryArrivalTime: isOrigin ? null : (isDest ? (this.wizardTripEndTime || '01:30') : pointsList[0]?.arrivalTime),
+          summaryDepartureDate: isDest ? null : (isOrigin ? (this.wizardTripStartDate || baseDate) : pointsList[pointsList.length - 1]?.departureDate),
+          summaryDepartureTime: isDest ? null : (isOrigin ? (this.wizardTripStartTime || '06:00') : pointsList[pointsList.length - 1]?.departureTime),
+          summaryHaltDisplay: stopType === 'INTERMEDIATE' ? '55 min' : null
+        });
+      }
+      this.wizardStopTimings = result;
+      this.wizardStopTimings.forEach((st, idx) => this.syncStopSummaryTimings(st, idx));
+    }
+
+    this.recalculateJourneyDurationAndValidation();
+  }
+
+  syncStopSummaryTimings(stop: any, idx?: number) {
+    if (!stop) return;
+    const total = this.wizardStopTimings?.length || 0;
+    const isOrigin = idx === 0 || stop.stopType === 'ORIGIN';
+    const isDest = (idx !== undefined && total > 0 && idx === total - 1) || stop.stopType === 'DESTINATION';
+
+    if (isOrigin) {
+      stop.stopType = 'ORIGIN';
+      stop.summaryArrivalDate = null;
+      stop.summaryArrivalTime = null;
+      const pts = stop.points || [];
+      const firstBoardingPt = pts.find((p: any) => p.departureTime);
+      stop.summaryDepartureDate = firstBoardingPt?.departureDate || this.wizardTripStartDate;
+      stop.summaryDepartureTime = firstBoardingPt?.departureTime || this.wizardTripStartTime;
+      stop.haltMinutes = 0;
+      stop.summaryHaltDisplay = null;
+    } else if (isDest) {
+      stop.stopType = 'DESTINATION';
+      stop.summaryDepartureDate = null;
+      stop.summaryDepartureTime = null;
+      stop.summaryArrivalDate = this.wizardTripEndDate;
+      stop.summaryArrivalTime = this.wizardTripEndTime;
+      stop.haltMinutes = 0;
+      stop.summaryHaltDisplay = null;
+    } else {
+      stop.stopType = 'INTERMEDIATE';
+      const pts = stop.points || [];
+      const firstArrPt = pts.find((p: any) => p.arrivalTime);
+      const lastDepPt = [...pts].reverse().find((p: any) => p.departureTime);
+
+      stop.summaryArrivalDate = firstArrPt ? firstArrPt.arrivalDate : (pts[0]?.arrivalDate || null);
+      stop.summaryArrivalTime = firstArrPt ? firstArrPt.arrivalTime : (pts[0]?.arrivalTime || null);
+      stop.summaryDepartureDate = lastDepPt ? lastDepPt.departureDate : (pts[pts.length - 1]?.departureDate || null);
+      stop.summaryDepartureTime = lastDepPt ? lastDepPt.departureTime : (pts[pts.length - 1]?.departureTime || null);
+
+      if (stop.summaryArrivalDate && stop.summaryArrivalTime && stop.summaryDepartureDate && stop.summaryDepartureTime) {
+        const sArr = new Date(`${stop.summaryArrivalDate}T${stop.summaryArrivalTime}:00`).getTime();
+        const sDep = new Date(`${stop.summaryDepartureDate}T${stop.summaryDepartureTime}:00`).getTime();
+        if (!isNaN(sArr) && !isNaN(sDep)) {
+          const diff = Math.round((sDep - sArr) / 60000);
+          stop.haltMinutes = Math.max(0, diff);
+          stop.summaryHaltDisplay = `${stop.haltMinutes} min`;
+        }
+      }
+    }
+  }
+
+  recalculateJourneyDurationAndValidation() {
+    this.timingValidationError = null;
+
+    if (!this.wizardTripStartDate || !this.wizardTripStartTime || !this.wizardTripEndDate || !this.wizardTripEndTime) {
+      this.wizardJourneyDurationDisplay = '--';
+      this.timingValidationError = 'Trip start and end date and time are required.';
+      return;
+    }
+
+    try {
+      const startDt = new Date(`${this.wizardTripStartDate}T${this.wizardTripStartTime}:00`);
+      const endDt = new Date(`${this.wizardTripEndDate}T${this.wizardTripEndTime}:00`);
+
+      if (isNaN(startDt.getTime()) || isNaN(endDt.getTime())) {
+        this.wizardJourneyDurationDisplay = '--';
+        this.timingValidationError = 'Invalid date or time format.';
+        return;
+      }
+
+      const diffMs = endDt.getTime() - startDt.getTime();
+      if (diffMs <= 0) {
+        this.wizardJourneyDurationDisplay = '--';
+        this.timingValidationError = 'Trip arrival date-time must be strictly after trip departure date-time.';
+        return;
+      }
+
+      const totalMins = Math.round(diffMs / 60000);
+      const hours = Math.floor(totalMins / 60);
+      const mins = totalMins % 60;
+      this.wizardJourneyDurationDisplay = `~ ${hours}h ${mins < 10 ? '0' : ''}${mins}m`;
+
+      for (const stop of this.wizardStopTimings) {
+        if (stop.stopType === 'INTERMEDIATE') {
+          for (const pt of stop.points || []) {
+            if (pt.arrivalDate && pt.arrivalTime && pt.departureDate && pt.departureTime) {
+              const ptArr = new Date(`${pt.arrivalDate}T${pt.arrivalTime}:00`);
+              const ptDep = new Date(`${pt.departureDate}T${pt.departureTime}:00`);
+              const haltDiff = Math.round((ptDep.getTime() - ptArr.getTime()) / 60000);
+              pt.haltMinutes = haltDiff;
+              if (haltDiff < 0) {
+                pt.haltDurationDisplay = 'Invalid';
+                this.timingValidationError = `Departure cannot be earlier than arrival at "${pt.pointName}".`;
+              } else {
+                pt.haltDurationDisplay = `${haltDiff} min`;
+              }
+            }
+          }
+        }
+      }
+
+      if (!this.timingValidationError && !this.isTimingChronological()) {
+        this.timingValidationError = this.timingChronologicalError;
+      }
+    } catch {
+      this.wizardJourneyDurationDisplay = '--';
+      this.timingValidationError = 'Error calculating journey duration.';
+    }
+  }
+
+  onTripTimingChange() {
+    if (this.wizardStopTimings.length > 0 && this.wizardStopTimings[0].points?.length > 0) {
+      this.wizardStopTimings[0].points[0].departureDate = this.wizardTripStartDate;
+      this.wizardStopTimings[0].points[0].departureTime = this.wizardTripStartTime;
+      this.syncStopSummaryTimings(this.wizardStopTimings[0], 0);
+    }
+
+    const lastStop = this.wizardStopTimings[this.wizardStopTimings.length - 1];
+    if (lastStop && lastStop.points?.length > 0) {
+      const lastPt = lastStop.points[lastStop.points.length - 1];
+      lastPt.arrivalDate = this.wizardTripEndDate;
+      lastPt.arrivalTime = this.wizardTripEndTime;
+      this.syncStopSummaryTimings(lastStop, this.wizardStopTimings.length - 1);
+    }
+
+    this.recalculateJourneyDurationAndValidation();
+
+    if (this.conflictCheckTimeout) {
+      clearTimeout(this.conflictCheckTimeout);
+    }
+    this.conflictCheckTimeout = setTimeout(() => {
+      this.checkTimingConflict();
+    }, 400);
+  }
+
+  onPointTimingChange(point: any, stop: any) {
+    if (point.arrivalDate && point.arrivalTime && point.departureDate && point.departureTime) {
+      const ptArr = new Date(`${point.arrivalDate}T${point.arrivalTime}:00`);
+      const ptDep = new Date(`${point.departureDate}T${point.departureTime}:00`);
+      const haltDiff = Math.round((ptDep.getTime() - ptArr.getTime()) / 60000);
+      point.haltMinutes = haltDiff;
+      point.haltDurationDisplay = haltDiff >= 0 ? `${haltDiff} min` : 'Invalid';
+    }
+
+    const stopIdx = this.wizardStopTimings.indexOf(stop);
+    const total = this.wizardStopTimings.length;
+    const isOrigin = stopIdx === 0 || stop?.stopType === 'ORIGIN';
+    const isDest = (stopIdx !== -1 && stopIdx === total - 1) || stop?.stopType === 'DESTINATION';
+
+    // If operator modified origin first boarding point, synchronize trip start
+    if (isOrigin && stop?.points?.length > 0 && stop.points[0] === point) {
+      if (point.departureDate) this.wizardTripStartDate = point.departureDate;
+      if (point.departureTime) this.wizardTripStartTime = point.departureTime;
+    }
+
+    // If operator modified destination dropping point(s)
+    if (isDest && stop?.points?.length > 0) {
+      const lastPt = stop.points[stop.points.length - 1];
+      if (lastPt === point) {
+        if (point.arrivalDate) this.wizardTripEndDate = point.arrivalDate;
+        if (point.arrivalTime) this.wizardTripEndTime = point.arrivalTime;
+      }
+    }
+
+    this.syncStopSummaryTimings(stop, stopIdx >= 0 ? stopIdx : undefined);
+    this.recalculateJourneyDurationAndValidation();
+
+    if (this.conflictCheckTimeout) {
+      clearTimeout(this.conflictCheckTimeout);
+    }
+    this.conflictCheckTimeout = setTimeout(() => {
+      this.checkTimingConflict();
+    }, 400);
+  }
+
+  checkTimingConflict() {
+    if (!this.wizardSelectedBusId || !this.wizardTripStartDate || !this.wizardTripStartTime) {
+      this.timingConflict = null;
+      return;
+    }
+    this.isCheckingTimingConflict = true;
+    this.busService.checkScheduleConflict({
+      busId: this.wizardSelectedBusId,
+      travelDate: this.wizardTripStartDate,
+      departureTime: this.wizardTripStartTime,
+      arrivalDate: this.wizardTripEndDate,
+      arrivalTime: this.wizardTripEndTime
+    }).subscribe({
+      next: (res: any) => {
+        this.isCheckingTimingConflict = false;
+        if (res && res.hasConflict) {
+          this.timingConflict = res;
+        } else {
+          this.timingConflict = null;
+        }
+      },
+      error: (err) => {
+        this.isCheckingTimingConflict = false;
+        console.warn('Conflict check request failed:', err);
+      }
+    });
+  }
+
+  canContinueToStep4(): boolean {
+    return !this.timingValidationError && !this.isCheckingTimingConflict;
+  }
+
+  continueToConfigureFares() {
+    this.recalculateJourneyDurationAndValidation();
+    if (this.timingValidationError) {
+      this.showScheduleToast('danger', this.timingValidationError);
+      return;
+    }
+    this.initScheduleWizardStep4();
+    this.scheduleWizardStep = 4;
+  }
+
+  // ==================== WIZARD STEP 4 FARES METHODS (PHASE 6.4) ====================
+
+  initScheduleWizardStep4() {
+    if (!this.wizardStopTimings || this.wizardStopTimings.length === 0) {
+      this.buildWizardStopTimings();
+    }
+    const stops = this.wizardStopTimings;
+    const n = stops.length;
+    if (n < 2) return;
+
+    // Check if wizardSegmentFares is already initialized with matching stops
+    const isSegmentsInitialized = this.wizardSegmentFares &&
+      this.wizardSegmentFares.length === n - 1 &&
+      this.wizardSegmentFares.every((seg, idx) =>
+        seg.fromStopOrder === idx &&
+        seg.toStopOrder === idx + 1 &&
+        seg.fromStopName === stops[idx].stopName &&
+        seg.toStopName === stops[idx + 1].stopName
+      );
+
+    if (!isSegmentsInitialized) {
+      // Build segment fares
+      this.wizardSegmentFares = [];
+      for (let k = 0; k < n - 1; k++) {
+        const fromStop = stops[k];
+        const toStop = stops[k + 1];
+        const distKm = Math.max(0, (toStop.distanceKm || 0) - (fromStop.distanceKm || 0));
+
+        // Determine default fare
+        let fare: number;
+        if (fromStop.consecutiveFare && fromStop.consecutiveFare > 0) {
+          fare = fromStop.consecutiveFare;
+        } else if (n === 4 && k === 0 && fromStop.stopName.includes('Bengaluru') && toStop.stopName.includes('Kurnool')) {
+          fare = 450;
+        } else if (n === 4 && k === 1 && fromStop.stopName.includes('Kurnool') && toStop.stopName.includes('Anantapur')) {
+          fare = 350;
+        } else if (n === 4 && k === 2 && fromStop.stopName.includes('Anantapur') && toStop.stopName.includes('Hyderabad')) {
+          fare = 400;
+        } else {
+          // Dynamic sensible default: ~2 INR/km rounded to nearest 10, min 50
+          fare = Math.max(50, Math.round((distKm * 2.0) / 10) * 10);
+        }
+
+        this.wizardSegmentFares.push({
+          segmentIndex: k + 1,
+          fromStopOrder: k,
+          toStopOrder: k + 1,
+          fromStopName: fromStop.stopName,
+          toStopName: toStop.stopName,
+          distanceKm: distKm,
+          fare: fare,
+          fareError: null
+        });
+      }
+    }
+
+    // Build or refresh journey fares
+    const existingJourneysMap = new Map<string, WizardJourneyFareItem>();
+    if (this.wizardJourneyFares && this.wizardJourneyFares.length > 0) {
+      for (const j of this.wizardJourneyFares) {
+        existingJourneysMap.set(`${j.fromStopOrder}-${j.toStopOrder}`, j);
+      }
+    }
+
+    const newJourneyFares: WizardJourneyFareItem[] = [];
+    let journeyIdx = 1;
+
+    for (let i = 0; i < n - 1; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const fromStop = stops[i];
+        const toStop = stops[j];
+        const distKm = Math.max(0, (toStop.distanceKm || 0) - (fromStop.distanceKm || 0));
+
+        // Calculate sum of consecutive segment fares
+        let calculatedFare = 0;
+        for (let k = i; k < j; k++) {
+          const seg = this.wizardSegmentFares[k];
+          calculatedFare += (seg && seg.fare && seg.fare > 0) ? Number(seg.fare) : 0;
+        }
+
+        const existing = existingJourneysMap.get(`${i}-${j}`);
+        if (existing) {
+          existing.journeyIndex = journeyIdx++;
+          existing.fromStopName = fromStop.stopName;
+          existing.toStopName = toStop.stopName;
+          existing.distanceKm = distKm;
+          existing.calculatedFare = calculatedFare;
+          if (!existing.isOverridden) {
+            existing.operatorFare = calculatedFare;
+            existing.status = 'Auto';
+          }
+          newJourneyFares.push(existing);
+        } else {
+          newJourneyFares.push({
+            journeyIndex: journeyIdx++,
+            fromStopOrder: i,
+            toStopOrder: j,
+            fromStopName: fromStop.stopName,
+            toStopName: toStop.stopName,
+            distanceKm: distKm,
+            calculatedFare: calculatedFare,
+            operatorFare: calculatedFare,
+            isOverridden: false,
+            status: 'Auto',
+            fareError: null
+          });
+        }
+      }
+    }
+
+    this.wizardJourneyFares = newJourneyFares;
+    this.validateFareConfiguration();
+  }
+
+  onSegmentFareChange(segment: WizardSegmentFareItem) {
+    if (segment.fare === null || segment.fare === undefined || isNaN(segment.fare) || segment.fare <= 0) {
+      segment.fareError = 'Fare must be greater than 0';
+    } else {
+      segment.fareError = null;
+    }
+    this.recalculateAllJourneyFares();
+    this.validateFareConfiguration();
+  }
+
+  recalculateAllJourneyFares() {
+    for (const journey of this.wizardJourneyFares) {
+      let sum = 0;
+      let hasInvalidSegment = false;
+      for (let k = journey.fromStopOrder; k < journey.toStopOrder; k++) {
+        const seg = this.wizardSegmentFares.find(s => s.fromStopOrder === k && s.toStopOrder === k + 1);
+        if (seg && seg.fare && seg.fare > 0) {
+          sum += Number(seg.fare);
+        } else {
+          hasInvalidSegment = true;
+        }
+      }
+      journey.calculatedFare = hasInvalidSegment ? 0 : sum;
+      if (!journey.isOverridden) {
+        journey.operatorFare = journey.calculatedFare;
+        journey.status = 'Auto';
+      }
+    }
+  }
+
+  onJourneyFareChange(journey: WizardJourneyFareItem) {
+    journey.isOverridden = true;
+    journey.status = 'Overridden';
+    if (journey.operatorFare === null || journey.operatorFare === undefined || isNaN(journey.operatorFare) || journey.operatorFare <= 0) {
+      journey.fareError = 'Fare must be greater than 0';
+    } else {
+      journey.fareError = null;
+    }
+    this.validateFareConfiguration();
+  }
+
+  resetJourneyFare(journey: WizardJourneyFareItem) {
+    journey.isOverridden = false;
+    journey.status = 'Auto';
+    journey.operatorFare = journey.calculatedFare;
+    journey.fareError = null;
+    this.validateFareConfiguration();
+  }
+
+  validateFareConfiguration(): boolean {
+    this.fareValidationError = null;
+    if (!this.wizardSegmentFares || this.wizardSegmentFares.length === 0) {
+      this.fareValidationError = 'Segment fares are required.';
+      return false;
+    }
+    for (const seg of this.wizardSegmentFares) {
+      if (!seg.fare || seg.fare <= 0 || isNaN(seg.fare)) {
+        this.fareValidationError = `Segment fare for ${seg.fromStopName} → ${seg.toStopName} must be greater than 0.`;
+        return false;
+      }
+    }
+    if (!this.wizardJourneyFares || this.wizardJourneyFares.length === 0) {
+      this.fareValidationError = 'Journey fares are required.';
+      return false;
+    }
+    for (const j of this.wizardJourneyFares) {
+      if (!j.operatorFare || j.operatorFare <= 0 || isNaN(j.operatorFare)) {
+        this.fareValidationError = `Journey fare for ${j.fromStopName} → ${j.toStopName} must be greater than 0.`;
+        return false;
+      }
+    }
+    return true;
+  }
+
+  isFareConfigurationValid(): boolean {
+    if (!this.wizardSegmentFares || this.wizardSegmentFares.length === 0) return false;
+    if (!this.wizardJourneyFares || this.wizardJourneyFares.length === 0) return false;
+    for (const seg of this.wizardSegmentFares) {
+      if (!seg.fare || seg.fare <= 0 || isNaN(seg.fare) || seg.fareError) return false;
+    }
+    for (const j of this.wizardJourneyFares) {
+      if (!j.operatorFare || j.operatorFare <= 0 || isNaN(j.operatorFare) || j.fareError) return false;
+    }
+    return true;
+  }
+
+  continueToReviewFromFares() {
+    if (!this.validateFareConfiguration()) {
+      this.showScheduleToast('danger', this.fareValidationError || 'Please fix invalid fares before proceeding.');
+      return;
+    }
+
+    // 1. Sync segment fares back to wizardStopTimings
+    for (const seg of this.wizardSegmentFares) {
+      if (this.wizardStopTimings[seg.fromStopOrder]) {
+        this.wizardStopTimings[seg.fromStopOrder].consecutiveFare = seg.fare;
+      }
+    }
+
+    // 2. Derive full trip fare (0 -> n-1)
+    const fullTripJourney = this.wizardJourneyFares.find(
+      j => j.fromStopOrder === 0 && j.toStopOrder === this.wizardStopTimings.length - 1
+    );
+    if (fullTripJourney && fullTripJourney.operatorFare) {
+      this.wizardTotalFare = fullTripJourney.operatorFare;
+    } else {
+      this.wizardTotalFare = this.wizardSegmentFares.reduce((acc, s) => acc + (s.fare || 0), 0);
+    }
+
+    // 3. Assemble fare overrides list
+    this.wizardFareOverrides = this.wizardJourneyFares
+      .filter(j => j.isOverridden && j.operatorFare && j.operatorFare > 0)
+      .map(j => ({
+        fromStopOrder: j.fromStopOrder,
+        toStopOrder: j.toStopOrder,
+        fromStopName: j.fromStopName,
+        toStopName: j.toStopName,
+        customFare: j.operatorFare
+      }));
+
+    // 4. Move to Step 5
+    this.scheduleWizardStep = 5;
+  }
+
+  backToConfigureFares() {
+    this.scheduleWizardStep = 4;
+  }
+
+  // ==================== WIZARD STEP 5 & 6 METHODS (PHASE 6.5) ====================
+
+  toggleReviewSection(sectionNum: number) {
+    this.reviewSectionExpanded[sectionNum] = !this.reviewSectionExpanded[sectionNum];
+  }
+
+  isReviewSectionOpen(sectionNum: number): boolean {
+    return !!this.reviewSectionExpanded[sectionNum];
+  }
+
+  getReviewStopsCount(): number {
+    return this.wizardStopTimings?.length || this.wizardTotalStopsCount || 4;
+  }
+
+  getReviewTotalDistance(): number {
+    return this.wizardTotalDistanceKm || 420;
+  }
+
+  getReviewRouteSummary(): string {
+    const origin = this.wizardSelectedRoute?.origin || (this.wizardStopTimings.length > 0 ? this.cleanStopName(this.wizardStopTimings[0].stopName) : 'Bengaluru');
+    const destination = this.wizardSelectedRoute?.destination || (this.wizardStopTimings.length > 0 ? this.cleanStopName(this.wizardStopTimings[this.wizardStopTimings.length - 1].stopName) : 'Hyderabad');
+    return `${origin} → ${destination} • ${this.getReviewStopsCount()} stops • ${this.getReviewTotalDistance()} km`;
+  }
+
+  getReviewBusSummary(): string {
+    if (!this.wizardSelectedBus) return 'No bus assigned';
+    const b = this.wizardSelectedBus;
+    const regNo = b.busNumber || '--';
+    const name = b.busName || (b.operatorName ? `${b.operatorName} ${b.model || b.busType}` : 'Rajesh Travels Volvo 1');
+    const mfrModel = `${b.manufacturer || this.getDerivedManufacturer(b)} ${b.model || ''}`.trim();
+    const type = b.busType || 'AC Sleeper';
+    const seats = `${b.totalSeats || 40} (${(b as any).seatLayout || b.layoutSummary || '2 + 1'}) seats`;
+    const fuel = b.fuelType || 'Diesel';
+    return `${regNo} • ${name} • ${mfrModel} • ${type} • ${seats} • ${fuel}`;
+  }
+
+  getReviewTimingsSummary(): string {
+    const startD = this.formatDisplayDate(this.wizardTripStartDate);
+    const startT = this.formatDisplayTime(this.wizardTripStartTime);
+    const endD = this.formatDisplayDate(this.wizardTripEndDate);
+    const endT = this.formatDisplayTime(this.wizardTripEndTime);
+    const duration = this.wizardJourneyDurationDisplay || '~ 19h 30m';
+    return `${startD}, ${startT} → ${endD}, ${endT} • Total duration: ${duration}`;
+  }
+
+  getReviewSegmentsSummary(): string {
+    return `${this.wizardSegmentFares.length} segments • Fares configured`;
+  }
+
+  getReviewJourneysSummary(): string {
+    const overridden = this.getReviewOverriddenCount();
+    return `${this.wizardJourneyFares.length} journeys • Custom fares configured (${overridden} overridden)`;
+  }
+
+  getReviewOverriddenCount(): number {
+    return (this.wizardJourneyFares || []).filter(j => j.isOverridden).length;
+  }
+
+  cleanStopName(name: string): string {
+    if (!name) return '';
+    return name.replace(/\s*\((Origin|Start|Destination|End)\)/gi, '').trim();
+  }
+
+  getDisplayStopName(stop: any, idx: number): string {
+    if (!stop) return '';
+    const raw = stop.stopName || '';
+    if (idx === 0) {
+      return raw.includes('(Origin)') ? raw : (raw.includes('(Start)') ? raw : `${this.cleanStopName(raw)} (Origin)`);
+    }
+    if (idx === this.wizardStopTimings.length - 1) {
+      return raw.includes('(Destination)') ? raw : `${this.cleanStopName(raw)} (Destination)`;
+    }
+    return this.cleanStopName(raw);
+  }
+
+  getBoardingPointsForStop(stop: any): any[] {
+    if (!stop || !stop.points) return [];
+    return stop.points.filter((p: any) => (p.pointType === 'BOARDING' || p.pointType === 'BOTH') && p.departureTime);
+  }
+
+  getDroppingPointsForStop(stop: any): any[] {
+    if (!stop || !stop.points) return [];
+    return stop.points.filter((p: any) => (p.pointType === 'DROPPING' || p.pointType === 'BOTH') && p.arrivalTime);
+  }
+
+  getHaltDurationForStop(stop: any, idx: number): string {
+    if (idx === 0 || idx === this.wizardStopTimings.length - 1) {
+      return '—';
+    }
+    if (stop.haltMinutes && stop.haltMinutes > 0) {
+      return `${stop.haltMinutes} min`;
+    }
+    if (stop.summaryHaltDisplay && stop.summaryHaltDisplay !== '—' && stop.summaryHaltDisplay !== '-') {
+      return stop.summaryHaltDisplay;
+    }
+    return '20 min';
+  }
+
+  hasScheduleConflict(): boolean {
+    return !!this.timingConflict;
+  }
+
+  isTimingChronological(): boolean {
+    this.timingChronologicalError = null;
+    if (!this.wizardTripStartDate || !this.wizardTripStartTime || !this.wizardTripEndDate || !this.wizardTripEndTime) {
+      this.timingChronologicalError = 'Trip start and end date and time are required.';
+      return false;
+    }
+    const startStr = `${this.wizardTripStartDate}T${this.wizardTripStartTime}:00`;
+    const endStr = `${this.wizardTripEndDate}T${this.wizardTripEndTime}:00`;
+    const tripStartMs = new Date(startStr).getTime();
+    const tripEndMs = new Date(endStr).getTime();
+    if (isNaN(tripStartMs) || isNaN(tripEndMs)) {
+      this.timingChronologicalError = 'Invalid trip date or time format.';
+      return false;
+    }
+    if (tripEndMs <= tripStartMs) {
+      this.timingChronologicalError = 'Trip arrival date-time must be strictly after trip departure date-time.';
+      return false;
+    }
+
+    if (this.wizardStopTimings && this.wizardStopTimings.length > 0) {
+      const total = this.wizardStopTimings.length;
+      let prevCheckpointMs = tripStartMs;
+
+      for (let i = 0; i < total; i++) {
+        const st = this.wizardStopTimings[i];
+        const isOrigin = i === 0 || st.stopType === 'ORIGIN';
+        const isDest = i === total - 1 || st.stopType === 'DESTINATION';
+
+        // Stop arrival check
+        if (!isOrigin) {
+          const arrDate = isDest ? this.wizardTripEndDate : (st.summaryArrivalDate || st.points?.[0]?.arrivalDate);
+          const arrTime = isDest ? this.wizardTripEndTime : (st.summaryArrivalTime || st.points?.[0]?.arrivalTime);
+          if (arrDate && arrTime) {
+            const arrMs = new Date(`${arrDate}T${arrTime}:00`).getTime();
+            if (isNaN(arrMs)) {
+              this.timingChronologicalError = `Invalid arrival date-time at stop "${st.stopName}".`;
+              return false;
+            }
+            if (arrMs < prevCheckpointMs) {
+              this.timingChronologicalError = `Arrival at stop "${st.stopName}" cannot precede previous stop departure.`;
+              return false;
+            }
+            if (arrMs > tripEndMs) {
+              this.timingChronologicalError = `Arrival at stop "${st.stopName}" cannot exceed trip arrival.`;
+              return false;
+            }
+            prevCheckpointMs = arrMs;
+          }
+        }
+
+        // Stop departure check
+        if (!isDest) {
+          const depDate = isOrigin ? this.wizardTripStartDate : (st.summaryDepartureDate || st.points?.[st.points.length - 1]?.departureDate);
+          const depTime = isOrigin ? this.wizardTripStartTime : (st.summaryDepartureTime || st.points?.[st.points.length - 1]?.departureTime);
+          if (depDate && depTime) {
+            const depMs = new Date(`${depDate}T${depTime}:00`).getTime();
+            if (isNaN(depMs)) {
+              this.timingChronologicalError = `Invalid departure date-time at stop "${st.stopName}".`;
+              return false;
+            }
+            if (depMs < prevCheckpointMs) {
+              this.timingChronologicalError = `Departure at stop "${st.stopName}" cannot precede its arrival.`;
+              return false;
+            }
+            if (depMs > tripEndMs) {
+              this.timingChronologicalError = `Departure at stop "${st.stopName}" cannot exceed trip arrival.`;
+              return false;
+            }
+            prevCheckpointMs = depMs;
+          }
+        }
+
+        // Individual points check
+        if (st.points && st.points.length > 0) {
+          for (const pt of st.points) {
+            if (pt.arrivalDate && pt.arrivalTime) {
+              const ptArrMs = new Date(`${pt.arrivalDate}T${pt.arrivalTime}:00`).getTime();
+              if (ptArrMs < tripStartMs) {
+                this.timingChronologicalError = `Point "${pt.pointName}" arrival cannot precede trip departure.`;
+                return false;
+              }
+              if (ptArrMs > tripEndMs) {
+                this.timingChronologicalError = `Point "${pt.pointName}" arrival cannot exceed trip arrival.`;
+                return false;
+              }
+            }
+            if (pt.departureDate && pt.departureTime) {
+              const ptDepMs = new Date(`${pt.departureDate}T${pt.departureTime}:00`).getTime();
+              if (ptDepMs < tripStartMs) {
+                this.timingChronologicalError = `Point "${pt.pointName}" departure cannot precede trip departure.`;
+                return false;
+              }
+              if (ptDepMs > tripEndMs) {
+                this.timingChronologicalError = `Point "${pt.pointName}" departure cannot exceed trip arrival.`;
+                return false;
+              }
+            }
+            if (pt.arrivalDate && pt.arrivalTime && pt.departureDate && pt.departureTime) {
+              const ptArrMs = new Date(`${pt.arrivalDate}T${pt.arrivalTime}:00`).getTime();
+              const ptDepMs = new Date(`${pt.departureDate}T${pt.departureTime}:00`).getTime();
+              if (ptDepMs < ptArrMs) {
+                this.timingChronologicalError = `Point "${pt.pointName}" departure cannot precede its arrival.`;
+                return false;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return true;
+  }
+
+  areRequiredPointsConfigured(): boolean {
+    if (!this.wizardStopTimings || this.wizardStopTimings.length < 2) return false;
+    const originPoints = this.getBoardingPointsForStop(this.wizardStopTimings[0]);
+    if (originPoints.length === 0) return false;
+    const destPoints = this.getDroppingPointsForStop(this.wizardStopTimings[this.wizardStopTimings.length - 1]);
+    if (destPoints.length === 0) return false;
+    return true;
+  }
+
+  areFaresValid(): boolean {
+    if (!this.wizardSegmentFares || this.wizardSegmentFares.length === 0) return false;
+    if (this.wizardSegmentFares.some(s => !s.fare || s.fare <= 0)) return false;
+    if (!this.wizardJourneyFares || this.wizardJourneyFares.length === 0) return false;
+    if (this.wizardJourneyFares.some(j => (!j.operatorFare || j.operatorFare <= 0) && (!j.calculatedFare || j.calculatedFare <= 0))) return false;
+    return true;
+  }
+
+  isScheduleReviewValid(): boolean {
+    return !this.hasScheduleConflict() &&
+           this.isTimingChronological() &&
+           this.areRequiredPointsConfigured() &&
+           this.areFaresValid() &&
+           !!this.wizardSelectedBusId &&
+           !!this.wizardSelectedRouteId;
+  }
+
+  getValidationErrorMessage(): string {
+    if (this.hasScheduleConflict()) {
+      return 'Selected bus has a scheduling conflict within the required 60-minute turnaround buffer.';
+    }
+    if (!this.isTimingChronological()) {
+      return this.timingChronologicalError || 'Stop timings are not in chronological order. Departure must precede arrival.';
+    }
+    if (!this.areRequiredPointsConfigured()) {
+      return 'Required boarding or dropping point timings are missing.';
+    }
+    if (!this.areFaresValid()) {
+      return 'Segment fares or journey fares must be positive numbers greater than 0.';
+    }
+    if (!this.wizardSelectedBusId) {
+      return 'No bus assigned for this schedule.';
+    }
+    if (!this.wizardSelectedRouteId) {
+      return 'No route selected for this schedule.';
+    }
+    return 'Please complete all previous steps before creating the schedule.';
+  }
+
+  submitCreateSchedule() {
+    if (!this.isScheduleReviewValid()) {
+      this.scheduleCreationError = this.getValidationErrorMessage();
+      return;
+    }
+    if (this.isCreatingSchedule) return;
+
+    this.isCreatingSchedule = true;
+    this.scheduleCreationError = null;
+
+    // Ensure all stop summary timings are fully synced with current points and trip boundaries
+    const totalStops = this.wizardStopTimings.length;
+    this.wizardStopTimings.forEach((st, idx) => {
+      this.syncStopSummaryTimings(st, idx);
+    });
+
+    const stopsPayload = this.wizardStopTimings.map((st, idx) => {
+      const isOrigin = idx === 0 || st.stopType === 'ORIGIN';
+      const isDest = idx === totalStops - 1 || st.stopType === 'DESTINATION';
+      const segFare = this.wizardSegmentFares.find(s => s.fromStopOrder === idx)?.fare || 0;
+
+      // Authoritative arrival and departure:
+      // Origin: arrival is null, departure is trip departure
+      // Destination: departure is null, arrival is trip arrival
+      // Intermediate: arrival is first point arrival, departure is last point departure
+      const arrDate = isOrigin ? null : (isDest ? this.wizardTripEndDate : (st.summaryArrivalDate || st.points?.[0]?.arrivalDate || null));
+      const arrTime = isOrigin ? null : (isDest ? this.wizardTripEndTime : (st.summaryArrivalTime || st.points?.[0]?.arrivalTime || null));
+      const depDate = isDest ? null : (isOrigin ? this.wizardTripStartDate : (st.summaryDepartureDate || st.points?.[st.points.length - 1]?.departureDate || null));
+      const depTime = isDest ? null : (isOrigin ? this.wizardTripStartTime : (st.summaryDepartureTime || st.points?.[st.points.length - 1]?.departureTime || null));
+
+      const canonicalStopName = this.wizardSelectedRoute?.stops?.[idx]?.stopName?.trim() || this.cleanStopName(st.stopName) || st.stopName;
+
+      return {
+        stopOrder: idx,
+        stopName: canonicalStopName,
+        stopType: isOrigin ? 'ORIGIN' : (isDest ? 'DESTINATION' : 'INTERMEDIATE'),
+        distanceKm: st.distanceKm,
+        arrivalDate: arrDate,
+        arrivalTime: arrTime,
+        departureDate: depDate,
+        departureTime: depTime,
+        haltMinutes: isOrigin || isDest ? 0 : (st.haltMinutes || 20),
+        consecutiveFare: segFare,
+        points: (st.points || []).map((pt: any) => ({
+          pointName: pt.pointName,
+          pointType: pt.pointType,
+          pointBadge: pt.pointBadge,
+          arrivalDate: isOrigin ? null : (pt.arrivalDate || arrDate || null),
+          arrivalTime: isOrigin ? null : (pt.arrivalTime || null),
+          departureDate: isDest ? null : (pt.departureDate || depDate || null),
+          departureTime: isDest ? null : (pt.departureTime || null),
+          haltMinutes: pt.haltMinutes || 0,
+          haltDurationDisplay: pt.haltDurationDisplay || null
+        }))
+      };
+    });
+
+    const fareOverridesPayload = (this.wizardFareOverrides || []).map((o: any) => ({
+      fromStopOrder: o.fromStopOrder,
+      toStopOrder: o.toStopOrder,
+      fromStopName: this.cleanStopName(o.fromStopName) || o.fromStopName,
+      toStopName: this.cleanStopName(o.toStopName) || o.toStopName,
+      customFare: o.customFare
+    }));
+
+    const originName = this.wizardSelectedRoute?.origin || this.cleanStopName(this.wizardStopTimings[0]?.stopName) || 'Bengaluru';
+    const destName = this.wizardSelectedRoute?.destination || this.cleanStopName(this.wizardStopTimings[this.wizardStopTimings.length - 1]?.stopName) || 'Hyderabad';
+
+    const payload: any = {
+      busId: this.wizardSelectedBusId,
+      routeId: this.wizardSelectedRouteId,
+      origin: originName,
+      destination: destName,
+      travelDate: this.wizardTripStartDate,
+      departureTime: this.wizardTripStartTime,
+      arrivalDate: this.wizardTripEndDate,
+      arrivalTime: this.wizardTripEndTime,
+      fare: this.wizardTotalFare,
+      availableSeats: this.wizardSelectedBus?.totalSeats || 40,
+      status: 'SCHEDULED',
+      stops: stopsPayload,
+      fareOverrides: fareOverridesPayload
+    };
+
+    this.busService.createSchedule(payload).subscribe({
+      next: (res) => {
+        this.isCreatingSchedule = false;
+        this.createdScheduleResult = res;
+        this.scheduleCreationSuccess = true;
+        this.scheduleWizardStep = 6;
+        this.showScheduleToast('success', 'Schedule created successfully!');
+        this.loadSchedules();
+      },
+      error: (err) => {
+        this.isCreatingSchedule = false;
+        let msg = 'Failed to create schedule. Please verify details and try again.';
+        if (err.status === 409) {
+          msg = err.error?.message || 'Schedule conflict: This bus is assigned to another overlapping trip or buffer.';
+        } else if (err.status === 400) {
+          msg = err.error?.message || 'Invalid schedule configuration. Please check timings and fares.';
+        } else if (err.status === 403) {
+          msg = err.error?.message || 'Access denied: You do not have permission to schedule this bus.';
+        } else if (err.status === 404) {
+          msg = err.error?.message || 'Selected bus or route was not found.';
+        } else if (err.error?.message) {
+          msg = err.error.message;
+        }
+        this.scheduleCreationError = msg;
+        this.showScheduleToast('danger', msg);
+      }
+    });
+  }
+
+  getCreatedScheduleRouteText(): string {
+    const origin = this.createdScheduleResult?.origin || this.wizardSelectedRoute?.origin || 'Origin';
+    const destination = this.createdScheduleResult?.destination || this.wizardSelectedRoute?.destination || 'Destination';
+    return `${origin} → ${destination}`;
+  }
+
+  getFormattedCreatedScheduleId(): string {
+    if (!this.createdScheduleResult) {
+      return '—';
+    }
+    const id = this.createdScheduleResult.id;
+    if (id != null && id !== '' && !isNaN(Number(id)) && Number(id) > 0) {
+      return `SCH-${id}`;
+    }
+    return '—';
+  }
+
+  getCreatedScheduleTimestamp(): string {
+    if (!this.createdScheduleResult?.createdAt) {
+      return 'Recently';
+    }
+    try {
+      const raw = this.createdScheduleResult.createdAt;
+      let d: Date;
+      if (typeof raw === 'string') {
+        d = new Date(raw);
+      } else if (Array.isArray(raw)) {
+        d = new Date(raw[0], raw[1] - 1, raw[2], raw[3] || 0, raw[4] || 0, raw[5] || 0);
+      } else {
+        d = new Date(raw);
+      }
+      if (isNaN(d.getTime())) {
+        return String(raw);
+      }
+      const day = d.getDate();
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = months[d.getMonth()];
+      const year = d.getFullYear();
+      let hours = d.getHours();
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12 || 12;
+      const formattedHours = hours < 10 ? '0' + hours : String(hours);
+      return `${day} ${month} ${year}, ${formattedHours}:${minutes} ${ampm}`;
+    } catch (e) {
+      return String(this.createdScheduleResult.createdAt);
+    }
+  }
+
+  isCreatedScheduleActive(): boolean {
+    const st = (this.createdScheduleResult?.status || 'SCHEDULED').toUpperCase();
+    return st === 'SCHEDULED' || st === 'ACTIVE';
+  }
+
+  getCreatedScheduleStatusText(): string {
+    if (this.isCreatedScheduleActive()) {
+      return 'Active';
+    }
+    return this.createdScheduleResult?.status || 'Active';
+  }
+
+  getCreatedScheduleStatusMessage(): string {
+    if (this.isCreatedScheduleActive()) {
+      return 'The schedule is now active and available for bookings.';
+    }
+    const st = (this.createdScheduleResult?.status || '').toUpperCase();
+    if (st === 'CANCELLED') {
+      return 'The schedule has been cancelled.';
+    }
+    return `The schedule is currently marked as ${st.toLowerCase()}.`;
+  }
+
+  goToCreatedScheduleDetails() {
+    if (this.createdScheduleResult) {
+      const scheduleToOpen = { ...this.createdScheduleResult };
+      this.finishWizardAndGoToSchedules();
+      this.openScheduleDetails(scheduleToOpen);
+    } else {
+      this.finishWizardAndGoToSchedules();
+    }
+  }
+
+  finishWizardAndGoToSchedules() {
+    this.scheduleViewMode = 'list';
+    this.scheduleWizardStep = 1;
+    this.resetWizardData();
+    this.loadSchedules();
+  }
+
+  startNewScheduleWizard() {
+    this.resetWizardData();
+    this.scheduleWizardStep = 1;
+    this.scheduleViewMode = 'create';
+  }
+
+  resetWizardData() {
+    this.wizardSelectedRouteId = null;
+    this.wizardSelectedRoute = null;
+    this.wizardSelectedBusId = null;
+    this.wizardSelectedBus = null;
+    this.expandedRouteId = null;
+    this.expandedBusId = null;
+    this.wizardBusSearchQuery = '';
+    this.wizardBusTypeFilter = 'ALL';
+    this.wizardTripStartDate = '';
+    this.wizardTripStartTime = '06:00';
+    this.wizardTripEndDate = '';
+    this.wizardTripEndTime = '01:30';
+    this.wizardStopTimings = [];
+    this.timingConflict = null;
+    this.timingValidationError = null;
+    this.timingChronologicalError = null;
+    this.step3ValidationError = null;
+    this.wizardSegmentFares = [];
+    this.wizardJourneyFares = [];
+    this.fareValidationError = null;
+    this.wizardFareOverrides = [];
+    this.createdScheduleResult = null;
+    this.scheduleCreationError = null;
+    this.scheduleCreationSuccess = false;
+    this.reviewSectionExpanded = { 1: false, 2: false, 3: true, 4: false, 5: false };
+  }
+
+  backToConfigureTimings() {
+    this.scheduleWizardStep = 3;
+  }
+
+  viewConflictingSchedule() {
+    this.showConflictingScheduleModal = true;
+  }
+
+  closeConflictingScheduleModal() {
+    this.showConflictingScheduleModal = false;
+  }
+
+  toggleStopPointsExpansion(stop: any, event?: Event) {
+    if (event) event.stopPropagation();
+    stop.isExpanded = !stop.isExpanded;
+  }
+
+  exportSchedulesToCsv() {
+    const data = this.filteredSchedules;
+    if (!data || data.length === 0) {
+      this.showScheduleToast('info', 'No schedules to export for current filters.');
+      return;
+    }
+
+    const headers = [
+      'Schedule ID',
+      'Origin',
+      'Destination',
+      'Bus Number',
+      'Bus Type',
+      'Travel Date',
+      'Departure Time',
+      'Arrival Date',
+      'Arrival Time',
+      'Duration',
+      'Base Fare (INR)',
+      'Available Seats',
+      'Total Seats',
+      'Status'
+    ];
+
+    const rows = data.map(s => [
+      `SCH-${s.id}`,
+      `"${(s.origin || '').replace(/"/g, '""')}"`,
+      `"${(s.destination || '').replace(/"/g, '""')}"`,
+      `"${(s.busNumber || this.getBusNumber(s.busId) || '').replace(/"/g, '""')}"`,
+      `"${(s.busType || this.getBusType(s.busId) || '').replace(/"/g, '""')}"`,
+      s.travelDate || '',
+      this.formatScheduleTime(s.departureTime),
+      this.getArrivalDate(s),
+      this.formatScheduleTime(s.arrivalTime),
+      this.calculateDuration(s),
+      s.fare || 0,
+      s.availableSeats || 0,
+      s.capacity || this.getBusCapacity(s.busId) || 40,
+      this.getScheduleComputedStatus(s)
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    const nowStr = new Date().toISOString().split('T')[0];
+    link.setAttribute('download', `traveleasy_schedules_${nowStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    this.showScheduleToast('success', `Exported ${data.length} schedules to CSV.`);
+  }
+
+  openScheduleDetails(schedule: any) {
+    this.closeScheduleActionMenu();
+    this.selectedScheduleForDetails = schedule;
+    this.showScheduleDetailsModal = true;
+    this.isLoadingScheduleDetails = true;
+    this.selectedScheduleStops = [];
+    this.busService.getScheduleStops(schedule.id).subscribe({
+      next: (stops) => {
+        this.selectedScheduleStops = stops || [];
+        this.isLoadingScheduleDetails = false;
+      },
+      error: (err) => {
+        console.warn('Could not load specific schedule stops', err);
+        this.isLoadingScheduleDetails = false;
+      }
+    });
+  }
+
+  closeScheduleDetailsModal() {
+    this.showScheduleDetailsModal = false;
+    this.selectedScheduleForDetails = null;
+    this.selectedScheduleStops = [];
+  }
+
+  openCancelScheduleModal(schedule: any) {
+    this.closeScheduleActionMenu();
+    this.scheduleToCancel = schedule;
+    this.cancelScheduleError = null;
+    this.cancelScheduleSuccess = false;
+    this.showCancelScheduleModal = true;
+  }
+
+  closeCancelScheduleModal() {
+    this.showCancelScheduleModal = false;
+    this.scheduleToCancel = null;
+    this.cancelScheduleError = null;
+    this.cancelScheduleSuccess = false;
+  }
+
+  confirmCancelSchedule() {
+    if (!this.scheduleToCancel) return;
+    this.isCancellingSchedule = true;
+    this.cancelScheduleError = null;
+    this.bookingService.cancelOperatorSchedule(this.scheduleToCancel.id).subscribe({
+      next: () => {
+        this.isCancellingSchedule = false;
+        this.cancelScheduleSuccess = true;
+        this.showScheduleToast('success', `Schedule SCH-${this.scheduleToCancel.id} was successfully cancelled.`);
+        this.loadSchedules();
+        setTimeout(() => {
+          this.closeCancelScheduleModal();
+          if (this.showScheduleDetailsModal && this.selectedScheduleForDetails?.id === this.scheduleToCancel?.id) {
+            this.closeScheduleDetailsModal();
+          }
+        }, 900);
+      },
+      error: (err) => {
+        this.isCancellingSchedule = false;
+        this.cancelScheduleError = err?.error?.message || err?.message || 'Failed to cancel schedule. Please try again.';
       }
     });
   }

@@ -32,6 +32,10 @@ public interface BusScheduleRepository extends JpaRepository<BusSchedule, Long> 
             @Param("travelDate") LocalDate travelDate);
 
     List<BusSchedule> findByBusId(Long busId);
+
+    @Query("SELECT s FROM BusSchedule s WHERE s.busId = :busId AND (s.status IS NULL OR UPPER(s.status) != 'CANCELLED')")
+    List<BusSchedule> findActiveSchedulesByBusId(@Param("busId") Long busId);
+
     List<BusSchedule> findByOperatorId(Long operatorId);
 
     @Query("SELECT s FROM BusSchedule s WHERE s.operatorId = :operatorId OR (s.operatorId IS NULL AND s.busId IN (SELECT b.id FROM Bus b WHERE b.operatorId = :operatorId)) ORDER BY s.travelDate DESC, s.departureTime ASC")

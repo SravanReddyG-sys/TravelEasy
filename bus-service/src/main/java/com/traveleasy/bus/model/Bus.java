@@ -29,4 +29,19 @@ public class Bus {
     private String templateId; // references SeatLayoutTemplate.id
     @Builder.Default
     private String status = "ACTIVE";
+
+    private String busName;
+    private String manufacturer;
+    private String model;
+    private Integer yearOfManufacturing;
+    private String fuelType;
+    private String imageUrl;
+
+    private String chassisNumber;
+    private String engineNumber;
+    private String emissionStandard;
+    private String color;
+    private String busCategory;
+    private String exteriorImageUrl;
+    private String interiorImageUrl;
 }

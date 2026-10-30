@@ -1,11 +1,20 @@
 package com.traveleasy.bus.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.traveleasy.bus.dto.SchedulePointDto;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "schedule_stops", indexes = {
@@ -20,6 +29,8 @@ import lombok.NoArgsConstructor;
 @Builder
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ScheduleStop {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -43,11 +54,60 @@ public class ScheduleStop {
     @Column(name = "departure_time", length = 10)
     private String departureTime; // e.g. "21:45" (null for DESTINATION)
 
+    @Column(name = "arrival_date")
+    private LocalDate arrivalDate;
+
+    @Column(name = "departure_date")
+    private LocalDate departureDate;
+
+    @Column(name = "arrival_date_time")
+    private LocalDateTime arrivalDateTime;
+
+    @Column(name = "departure_date_time")
+    private LocalDateTime departureDateTime;
+
+    @Column(name = "halt_minutes")
+    private Integer haltMinutes;
+
     @Column(name = "distance_km")
     private Double distanceKm;
 
     @Column(name = "consecutive_fare")
     private Double consecutiveFare; // Elementary fare from stop k to stop k+1. 0.0 for destination.
+
+    @Lob
+    @Column(name = "points_json", columnDefinition = "TEXT")
+    private String pointsJson;
+
+    @Transient
+    @Builder.Default
+    private List<SchedulePointDto> points = new ArrayList<>();
+
+    public List<SchedulePointDto> getPoints() {
+        if (points != null && !points.isEmpty()) {
+            return points;
+        }
+        if (pointsJson != null && !pointsJson.isBlank()) {
+            try {
+                this.points = OBJECT_MAPPER.readValue(pointsJson, new TypeReference<List<SchedulePointDto>>() {});
+                return this.points;
+            } catch (Exception ignored) {
+            }
+        }
+        return points != null ? points : new ArrayList<>();
+    }
+
+    public void setPoints(List<SchedulePointDto> points) {
+        this.points = points;
+        if (points != null && !points.isEmpty()) {
+            try {
+                this.pointsJson = OBJECT_MAPPER.writeValueAsString(points);
+            } catch (Exception ignored) {
+            }
+        } else {
+            this.pointsJson = null;
+        }
+    }
 
     public Double getFareToNextStop() {
         return consecutiveFare;

@@ -105,9 +105,18 @@ public class RouteStopsService {
                     .stopType(stopType)
                     .arrivalTime(dto.getArrivalTime())
                     .departureTime(dto.getDepartureTime())
+                    .arrivalDate(dto.getArrivalDate())
+                    .departureDate(dto.getDepartureDate())
+                    .arrivalDateTime(dto.getArrivalDateTime())
+                    .departureDateTime(dto.getDepartureDateTime())
+                    .haltMinutes(dto.getHaltMinutes())
                     .distanceKm(dto.getDistanceKm())
                     .consecutiveFare(i == lastIndex ? 0.0 : fare)
                     .build();
+
+            if (dto.getPoints() != null && !dto.getPoints().isEmpty()) {
+                stop.setPoints(dto.getPoints());
+            }
             entities.add(stop);
         }
 

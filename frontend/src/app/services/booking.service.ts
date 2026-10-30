@@ -77,4 +77,12 @@ export class BookingService {
   deleteReview(reviewId: number): Observable<any> {
     return this.http.delete(`${this.apiUrl}/reviews/${reviewId}`);
   }
+
+  cancelOperatorSchedule(scheduleId: number): Observable<any> {
+    return this.http.put(`${this.apiUrl}/bookings/operator/schedules/${scheduleId}/cancel`, {});
+  }
+
+  getOperatorScheduleCancellationStatus(scheduleId: number): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/bookings/operator/schedules/${scheduleId}/cancellation-status`);
+  }
 }

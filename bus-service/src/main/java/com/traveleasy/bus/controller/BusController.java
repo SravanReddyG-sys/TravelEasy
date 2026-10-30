@@ -27,6 +27,7 @@ import com.traveleasy.bus.repository.BusScheduleRepository;
 import com.traveleasy.bus.repository.SeatRepository;
 
 import com.traveleasy.bus.service.SeatLayoutService;
+import com.traveleasy.bus.service.ScheduleService;
 import com.traveleasy.bus.security.BusSecurityService;
 
 import lombok.RequiredArgsConstructor;
@@ -40,12 +41,21 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.transaction.annotation.Transactional;
 import com.traveleasy.bus.dto.ScheduleStopDto;
+import com.traveleasy.bus.dto.ScheduleConflictCheckRequest;
+import com.traveleasy.bus.dto.ScheduleConflictCheckResponse;
 import com.traveleasy.bus.model.ScheduleStop;
 import com.traveleasy.bus.service.RouteStopsService;
 import com.traveleasy.bus.dto.FareMatrixEntryDto;
 import com.traveleasy.bus.dto.FareOverrideItemDto;
 import com.traveleasy.bus.dto.ScheduleFareMatrixResponse;
+import com.traveleasy.bus.dto.FareMatrixPreviewRequest;
 import com.traveleasy.bus.service.FareMatrixService;
+import com.traveleasy.bus.service.BusImageStorageService;
+import com.traveleasy.bus.service.BusValidationService;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
 
 
 
@@ -74,12 +84,15 @@ public class BusController {
     private final SeatLayoutService seatLayoutService;
     private final BusSecurityService securityService;
     private final RouteStopsService routeStopsService;
+    private final ScheduleService scheduleService;
     private final FareMatrixService fareMatrixService;
     private final SeatSegmentReservationService seatSegmentReservationService;
     private final com.traveleasy.bus.service.RouteService routeService;
     private final com.traveleasy.bus.repository.RouteRepository routeRepository;
     private final com.traveleasy.bus.repository.RouteStopRepository routeStopRepository;
     private final com.traveleasy.bus.repository.RoutePointRepository routePointRepository;
+    private final BusImageStorageService imageStorageService;
+    private final BusValidationService validationService;
 
 
 
@@ -129,6 +142,147 @@ public class BusController {
 
     // ==================== BUS MANAGEMENT ====================
 
+    @GetMapping("/check-registration")
+    public ResponseEntity<?> checkRegistration(
+            @RequestParam("busNumber") String busNumber,
+            @RequestParam(value = "excludeBusId", required = false) Long excludeBusId) {
+        if (busNumber == null || busNumber.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Registration number parameter is required"));
+        }
+        String normalized = validationService.normalizeRegistrationNumber(busNumber);
+        boolean validFormat = validationService.isValidRegistrationNumber(normalized);
+        if (!validFormat) {
+            return ResponseEntity.ok(Map.of(
+                    "busNumber", busNumber,
+                    "normalized", normalized,
+                    "validFormat", false,
+                    "available", false,
+                    "message", "Invalid registration number format. Expected standard (e.g. KA01AB1234) or BH-series (e.g. 22BH1234AA)."
+            ));
+        }
+
+        boolean taken = validationService.isRegistrationNumberTaken(normalized, excludeBusId);
+        return ResponseEntity.ok(Map.of(
+                "busNumber", busNumber,
+                "normalized", normalized,
+                "validFormat", true,
+                "available", !taken,
+                "message", taken ? "Registration number is already registered." : "Registration number is valid and available."
+        ));
+    }
+
+    @PostMapping("/validate-basic-details")
+    public ResponseEntity<?> validateBasicDetails(
+            @RequestBody Bus bus,
+            @RequestParam(value = "checkImages", defaultValue = "true") boolean checkImages,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Authentication required"));
+        }
+        String token = authHeader.substring(7).trim();
+        if (!securityService.validateToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Invalid or expired authorization token"));
+        }
+
+        Map<String, String> errors = validationService.validateBasicDetails(bus, checkImages);
+        if (!errors.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "valid", false,
+                    "errors", errors,
+                    "message", "Validation failed for Basic Details"
+            ));
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "valid", true,
+                "message", "Basic Details are valid"
+        ));
+    }
+
+    @PostMapping("/images/upload")
+    public ResponseEntity<?> uploadImage(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "category", required = false) String category,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Authentication required to upload bus images"));
+        }
+        String token = authHeader.substring(7).trim();
+        if (!securityService.validateToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Invalid or expired authorization token"));
+        }
+        String callerRole = securityService.extractRole(token);
+        if (!"ROLE_ADMIN".equalsIgnoreCase(callerRole) && !"ROLE_BUS_OPERATOR".equalsIgnoreCase(callerRole)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Bus Operator or Admin role required"));
+        }
+
+        try {
+            String filename = imageStorageService.storeImage(file, category);
+            String imageUrl = "/api/buses/images/" + filename;
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                    "filename", filename,
+                    "imageUrl", imageUrl,
+                    "category", category != null ? category : "bus",
+                    "size", file.getSize()
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Failed to upload image: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/images/{filename:.+}")
+    public ResponseEntity<Resource> getImage(@PathVariable String filename) {
+        try {
+            Resource resource = imageStorageService.loadAsResource(filename);
+            String contentType = "image/jpeg";
+            String lower = filename.toLowerCase();
+            if (lower.endsWith(".png")) {
+                contentType = "image/png";
+            } else if (lower.endsWith(".webp")) {
+                contentType = "image/webp";
+            }
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                    .body(resource);
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @DeleteMapping("/images/{filename:.+}")
+    public ResponseEntity<?> deleteImage(
+            @PathVariable String filename,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Authentication required to delete bus images"));
+        }
+        String token = authHeader.substring(7).trim();
+        if (!securityService.validateToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Invalid or expired authorization token"));
+        }
+
+        boolean deleted = imageStorageService.deleteImage(filename);
+        if (deleted) {
+            return ResponseEntity.ok(Map.of("message", "Image deleted successfully", "filename", filename));
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Image not found or could not be deleted"));
+        }
+    }
+
     @PostMapping
     public ResponseEntity<?> addBus(
             @RequestBody Bus bus,
@@ -173,6 +327,26 @@ public class BusController {
 
         if (bus.getStatus() == null || bus.getStatus().trim().isEmpty()) {
             bus.setStatus("ACTIVE");
+        }
+
+        // Normalize registration number, chassis, engine, and image mappings
+        if (bus.getBusNumber() != null) {
+            bus.setBusNumber(validationService.normalizeRegistrationNumber(bus.getBusNumber()));
+        }
+        if (bus.getChassisNumber() != null) {
+            bus.setChassisNumber(bus.getChassisNumber().trim().toUpperCase());
+        }
+        if (bus.getEngineNumber() != null) {
+            bus.setEngineNumber(bus.getEngineNumber().trim().toUpperCase());
+        }
+        if (bus.getExteriorImageUrl() != null && (bus.getImageUrl() == null || bus.getImageUrl().isBlank())) {
+            bus.setImageUrl(bus.getExteriorImageUrl());
+        }
+
+        // Uniqueness validation
+        if (bus.getBusNumber() != null && validationService.isRegistrationNumberTaken(bus.getBusNumber(), bus.getId())) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("message", "Registration Number '" + bus.getBusNumber() + "' is already registered."));
         }
 
         try {
@@ -385,6 +559,45 @@ public class BusController {
 
     // ==================== TRIP SCHEDULE & SEAT INVENTORY ====================
 
+    @PostMapping("/schedules/check-conflict")
+    public ResponseEntity<?> checkScheduleConflict(
+            @RequestBody ScheduleConflictCheckRequest request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Authentication required to check schedule conflict"));
+        }
+
+        String token = authHeader.substring(7).trim();
+        if (!securityService.validateToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Invalid or expired authorization token"));
+        }
+
+        String callerRole = securityService.extractRole(token);
+        if (callerRole == null || callerRole.isBlank()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Missing or invalid role claim"));
+        }
+
+        boolean isAdmin = "ROLE_ADMIN".equalsIgnoreCase(callerRole);
+        boolean isOperator = "ROLE_BUS_OPERATOR".equalsIgnoreCase(callerRole);
+
+        if (!isAdmin && !isOperator) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Bus Operator or Admin role required"));
+        }
+
+        Long callerUserId = securityService.extractUserId(token);
+        if (callerUserId == null || callerUserId <= 0) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Missing or invalid user identity in token"));
+        }
+
+        ScheduleConflictCheckResponse response = scheduleService.checkConflict(callerUserId, isAdmin, request);
+        return ResponseEntity.ok(response);
+    }
+
     @PostMapping("/schedules")
     public ResponseEntity<?> createSchedule(
             @RequestBody BusSchedule schedule,
@@ -420,121 +633,7 @@ public class BusController {
                     .body(Map.of("message", "Access denied: Missing or invalid user identity in token"));
         }
 
-        if (schedule.getBusId() == null) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Bus ID is required"));
-        }
-
-        Bus bus = busRepository.findById(schedule.getBusId()).orElse(null);
-        if (bus == null) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Bus not found with id: " + schedule.getBusId()));
-        }
-
-        if (isOperator && (bus.getOperatorId() == null || !bus.getOperatorId().equals(callerUserId))) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "Access denied: You do not own this bus"));
-        }
-
-        if ("INACTIVE".equalsIgnoreCase(bus.getStatus())) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Cannot schedule trips on an inactive bus."));
-        }
-
-        if (schedule.getRouteId() != null) {
-            com.traveleasy.bus.model.Route route = routeRepository.findById(schedule.getRouteId()).orElse(null);
-            if (route == null) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Route not found with id: " + schedule.getRouteId()));
-            }
-            if (isOperator && (route.getOperatorId() == null || !route.getOperatorId().equals(callerUserId))) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(Map.of("message", "Access denied: You do not own this route"));
-            }
-            if ("INACTIVE".equalsIgnoreCase(route.getStatus())) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Cannot schedule trips on an inactive route."));
-            }
-
-            if (schedule.getOrigin() == null || schedule.getOrigin().trim().isEmpty()) {
-                schedule.setOrigin(route.getOrigin());
-            }
-            if (schedule.getDestination() == null || schedule.getDestination().trim().isEmpty()) {
-                schedule.setDestination(route.getDestination());
-            }
-
-            List<com.traveleasy.bus.model.RouteStop> rStops = routeStopRepository.findByRouteIdOrderByStopOrderAsc(route.getId());
-            if (rStops.size() < 2) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Route has invalid stop configuration."));
-            }
-
-            // Snapshot stops if not provided by caller
-            if (schedule.getStops() == null || schedule.getStops().isEmpty()) {
-                List<ScheduleStopDto> snapshotStops = new ArrayList<>();
-                double defFare = (schedule.getFare() != null && rStops.size() > 1) 
-                        ? Math.round((schedule.getFare() / (rStops.size() - 1)) * 100.0) / 100.0 
-                        : 100.0;
-                for (int i = 0; i < rStops.size(); i++) {
-                    com.traveleasy.bus.model.RouteStop rs = rStops.get(i);
-                    ScheduleStopDto dto = new ScheduleStopDto();
-                    dto.setStopOrder(rs.getStopOrder());
-                    dto.setStopName(rs.getStopName());
-                    dto.setStopType(rs.getStopType());
-                    dto.setDistanceKm(rs.getDistanceKm());
-                    dto.setConsecutiveFare(i < rStops.size() - 1 ? defFare : 0.0);
-                    if (i == 0) {
-                        dto.setDepartureTime(schedule.getDepartureTime());
-                    } else if (i == rStops.size() - 1) {
-                        dto.setArrivalTime(schedule.getArrivalTime());
-                    }
-                    snapshotStops.add(dto);
-                }
-                schedule.setStops(snapshotStops);
-            } else {
-                // If caller provided stops, validate that stop names and sequence match route
-                if (schedule.getStops().size() != rStops.size()) {
-                    return ResponseEntity.badRequest().body(Map.of("message", "Schedule stop count (" + schedule.getStops().size() + ") does not match route stop count (" + rStops.size() + ")."));
-                }
-                for (int i = 0; i < rStops.size(); i++) {
-                    if (!schedule.getStops().get(i).getStopName().trim().equalsIgnoreCase(rStops.get(i).getStopName().trim())) {
-                        return ResponseEntity.badRequest().body(Map.of("message", "Schedule stop mismatch at position " + i + ": expected '" + rStops.get(i).getStopName() + "' from route but received '" + schedule.getStops().get(i).getStopName() + "'."));
-                    }
-                }
-            }
-
-            // Auto-populate boarding and dropping points summary from route if not provided
-            if (schedule.getBoardingPoints() == null || schedule.getBoardingPoints().trim().isEmpty()) {
-                List<com.traveleasy.bus.model.RoutePoint> bps = routePointRepository.findByRouteId(route.getId()).stream()
-                        .filter(p -> "BOARDING".equalsIgnoreCase(p.getPointType()) && Boolean.TRUE.equals(p.getActive()))
-                        .toList();
-                if (!bps.isEmpty()) {
-                    schedule.setBoardingPoints(String.join(", ", bps.stream().map(com.traveleasy.bus.model.RoutePoint::getPointName).toList()));
-                }
-            }
-            if (schedule.getDroppingPoints() == null || schedule.getDroppingPoints().trim().isEmpty()) {
-                List<com.traveleasy.bus.model.RoutePoint> dps = routePointRepository.findByRouteId(route.getId()).stream()
-                        .filter(p -> "DROPPING".equalsIgnoreCase(p.getPointType()) && Boolean.TRUE.equals(p.getActive()))
-                        .toList();
-                if (!dps.isEmpty()) {
-                    schedule.setDroppingPoints(String.join(", ", dps.stream().map(com.traveleasy.bus.model.RoutePoint::getPointName).toList()));
-                }
-            }
-        }
-
-        schedule.setOperatorId(bus.getOperatorId());
-        schedule.setOperatorName(bus.getOperatorName());
-        schedule.setBusNumber(bus.getBusNumber());
-        schedule.setBusType(bus.getBusType());
-        if (schedule.getStatus() == null || schedule.getStatus().trim().isEmpty()) {
-            schedule.setStatus("SCHEDULED");
-        }
-
-        BusSchedule savedSchedule = scheduleRepository.save(schedule);
-
-        // Generate physical seats from the authoritative layout template
-        seatLayoutService.generateTripSeats(savedSchedule, bus);
-        scheduleRepository.save(savedSchedule);
-
-        if (schedule.getStops() != null && !schedule.getStops().isEmpty()) {
-            routeStopsService.configureRouteStops(savedSchedule.getId(), schedule.getStops());
-            savedSchedule = scheduleRepository.findById(savedSchedule.getId()).orElse(savedSchedule);
-        }
-
+        BusSchedule savedSchedule = scheduleService.createSchedule(callerUserId, isAdmin, schedule);
         return ResponseEntity.status(HttpStatus.CREATED).body(savedSchedule);
     }
 
@@ -1000,6 +1099,14 @@ public class BusController {
     }
 
     // ==================== ORIGIN-DESTINATION (OD) FARE MATRIX & OVERRIDES ====================
+
+    @PostMapping("/schedules/fare-matrix/preview")
+    public ResponseEntity<ScheduleFareMatrixResponse> previewFareMatrix(@RequestBody FareMatrixPreviewRequest request) {
+        if (request == null || request.getStops() == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(fareMatrixService.previewFareMatrix(request.getStops(), request.getOverrides()));
+    }
 
     @GetMapping("/schedules/{scheduleId}/fare-matrix")
     public ResponseEntity<ScheduleFareMatrixResponse> getScheduleFareMatrix(@PathVariable Long scheduleId) {

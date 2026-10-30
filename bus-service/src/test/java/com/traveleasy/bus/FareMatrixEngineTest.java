@@ -4,6 +4,7 @@ import com.traveleasy.bus.dto.FareOverrideItemDto;
 import com.traveleasy.bus.dto.FareMatrixEntryDto;
 import com.traveleasy.bus.dto.ScheduleFareMatrixResponse;
 import com.traveleasy.bus.dto.ScheduleStopDto;
+import com.traveleasy.bus.dto.FareMatrixPreviewRequest;
 import com.traveleasy.bus.model.Bus;
 import com.traveleasy.bus.model.BusSchedule;
 import com.traveleasy.bus.repository.BusRepository;
@@ -56,6 +57,12 @@ public class FareMatrixEngineTest {
 
     @Autowired
     private RouteStopsService routeStopsService;
+
+    @Autowired
+    private com.traveleasy.bus.service.ScheduleService scheduleService;
+
+    @Autowired
+    private com.traveleasy.bus.service.FareMatrixService fareMatrixService;
 
     private static final String SECRET = "TravelEasySuperSecretKeyForJWTSigning12345678901234567890";
 
@@ -482,5 +489,175 @@ public class FareMatrixEngineTest {
                 Map.class
         );
         assertEquals(HttpStatus.CONFLICT, resp.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Unit 4.2.9: Preview fare matrix endpoint dynamically calculates N*(N-1)/2 pairs and applies overrides")
+    public void testPreviewFareMatrix_DynamicPairsAndOverrides() {
+        List<ScheduleStopDto> stops = List.of(
+                ScheduleStopDto.builder().stopOrder(0).stopName("Bengaluru (Origin)").distanceKm(0.0).consecutiveFare(450.0).build(),
+                ScheduleStopDto.builder().stopOrder(1).stopName("Kurnool").distanceKm(210.0).consecutiveFare(350.0).build(),
+                ScheduleStopDto.builder().stopOrder(2).stopName("Anantapur").distanceKm(320.0).consecutiveFare(400.0).build(),
+                ScheduleStopDto.builder().stopOrder(3).stopName("Hyderabad (Destination)").distanceKm(420.0).consecutiveFare(0.0).build()
+        );
+
+        List<FareOverrideItemDto> overrides = List.of(
+                FareOverrideItemDto.builder().fromStopOrder(0).toStopOrder(2).customFare(750.0).build(),
+                FareOverrideItemDto.builder().fromStopOrder(0).toStopOrder(3).customFare(1100.0).build(),
+                FareOverrideItemDto.builder().fromStopOrder(1).toStopOrder(3).customFare(700.0).build()
+        );
+
+        FareMatrixPreviewRequest req = FareMatrixPreviewRequest.builder()
+                .stops(stops)
+                .overrides(overrides)
+                .build();
+
+        ResponseEntity<ScheduleFareMatrixResponse> resp = restTemplate.postForEntity(
+                getBaseUrl() + "/schedules/fare-matrix/preview",
+                req,
+                ScheduleFareMatrixResponse.class
+        );
+
+        assertEquals(HttpStatus.OK, resp.getStatusCode());
+        assertNotNull(resp.getBody());
+        ScheduleFareMatrixResponse body = resp.getBody();
+        assertEquals(4, body.getTotalStops());
+        assertEquals(6, body.getTotalPairs());
+
+        List<FareMatrixEntryDto> matrix = body.getMatrix();
+        assertEquals(6, matrix.size());
+
+        // Pair 0->1: Bengaluru -> Kurnool (dist 210, calc 450, eff 450, not overridden)
+        FareMatrixEntryDto p01 = matrix.stream().filter(e -> e.getFromStopOrder() == 0 && e.getToStopOrder() == 1).findFirst().orElseThrow();
+        assertEquals(210.0, p01.getDistanceKm());
+        assertEquals(450.0, p01.getCalculatedFare());
+        assertEquals(450.0, p01.getEffectiveFare());
+        assertFalse(p01.getIsOverridden());
+
+        // Pair 0->2: Bengaluru -> Anantapur (dist 320, calc 800, eff 750, overridden)
+        FareMatrixEntryDto p02 = matrix.stream().filter(e -> e.getFromStopOrder() == 0 && e.getToStopOrder() == 2).findFirst().orElseThrow();
+        assertEquals(320.0, p02.getDistanceKm());
+        assertEquals(800.0, p02.getCalculatedFare());
+        assertEquals(750.0, p02.getEffectiveFare());
+        assertTrue(p02.getIsOverridden());
+
+        // Pair 0->3: Bengaluru -> Hyderabad (dist 420, calc 1200, eff 1100, overridden)
+        FareMatrixEntryDto p03 = matrix.stream().filter(e -> e.getFromStopOrder() == 0 && e.getToStopOrder() == 3).findFirst().orElseThrow();
+        assertEquals(420.0, p03.getDistanceKm());
+        assertEquals(1200.0, p03.getCalculatedFare());
+        assertEquals(1100.0, p03.getEffectiveFare());
+        assertTrue(p03.getIsOverridden());
+
+        // Pair 1->2: Kurnool -> Anantapur (dist 110, calc 350, eff 350, not overridden)
+        FareMatrixEntryDto p12 = matrix.stream().filter(e -> e.getFromStopOrder() == 1 && e.getToStopOrder() == 2).findFirst().orElseThrow();
+        assertEquals(110.0, p12.getDistanceKm());
+        assertEquals(350.0, p12.getCalculatedFare());
+        assertEquals(350.0, p12.getEffectiveFare());
+        assertFalse(p12.getIsOverridden());
+
+        // Pair 1->3: Kurnool -> Hyderabad (dist 210, calc 750, eff 700, overridden)
+        FareMatrixEntryDto p13 = matrix.stream().filter(e -> e.getFromStopOrder() == 1 && e.getToStopOrder() == 3).findFirst().orElseThrow();
+        assertEquals(210.0, p13.getDistanceKm());
+        assertEquals(750.0, p13.getCalculatedFare());
+        assertEquals(700.0, p13.getEffectiveFare());
+        assertTrue(p13.getIsOverridden());
+
+        // Pair 2->3: Anantapur -> Hyderabad (dist 100, calc 400, eff 400, not overridden)
+        FareMatrixEntryDto p23 = matrix.stream().filter(e -> e.getFromStopOrder() == 2 && e.getToStopOrder() == 3).findFirst().orElseThrow();
+        assertEquals(100.0, p23.getDistanceKm());
+        assertEquals(400.0, p23.getCalculatedFare());
+        assertEquals(400.0, p23.getEffectiveFare());
+        assertFalse(p23.getIsOverridden());
+    }
+
+    @Test
+    @DisplayName("Unit 4.2.10: Create schedule with fareOverrides persists overrides and synchronizes full-trip fare")
+    public void testCreateSchedule_WithFareOverrides_PersistsAndSynchronizes() {
+        Long operatorId = 710L;
+        Bus bus = busRepository.save(Bus.builder()
+                .busNumber("AP09-MATRIX-CREAT-" + System.currentTimeMillis() % 10000)
+                .busType("AC Sleeper (2+1)")
+                .totalSeats(30)
+                .operatorName("Orange Tours & Travels")
+                .operatorId(operatorId)
+                .status("ACTIVE")
+                .templateId("tpl-sleeper-2-1-30")
+                .build());
+
+        List<ScheduleStopDto> stops = List.of(
+                ScheduleStopDto.builder().stopOrder(0).stopName("Bengaluru").departureTime("06:00").distanceKm(0.0).consecutiveFare(450.0).build(),
+                ScheduleStopDto.builder().stopOrder(1).stopName("Kurnool").arrivalTime("10:00").departureTime("10:20").distanceKm(210.0).consecutiveFare(350.0).build(),
+                ScheduleStopDto.builder().stopOrder(2).stopName("Anantapur").arrivalTime("14:15").departureTime("14:35").distanceKm(320.0).consecutiveFare(400.0).build(),
+                ScheduleStopDto.builder().stopOrder(3).stopName("Hyderabad").arrivalTime("20:00").distanceKm(420.0).consecutiveFare(0.0).build()
+        );
+
+        List<FareOverrideItemDto> overrides = List.of(
+                FareOverrideItemDto.builder().fromStopOrder(0).toStopOrder(2).fromStopName("Bengaluru").toStopName("Anantapur").customFare(750.0).build(),
+                FareOverrideItemDto.builder().fromStopOrder(0).toStopOrder(3).fromStopName("Bengaluru").toStopName("Hyderabad").customFare(1100.0).build()
+        );
+
+        BusSchedule scheduleReq = BusSchedule.builder()
+                .busId(bus.getId())
+                .travelDate(LocalDate.now().plusDays(5))
+                .departureTime("06:00")
+                .arrivalTime("20:00")
+                .availableSeats(30)
+                .stops(stops)
+                .fareOverrides(overrides)
+                .build();
+
+        BusSchedule created = scheduleService.createSchedule(operatorId, false, scheduleReq);
+        assertNotNull(created.getId());
+
+        // Full trip fare should be synchronized to overridden fare (1100.0)
+        assertEquals(1100.0, created.getFare());
+
+        // Check overrides persisted in DB
+        List<com.traveleasy.bus.model.ScheduleFareOverride> savedOverrides = fareOverrideRepository.findByScheduleId(created.getId());
+        assertEquals(2, savedOverrides.size());
+
+        // Verify effective fare queries
+        Double eff02 = fareMatrixService.getEffectiveFare(created.getId(), 0, 2);
+        assertEquals(750.0, eff02);
+
+        Double eff01 = fareMatrixService.getEffectiveFare(created.getId(), 0, 1);
+        assertEquals(450.0, eff01);
+    }
+
+    @Test
+    @DisplayName("Unit 4.2.11: Create schedule with invalid fareOverrides is rejected")
+    public void testCreateSchedule_WithInvalidFareOverrides_Rejection() {
+        Long operatorId = 711L;
+        Bus bus = busRepository.save(Bus.builder()
+                .busNumber("AP09-MATRIX-ERR-" + System.currentTimeMillis() % 10000)
+                .busType("AC Sleeper (2+1)")
+                .totalSeats(30)
+                .operatorName("Orange Tours & Travels")
+                .operatorId(operatorId)
+                .status("ACTIVE")
+                .templateId("tpl-sleeper-2-1-30")
+                .build());
+
+        List<ScheduleStopDto> stops = List.of(
+                ScheduleStopDto.builder().stopOrder(0).stopName("Origin").departureTime("06:00").distanceKm(0.0).consecutiveFare(400.0).build(),
+                ScheduleStopDto.builder().stopOrder(1).stopName("Destination").arrivalTime("12:00").distanceKm(200.0).consecutiveFare(0.0).build()
+        );
+
+        // Invalid: customFare <= 0
+        BusSchedule scheduleReq = BusSchedule.builder()
+                .busId(bus.getId())
+                .travelDate(LocalDate.now().plusDays(5))
+                .departureTime("06:00")
+                .arrivalTime("12:00")
+                .availableSeats(30)
+                .stops(stops)
+                .fareOverrides(List.of(
+                        FareOverrideItemDto.builder().fromStopOrder(0).toStopOrder(1).customFare(-50.0).build()
+                ))
+                .build();
+
+        assertThrows(org.springframework.web.server.ResponseStatusException.class, () -> {
+            scheduleService.createSchedule(operatorId, false, scheduleReq);
+        });
     }
 }
