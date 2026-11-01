@@ -874,74 +874,7 @@ interface TrendDay {
                 </div>
               </div>
 
-              <!-- 8. Status Toggle (Activate / Deactivate) Confirmation Modal Overlay -->
-              <div *ngIf="showToggleStatusModal && selectedToggleBus" class="modal fade show d-block bg-dark bg-opacity-50" tabindex="-1" style="z-index: 1055;">
-                <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
-                  <div class="modal-content rounded-4 border-0 shadow-lg p-2">
-                    <div class="modal-body text-center p-4">
-                      
-                      <!-- Icon -->
-                      <div class="mb-3">
-                        <div *ngIf="(selectedToggleBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE'"
-                             class="rounded-circle bg-warning bg-opacity-10 text-warning d-inline-flex align-items-center justify-content-center"
-                             style="width: 72px; height: 72px; font-size: 32px;">
-                          <i class="fa-solid fa-triangle-exclamation"></i>
-                        </div>
-                        <div *ngIf="(selectedToggleBus.status || '').toUpperCase() === 'INACTIVE'"
-                             class="rounded-circle bg-success bg-opacity-10 text-success d-inline-flex align-items-center justify-content-center"
-                             style="width: 72px; height: 72px; font-size: 32px;">
-                          <i class="fa-solid fa-circle-check"></i>
-                        </div>
-                      </div>
 
-                      <!-- Title -->
-                      <h4 class="fw-bold text-dark mb-1">
-                        {{ (selectedToggleBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'Deactivate Bus' : 'Activate Bus' }}
-                      </h4>
-
-                      <!-- Message -->
-                      <p class="text-muted small mb-3">
-                        Are you sure you want to {{ (selectedToggleBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'deactivate' : 'activate' }}
-                        <strong class="text-dark">{{ selectedToggleBus.busName || selectedToggleBus.busNumber }}</strong>
-                        ({{ selectedToggleBus.busNumber }})?
-                      </p>
-
-                      <!-- Information Note -->
-                      <div *ngIf="(selectedToggleBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE'" class="alert alert-warning text-start small mb-3 py-2 px-3 rounded-3">
-                        <i class="fa-solid fa-circle-info me-1"></i>
-                        Deactivating this bus prevents assigning it to new schedules. All historical schedules and bookings remain safe and intact.
-                      </div>
-
-                      <div *ngIf="(selectedToggleBus.status || '').toUpperCase() === 'INACTIVE'" class="alert alert-info text-start small mb-3 py-2 px-3 rounded-3">
-                        <i class="fa-solid fa-circle-info me-1"></i>
-                        Activating this bus will make it immediately available for new schedule assignments.
-                      </div>
-
-                      <!-- Conflict or Error message from backend -->
-                      <div *ngIf="statusToggleError" class="alert alert-danger text-start small mb-3 py-2 px-3 rounded-3">
-                        <i class="fa-solid fa-triangle-exclamation me-1"></i>
-                        {{ statusToggleError }}
-                      </div>
-
-                      <!-- Buttons -->
-                      <div class="d-flex justify-content-center gap-2 mt-4">
-                        <button type="button" class="btn btn-outline-secondary px-4 py-2 rounded-3 fw-semibold" [disabled]="isTogglingBusStatus" (click)="closeToggleStatusModal()">
-                          Cancel
-                        </button>
-                        <button type="button"
-                                class="btn px-4 py-2 rounded-3 fw-bold d-inline-flex align-items-center gap-2"
-                                [disabled]="isTogglingBusStatus"
-                                [ngClass]="(selectedToggleBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'btn-danger' : 'btn-success'"
-                                (click)="confirmToggleBusStatus()">
-                          <span *ngIf="isTogglingBusStatus" class="spinner-border spinner-border-sm" role="status"></span>
-                          <span>{{ (selectedToggleBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'Yes, Deactivate' : 'Yes, Activate' }}</span>
-                        </button>
-                      </div>
-
-                    </div>
-                  </div>
-                </div>
-              </div>
 
             </div>
 
@@ -3445,6 +3378,75 @@ interface TrendDay {
                 </div>
               </ng-container>
             </div>
+
+              <!-- 8. Status Toggle (Activate / Deactivate) Confirmation Modal Overlay -->
+              <div *ngIf="showToggleStatusModal && selectedToggleBus" class="modal fade show d-block bg-dark bg-opacity-50" tabindex="-1" style="z-index: 1055;">
+                <div class="modal-dialog modal-dialog-centered" style="max-width: 440px;">
+                  <div class="modal-content rounded-4 border-0 shadow-lg p-2">
+                    <div class="modal-body text-center p-4">
+                      
+                      <!-- Icon -->
+                      <div class="mb-3">
+                        <div *ngIf="(selectedToggleBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE'"
+                             class="rounded-circle bg-warning bg-opacity-10 text-warning d-inline-flex align-items-center justify-content-center"
+                             style="width: 72px; height: 72px; font-size: 32px;">
+                          <i class="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                        <div *ngIf="(selectedToggleBus.status || '').toUpperCase() === 'INACTIVE'"
+                             class="rounded-circle bg-success bg-opacity-10 text-success d-inline-flex align-items-center justify-content-center"
+                             style="width: 72px; height: 72px; font-size: 32px;">
+                          <i class="fa-solid fa-circle-check"></i>
+                        </div>
+                      </div>
+
+                      <!-- Title -->
+                      <h4 class="fw-bold text-dark mb-1">
+                        {{ (selectedToggleBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'Deactivate Bus' : 'Activate Bus' }}
+                      </h4>
+
+                      <!-- Message -->
+                      <p class="text-muted small mb-3">
+                        Are you sure you want to {{ (selectedToggleBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'deactivate' : 'activate' }}
+                        <strong class="text-dark">{{ selectedToggleBus.busName || selectedToggleBus.busNumber }}</strong>
+                        ({{ selectedToggleBus.busNumber }})?
+                      </p>
+
+                      <!-- Information Note -->
+                      <div *ngIf="(selectedToggleBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE'" class="alert alert-warning text-start small mb-3 py-2 px-3 rounded-3">
+                        <i class="fa-solid fa-circle-info me-1"></i>
+                        Deactivating this bus prevents assigning it to new schedules. All historical schedules and bookings remain safe and intact.
+                      </div>
+
+                      <div *ngIf="(selectedToggleBus.status || '').toUpperCase() === 'INACTIVE'" class="alert alert-info text-start small mb-3 py-2 px-3 rounded-3">
+                        <i class="fa-solid fa-circle-info me-1"></i>
+                        Activating this bus will make it immediately available for new schedule assignments.
+                      </div>
+
+                      <!-- Conflict or Error message from backend -->
+                      <div *ngIf="statusToggleError" class="alert alert-danger text-start small mb-3 py-2 px-3 rounded-3">
+                        <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                        {{ statusToggleError }}
+                      </div>
+
+                      <!-- Buttons -->
+                      <div class="d-flex justify-content-center gap-2 mt-4">
+                        <button type="button" class="btn btn-outline-secondary px-4 py-2 rounded-3 fw-semibold" [disabled]="isTogglingBusStatus" (click)="closeToggleStatusModal()">
+                          Cancel
+                        </button>
+                        <button type="button"
+                                class="btn px-4 py-2 rounded-3 fw-bold d-inline-flex align-items-center gap-2"
+                                [disabled]="isTogglingBusStatus"
+                                [ngClass]="(selectedToggleBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'btn-danger' : 'btn-success'"
+                                (click)="confirmToggleBusStatus()">
+                          <span *ngIf="isTogglingBusStatus" class="spinner-border spinner-border-sm" role="status"></span>
+                          <span>{{ (selectedToggleBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'Yes, Deactivate' : 'Yes, Activate' }}</span>
+                        </button>
+                      </div>
+
+                    </div>
+                  </div>
+                </div>
+              </div>
           </div>
 
           <!-- ==================== VIEW 3: REUSABLE ROUTES ==================== -->
@@ -15377,7 +15379,9 @@ getActiveRoutesCount(): number {
         }
         if (this.selectedDetailsBus && this.selectedDetailsBus.id === bus.id) {
           this.selectedDetailsBus.status = newStatus;
+          this.selectedDetailsBus = { ...this.selectedDetailsBus };
         }
+        this.loadBuses();
         this.closeToggleStatusModal();
       },
       error: (err) => {
