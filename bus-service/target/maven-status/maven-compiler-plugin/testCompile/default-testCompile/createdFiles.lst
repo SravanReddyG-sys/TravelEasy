@@ -1,2 +1,14 @@
+com\traveleasy\bus\RouteManagementArchitectureTest.class
+com\traveleasy\bus\BusDeactivationTest.class
+com\traveleasy\bus\SeatSegmentReservationTest.class
 com\traveleasy\bus\FareMatrixEngineTest.class
+com\traveleasy\bus\ScheduleReviewAndCreationIntegrationTest.class
+com\traveleasy\bus\SeatLayoutCatalogueTest.class
+com\traveleasy\bus\BusAssignPageContractAndModelTest.class
+com\traveleasy\bus\OperatorScheduleListingTest.class
+com\traveleasy\bus\BusOwnershipSecurityTest.class
+com\traveleasy\bus\BusRegistrationAndTripInventoryTest.class
 com\traveleasy\bus\service\SeatHoldReconciliationServiceTest.class
+com\traveleasy\bus\ScheduleValidationAndConflictTest.class
+com\traveleasy\bus\RouteStopsAndSegmentFaresTest.class
+com\traveleasy\bus\BusScheduleCancellationEndpointsTest.class

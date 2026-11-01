@@ -341,4 +341,34 @@ public class BusDeactivationTest {
         assertEquals(HttpStatus.BAD_REQUEST, res.getStatusCode());
         assertTrue(res.getBody().get("message").toString().contains("Cannot schedule trips on an inactive bus"));
     }
+
+    @Test
+    @DisplayName("Unit 3.2: Update bus details by authorized operator returns updated bus")
+    public void testUpdateBus_AuthorizedOperator_Success() {
+        Bus bus = createAndSaveBus(888L, "ACTIVE");
+        String token888 = createTestToken(888L, "ROLE_BUS_OPERATOR", "op888@traveleasy.com");
+
+        Bus updateReq = new Bus();
+        updateReq.setBusName("TravelEasy Updated Luxury");
+        updateReq.setManufacturer("Volvo");
+        updateReq.setModel("9600 Multi-Axle");
+        updateReq.setColor("Sapphire Blue");
+
+        ResponseEntity<Bus> res = restTemplate.exchange(
+                getBaseUrl() + "/" + bus.getId(),
+                HttpMethod.PUT,
+                new HttpEntity<>(updateReq, authHeaders(token888)),
+                Bus.class
+        );
+
+        assertEquals(HttpStatus.OK, res.getStatusCode());
+        assertNotNull(res.getBody());
+        assertEquals("TravelEasy Updated Luxury", res.getBody().getBusName());
+        assertEquals("Volvo", res.getBody().getManufacturer());
+        assertEquals("9600 Multi-Axle", res.getBody().getModel());
+        assertEquals("Sapphire Blue", res.getBody().getColor());
+
+        Bus reloaded = busRepository.findById(bus.getId()).orElseThrow();
+        assertEquals("TravelEasy Updated Luxury", reloaded.getBusName());
+    }
 }

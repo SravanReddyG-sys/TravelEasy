@@ -56,6 +56,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.multipart.MultipartFile;
+import java.nio.file.Paths;
 
 
 
@@ -274,10 +275,34 @@ public class BusController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("message", "Invalid or expired authorization token"));
         }
+        String callerRole = securityService.extractRole(token);
+        if (!"ROLE_ADMIN".equalsIgnoreCase(callerRole) && !"ROLE_BUS_OPERATOR".equalsIgnoreCase(callerRole)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Bus Operator or Admin role required"));
+        }
 
-        boolean deleted = imageStorageService.deleteImage(filename);
+        if (filename == null || filename.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Filename cannot be empty"));
+        }
+
+        // Normalize and extract clean filename to prevent path traversal
+        String cleanFilename = Paths.get(filename).getFileName().toString();
+        if (cleanFilename.contains("..") || cleanFilename.contains("/") || cleanFilename.contains("\\")) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Invalid filename format"));
+        }
+
+        // SAFETY CHECK: Never delete images belonging to an already registered bus
+        if (busRepository.isImageInUseByRegisteredBus(cleanFilename)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of(
+                            "message", "Cannot delete image: file is actively associated with a registered bus",
+                            "filename", cleanFilename
+                    ));
+        }
+
+        boolean deleted = imageStorageService.deleteImage(cleanFilename);
         if (deleted) {
-            return ResponseEntity.ok(Map.of("message", "Image deleted successfully", "filename", filename));
+            return ResponseEntity.ok(Map.of("message", "Image deleted successfully", "filename", cleanFilename));
         } else {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Image not found or could not be deleted"));
         }
@@ -422,6 +447,120 @@ public class BusController {
         return busRepository.findById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateBus(
+            @PathVariable Long id,
+            @RequestBody Bus busUpdates,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Authentication required to update a bus"));
+        }
+
+        String token = authHeader.substring(7).trim();
+        if (!securityService.validateToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Invalid or expired authorization token"));
+        }
+
+        String callerRole = securityService.extractRole(token);
+        if (callerRole == null || callerRole.isBlank()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Missing or invalid role claim"));
+        }
+
+        boolean isAdmin = "ROLE_ADMIN".equalsIgnoreCase(callerRole);
+        boolean isOperator = "ROLE_BUS_OPERATOR".equalsIgnoreCase(callerRole);
+
+        if (!isAdmin && !isOperator) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Bus Operator or Admin role required"));
+        }
+
+        Long callerUserId = securityService.extractUserId(token);
+        if (callerUserId == null || callerUserId <= 0) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Missing or invalid user identity in token"));
+        }
+
+        Bus existingBus = busRepository.findById(id).orElse(null);
+        if (existingBus == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Bus not found with id: " + id));
+        }
+
+        if (isOperator && (existingBus.getOperatorId() == null || !existingBus.getOperatorId().equals(callerUserId))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "You do not have permission to modify this bus."));
+        }
+
+        if (busUpdates.getBusName() != null && !busUpdates.getBusName().trim().isEmpty()) {
+            existingBus.setBusName(busUpdates.getBusName().trim());
+        }
+        if (busUpdates.getManufacturer() != null && !busUpdates.getManufacturer().trim().isEmpty()) {
+            existingBus.setManufacturer(busUpdates.getManufacturer().trim());
+        }
+        if (busUpdates.getModel() != null && !busUpdates.getModel().trim().isEmpty()) {
+            existingBus.setModel(busUpdates.getModel().trim());
+        }
+        if (busUpdates.getYearOfManufacturing() != null) {
+            existingBus.setYearOfManufacturing(busUpdates.getYearOfManufacturing());
+        }
+        if (busUpdates.getFuelType() != null && !busUpdates.getFuelType().trim().isEmpty()) {
+            existingBus.setFuelType(busUpdates.getFuelType().trim());
+        }
+        if (busUpdates.getChassisNumber() != null && !busUpdates.getChassisNumber().trim().isEmpty()) {
+            existingBus.setChassisNumber(busUpdates.getChassisNumber().trim().toUpperCase());
+        }
+        if (busUpdates.getEngineNumber() != null && !busUpdates.getEngineNumber().trim().isEmpty()) {
+            existingBus.setEngineNumber(busUpdates.getEngineNumber().trim().toUpperCase());
+        }
+        if (busUpdates.getEmissionStandard() != null && !busUpdates.getEmissionStandard().trim().isEmpty()) {
+            existingBus.setEmissionStandard(busUpdates.getEmissionStandard().trim());
+        }
+        if (busUpdates.getColor() != null && !busUpdates.getColor().trim().isEmpty()) {
+            existingBus.setColor(busUpdates.getColor().trim());
+        }
+        if (busUpdates.getBusCategory() != null && !busUpdates.getBusCategory().trim().isEmpty()) {
+            existingBus.setBusCategory(busUpdates.getBusCategory().trim());
+        }
+        if (busUpdates.getAmenities() != null) {
+            existingBus.setAmenities(busUpdates.getAmenities());
+        }
+        if (busUpdates.getExteriorImageUrl() != null && !busUpdates.getExteriorImageUrl().trim().isEmpty()) {
+            existingBus.setExteriorImageUrl(busUpdates.getExteriorImageUrl().trim());
+            existingBus.setImageUrl(busUpdates.getExteriorImageUrl().trim());
+        }
+        if (busUpdates.getInteriorImageUrl() != null && !busUpdates.getInteriorImageUrl().trim().isEmpty()) {
+            existingBus.setInteriorImageUrl(busUpdates.getInteriorImageUrl().trim());
+        }
+
+        // Document Information metadata
+        if (busUpdates.getRcIssuingAuthority() != null) existingBus.setRcIssuingAuthority(busUpdates.getRcIssuingAuthority());
+        if (busUpdates.getRcIssueDate() != null) existingBus.setRcIssueDate(busUpdates.getRcIssueDate());
+        if (busUpdates.getRcValidTill() != null) existingBus.setRcValidTill(busUpdates.getRcValidTill());
+        if (busUpdates.getPermitNumber() != null) existingBus.setPermitNumber(busUpdates.getPermitNumber());
+        if (busUpdates.getPermitType() != null) existingBus.setPermitType(busUpdates.getPermitType());
+        if (busUpdates.getPermitIssueDate() != null) existingBus.setPermitIssueDate(busUpdates.getPermitIssueDate());
+        if (busUpdates.getPermitValidTill() != null) existingBus.setPermitValidTill(busUpdates.getPermitValidTill());
+        if (busUpdates.getInsurancePolicyNumber() != null) existingBus.setInsurancePolicyNumber(busUpdates.getInsurancePolicyNumber());
+        if (busUpdates.getInsuranceProvider() != null) existingBus.setInsuranceProvider(busUpdates.getInsuranceProvider());
+        if (busUpdates.getInsuranceIssueDate() != null) existingBus.setInsuranceIssueDate(busUpdates.getInsuranceIssueDate());
+        if (busUpdates.getInsuranceValidTill() != null) existingBus.setInsuranceValidTill(busUpdates.getInsuranceValidTill());
+        if (busUpdates.getPucNumber() != null) existingBus.setPucNumber(busUpdates.getPucNumber());
+        if (busUpdates.getPucTestingCenter() != null) existingBus.setPucTestingCenter(busUpdates.getPucTestingCenter());
+        if (busUpdates.getPucIssueDate() != null) existingBus.setPucIssueDate(busUpdates.getPucIssueDate());
+        if (busUpdates.getPucValidTill() != null) existingBus.setPucValidTill(busUpdates.getPucValidTill());
+        if (busUpdates.getFitnessCertificateNumber() != null) existingBus.setFitnessCertificateNumber(busUpdates.getFitnessCertificateNumber());
+        if (busUpdates.getFitnessIssuingAuthority() != null) existingBus.setFitnessIssuingAuthority(busUpdates.getFitnessIssuingAuthority());
+        if (busUpdates.getFitnessIssueDate() != null) existingBus.setFitnessIssueDate(busUpdates.getFitnessIssueDate());
+        if (busUpdates.getFitnessValidTill() != null) existingBus.setFitnessValidTill(busUpdates.getFitnessValidTill());
+        if (busUpdates.getDocumentsJson() != null) existingBus.setDocumentsJson(busUpdates.getDocumentsJson());
+
+        Bus saved = busRepository.save(existingBus);
+        return ResponseEntity.ok(saved);
     }
 
     @PutMapping("/{id}/deactivate")

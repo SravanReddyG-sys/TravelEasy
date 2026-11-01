@@ -29,6 +29,28 @@ export interface Bus {
   busCategory?: string;
   busImages?: string[];
   layoutSummary?: string;
+
+  // Document Information Metadata (Step 3)
+  rcIssuingAuthority?: string;
+  rcIssueDate?: string;
+  rcValidTill?: string;
+  permitNumber?: string;
+  permitType?: string;
+  permitIssueDate?: string;
+  permitValidTill?: string;
+  insurancePolicyNumber?: string;
+  insuranceProvider?: string;
+  insuranceIssueDate?: string;
+  insuranceValidTill?: string;
+  pucNumber?: string;
+  pucTestingCenter?: string;
+  pucIssueDate?: string;
+  pucValidTill?: string;
+  fitnessCertificateNumber?: string;
+  fitnessIssuingAuthority?: string;
+  fitnessIssueDate?: string;
+  fitnessValidTill?: string;
+  documentsJson?: string;
 }
 
 export interface BusBasicDetailsForm {
@@ -50,6 +72,55 @@ export interface BusBasicDetailsForm {
   interiorImageUrl?: string;
   exteriorImagePreview?: string;
   interiorImagePreview?: string;
+  templateId?: string;
+  busConfiguration?: string;
+  totalSeats?: number;
+  documents?: BusDocumentsForm;
+}
+
+export interface RegistrationCertificateDoc {
+  registrationNumber: string;
+  issuingAuthority: string;
+  issueDate: string;
+  validTill: string;
+}
+
+export interface PermitCertificateDoc {
+  permitNumber: string;
+  permitType: string;
+  issueDate: string;
+  validTill: string;
+}
+
+export interface InsuranceCertificateDoc {
+  policyNumber: string;
+  provider: string;
+  customProviderName?: string;
+  issueDate: string;
+  validTill: string;
+}
+
+export interface PollutionCertificateDoc {
+  pucNumber: string;
+  testingCenter: string;
+  issueDate: string;
+  validTill: string;
+}
+
+export interface FitnessCertificateDoc {
+  certificateNumber: string;
+  issuingAuthority: string;
+  customAuthorityName?: string;
+  issueDate: string;
+  validTill: string;
+}
+
+export interface BusDocumentsForm {
+  registrationCertificate: RegistrationCertificateDoc;
+  permitCertificate: PermitCertificateDoc;
+  insuranceCertificate: InsuranceCertificateDoc;
+  pollutionCertificate: PollutionCertificateDoc;
+  fitnessCertificate: FitnessCertificateDoc;
 }
 
 export interface Schedule {

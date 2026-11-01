@@ -353,4 +353,118 @@ public class BusBasicDetailsValidationAndStorageTest {
         );
         assertEquals(HttpStatus.NOT_FOUND, verifyGone.getStatusCode());
     }
+
+    @Test
+    @DisplayName("API: Attempt to delete image associated with a registered bus is rejected with 409 Conflict")
+    void testApi_DeleteImage_AssociatedWithRegisteredBus_Rejected409() {
+        Long operatorId = 701L;
+        String token = createToken(operatorId, "ROLE_BUS_OPERATOR", "operator701@traveleasy.com");
+
+        // 1. Store a test image
+        byte[] jpegBytes = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01};
+        MockMultipartFile file = new MockMultipartFile("file", "registered_bus.jpg", "image/jpeg", jpegBytes);
+        String filename = imageStorageService.storeImage(file, "exterior");
+        assertNotNull(filename);
+
+        // 2. Register a bus referencing this image
+        String uniqueBusNumber = "KA05" + UUID.randomUUID().toString().substring(0, 4).toUpperCase();
+        Bus registeredBus = Bus.builder()
+                .busNumber(uniqueBusNumber)
+                .busName("Protected Fleet Bus")
+                .operatorId(operatorId)
+                .operatorName("Test Operator")
+                .manufacturer("Volvo")
+                .model("9600")
+                .busType("Seater")
+                .facilityType("AC")
+                .exteriorImageUrl("/api/buses/images/" + filename)
+                .interiorImageUrl("/api/buses/images/int_dummy.jpg")
+                .totalSeats(36)
+                .build();
+        registeredBus = busRepository.save(registeredBus);
+
+        try {
+            // 3. Attempt to delete the registered bus image via DELETE endpoint
+            HttpHeaders deleteHeaders = new HttpHeaders();
+            deleteHeaders.set("Authorization", "Bearer " + token);
+            HttpEntity<Void> deleteEntity = new HttpEntity<>(deleteHeaders);
+
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    getBaseUrl() + "/images/" + filename,
+                    HttpMethod.DELETE,
+                    deleteEntity,
+                    Map.class
+            );
+
+            // Must be rejected with HTTP 409 Conflict
+            assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
+            assertNotNull(response.getBody());
+            assertTrue(response.getBody().get("message").toString().contains("actively associated with a registered bus"));
+
+            // Verify file still exists on disk and is readable
+            Resource resource = imageStorageService.loadAsResource(filename);
+            assertNotNull(resource);
+            assertTrue(resource.exists());
+        } finally {
+            // Cleanup registered bus and test image
+            busRepository.delete(registeredBus);
+            imageStorageService.deleteImage(filename);
+        }
+    }
+
+    @Test
+    @DisplayName("API: Path traversal in delete endpoint is prevented")
+    void testApi_DeleteImage_PathTraversalPrevented() {
+        Long operatorId = 701L;
+        String token = createToken(operatorId, "ROLE_BUS_OPERATOR", "operator701@traveleasy.com");
+
+        HttpHeaders deleteHeaders = new HttpHeaders();
+        deleteHeaders.set("Authorization", "Bearer " + token);
+        HttpEntity<Void> deleteEntity = new HttpEntity<>(deleteHeaders);
+
+        // Attempt deletion with ../
+        ResponseEntity<Map> response = restTemplate.exchange(
+                getBaseUrl() + "/images/..%2F..%2Fsecret.txt",
+                HttpMethod.DELETE,
+                deleteEntity,
+                Map.class
+        );
+
+        // Expect either Bad Request, Not Found, or Forbidden, never 200 OK
+        assertNotEquals(HttpStatus.OK, response.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("API: Repeated deletion of already deleted temporary image returns 404 cleanly")
+    void testApi_DeleteImage_RepeatedDeletion_Returns404() {
+        Long operatorId = 701L;
+        String token = createToken(operatorId, "ROLE_BUS_OPERATOR", "operator701@traveleasy.com");
+
+        // 1. Store a test image
+        byte[] jpegBytes = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01};
+        MockMultipartFile file = new MockMultipartFile("file", "temp_to_delete.jpg", "image/jpeg", jpegBytes);
+        String filename = imageStorageService.storeImage(file, "exterior");
+
+        HttpHeaders deleteHeaders = new HttpHeaders();
+        deleteHeaders.set("Authorization", "Bearer " + token);
+        HttpEntity<Void> deleteEntity = new HttpEntity<>(deleteHeaders);
+
+        // 2. First deletion succeeds (200 OK)
+        ResponseEntity<Map> firstDelete = restTemplate.exchange(
+                getBaseUrl() + "/images/" + filename,
+                HttpMethod.DELETE,
+                deleteEntity,
+                Map.class
+        );
+        assertEquals(HttpStatus.OK, firstDelete.getStatusCode());
+
+        // 3. Second deletion of same image returns 404 Not Found cleanly
+        ResponseEntity<Map> secondDelete = restTemplate.exchange(
+                getBaseUrl() + "/images/" + filename,
+                HttpMethod.DELETE,
+                deleteEntity,
+                Map.class
+        );
+        assertEquals(HttpStatus.NOT_FOUND, secondDelete.getStatusCode());
+    }
 }

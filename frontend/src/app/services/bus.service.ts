@@ -139,8 +139,16 @@ export class BusService {
     return this.http.put(`${this.apiUrl}/${busId}/activate`, {});
   }
 
+  updateBus(busId: number, busData: any): Observable<Bus> {
+    return this.http.put<Bus>(`${this.apiUrl}/${busId}`, busData);
+  }
+
   getTemplates(): Observable<any[]> {
     return this.http.get<any[]>(`${this.apiUrl}/templates`);
+  }
+
+  getTemplateDetails(templateId: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/templates/${encodeURIComponent(templateId)}`);
   }
 
   getTemplatesByConfiguration(config: string): Observable<any[]> {
