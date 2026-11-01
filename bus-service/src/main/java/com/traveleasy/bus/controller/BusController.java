@@ -1508,6 +1508,33 @@ public class BusController {
 
     // ==================== ROUTE MANAGEMENT ENDPOINTS ====================
 
+    @GetMapping("/routes/next-code")
+    public ResponseEntity<?> getNextRouteCode(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Authentication required to generate route code"));
+        }
+        String token = authHeader.substring(7).trim();
+        if (!securityService.validateToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Invalid or expired authorization token"));
+        }
+        String callerRole = securityService.extractRole(token);
+        if (!"ROLE_ADMIN".equalsIgnoreCase(callerRole) && !"ROLE_BUS_OPERATOR".equalsIgnoreCase(callerRole)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Bus Operator or Admin role required"));
+        }
+        Long callerUserId = securityService.extractUserId(token);
+        if (callerUserId == null || callerUserId <= 0) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Missing or invalid user identity in token"));
+        }
+
+        String nextCode = routeService.generateNextRouteCode();
+        return ResponseEntity.ok(Map.of("routeCode", nextCode));
+    }
+
     @PostMapping("/routes")
     public ResponseEntity<?> createRoute(
             @RequestBody com.traveleasy.bus.dto.CreateRouteRequest req,

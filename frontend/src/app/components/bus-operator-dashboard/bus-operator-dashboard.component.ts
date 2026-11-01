@@ -13020,7 +13020,8 @@ getActiveRoutesCount(): number {
     this.routeWizardStep = 1;
     this.step1FormSubmitted = false;
     this.wizardRouteName = '';
-    this.wizardRouteCode = 'RTE-PENDING';
+    this.wizardRouteCode = 'Loading...';
+    this.fetchNextRouteCode();
     this.wizardOrigin = '';
     this.customOrigin = '';
     this.wizardDestination = '';
@@ -13045,6 +13046,22 @@ getActiveRoutesCount(): number {
     this.isAllStopsExpanded = false;
     this.isSubmittingRoute = false;
     this.createRouteError = null;
+  }
+
+  fetchNextRouteCode(): void {
+    this.busService.getNextRouteCode().subscribe({
+      next: (res) => {
+        if (res && res.routeCode) {
+          this.wizardRouteCode = res.routeCode;
+        }
+      },
+      error: (err) => {
+        console.warn('Failed to fetch next route code from backend, using fallback', err);
+        if (!this.wizardRouteCode || this.wizardRouteCode === 'Loading...' || this.wizardRouteCode === 'RTE-PENDING') {
+          this.wizardRouteCode = this.generateWizardRouteCode();
+        }
+      }
+    });
   }
 
   cancelRouteCreation() {
@@ -13552,8 +13569,11 @@ getActiveRoutesCount(): number {
     }
 
     // Generate Candidate Route ID if pending or not set
-    if (!this.wizardRouteCode || this.wizardRouteCode === 'RTE-PENDING') {
-      this.wizardRouteCode = this.generateWizardRouteCode();
+    if (!this.wizardRouteCode || this.wizardRouteCode === 'RTE-PENDING' || this.wizardRouteCode === 'Loading...') {
+      this.fetchNextRouteCode();
+      if (!this.wizardRouteCode || this.wizardRouteCode === 'Loading...') {
+        this.wizardRouteCode = this.generateWizardRouteCode();
+      }
     }
 
     this.expandedStopsMap = {};
@@ -13579,7 +13599,7 @@ getActiveRoutesCount(): number {
         }
       }
     }
-    const nextNum = maxNum > 0 ? maxNum + 1 : (this.myRoutes ? this.myRoutes.length + 1 : 1);
+    const nextNum = maxNum > 0 ? maxNum + 1 : Math.floor(100 + Math.random() * 900);
     return `RTE-${nextNum.toString().padStart(3, '0')}`;
   }
 

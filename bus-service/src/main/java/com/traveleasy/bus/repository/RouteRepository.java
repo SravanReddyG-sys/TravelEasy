@@ -2,6 +2,7 @@ package com.traveleasy.bus.repository;
 
 import com.traveleasy.bus.model.Route;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -19,4 +20,7 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
     boolean existsByRouteCode(String routeCode);
 
     boolean existsByRouteCodeAndIdNot(String routeCode, Long id);
+
+    @Query("SELECT r.routeCode FROM Route r WHERE r.routeCode IS NOT NULL")
+    List<String> findAllRouteCodes();
 }

@@ -632,4 +632,86 @@ public class RouteManagementArchitectureTest {
         assertEquals(initialStopCount, routeStopRepository.count(), "No stop records should be persisted on failure");
         assertEquals(initialPointCount, routePointRepository.count(), "No point records should be persisted on failure");
     }
+
+    @Test
+    @DisplayName("ARCH-13: Verify Next Route Code Generation and Cross-Operator Route Code Uniqueness")
+    public void testGetNextRouteCode_AndCrossOperatorUniqueRouteId() {
+        Long operator1 = 901L;
+        String token1 = createTestToken(operator1, "ROLE_BUS_OPERATOR", "op901@traveleasy.com");
+        HttpHeaders headers1 = new HttpHeaders();
+        headers1.setBearerAuth(token1);
+        headers1.setContentType(MediaType.APPLICATION_JSON);
+
+        // 1. Operator 1 requests next route code
+        ResponseEntity<Map> nextCodeResp = restTemplate.exchange(
+                getBaseUrl() + "/routes/next-code",
+                HttpMethod.GET,
+                new HttpEntity<>(headers1),
+                Map.class
+        );
+        assertEquals(HttpStatus.OK, nextCodeResp.getStatusCode());
+        assertNotNull(nextCodeResp.getBody());
+        String code1 = (String) nextCodeResp.getBody().get("routeCode");
+        assertNotNull(code1);
+        assertTrue(code1.matches("^RTE-\\d+$"));
+
+        // Operator 1 creates route with code1
+        CreateRouteRequest req1 = buildSampleRouteRequest("Op1 Route", "Vijayawada", "Guntur");
+        req1.setRouteCode(code1);
+        ResponseEntity<RouteDto> createResp1 = restTemplate.postForEntity(
+                getBaseUrl() + "/routes",
+                new HttpEntity<>(req1, headers1),
+                RouteDto.class
+        );
+        assertEquals(HttpStatus.CREATED, createResp1.getStatusCode());
+        assertEquals(code1, createResp1.getBody().getRouteCode());
+
+        // 2. Newly registered Operator 2 (0 routes) requests next route code
+        Long operator2 = 902L;
+        String token2 = createTestToken(operator2, "ROLE_BUS_OPERATOR", "op902@traveleasy.com");
+        HttpHeaders headers2 = new HttpHeaders();
+        headers2.setBearerAuth(token2);
+        headers2.setContentType(MediaType.APPLICATION_JSON);
+
+        ResponseEntity<Map> nextCodeResp2 = restTemplate.exchange(
+                getBaseUrl() + "/routes/next-code",
+                HttpMethod.GET,
+                new HttpEntity<>(headers2),
+                Map.class
+        );
+        assertEquals(HttpStatus.OK, nextCodeResp2.getStatusCode());
+        String code2 = (String) nextCodeResp2.getBody().get("routeCode");
+        assertNotNull(code2);
+        assertTrue(code2.matches("^RTE-\\d+$"));
+        assertNotEquals(code1, code2, "Newly created operator must not get code1 which was already used");
+
+        // 3. Operator 2 creates route with auto-generated code
+        CreateRouteRequest req2 = buildSampleRouteRequest("Op2 Route", "Guntur", "Tenali");
+        req2.setRouteCode(code2);
+        ResponseEntity<RouteDto> createResp2 = restTemplate.postForEntity(
+                getBaseUrl() + "/routes",
+                new HttpEntity<>(req2, headers2),
+                RouteDto.class
+        );
+        assertEquals(HttpStatus.CREATED, createResp2.getStatusCode());
+        assertEquals(code2, createResp2.getBody().getRouteCode());
+
+        // 4. If Operator 3 submits route with duplicate auto-generated RTE code (e.g. code1), backend auto-reallocates
+        Long operator3 = 903L;
+        String token3 = createTestToken(operator3, "ROLE_BUS_OPERATOR", "op903@traveleasy.com");
+        HttpHeaders headers3 = new HttpHeaders();
+        headers3.setBearerAuth(token3);
+        headers3.setContentType(MediaType.APPLICATION_JSON);
+
+        CreateRouteRequest req3 = buildSampleRouteRequest("Op3 Route Auto Reallocate", "Tenali", "Vijayawada");
+        req3.setRouteCode(code1);
+        ResponseEntity<RouteDto> createResp3 = restTemplate.postForEntity(
+                getBaseUrl() + "/routes",
+                new HttpEntity<>(req3, headers3),
+                RouteDto.class
+        );
+        assertEquals(HttpStatus.CREATED, createResp3.getStatusCode());
+        assertNotEquals(code1, createResp3.getBody().getRouteCode(), "Backend should auto-allocate unique route code on collision");
+        assertTrue(createResp3.getBody().getRouteCode().matches("^RTE-\\d+$"));
+    }
 }
