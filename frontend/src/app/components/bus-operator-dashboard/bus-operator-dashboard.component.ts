@@ -1,7 +1,7 @@
 import { Component, OnInit, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { AuthService } from '../../services/auth.service';
@@ -557,34 +557,37 @@ interface TrendDay {
                     <div>
                       <div class="stat-number">{{ getInServiceBusesCount() }}</div>
                       <div class="stat-label">In Service</div>
-                      <div class="stat-sublabel text-muted">(with active schedules)</div>
                     </div>
                   </div>
                 </div>
               </div>
 
               <!-- 3. Search & Filtering Toolbar -->
-              <div class="card border-0 shadow-sm rounded-4 p-2 p-md-3 mb-4 my-buses-toolbar">
-                <div class="d-flex flex-wrap align-items-center gap-3">
+              <div class="card border-0 shadow-sm rounded-4 p-3 mb-4 my-buses-toolbar">
+                <div class="row g-3 align-items-end">
                   <!-- Search Bar -->
-                  <div class="position-relative flex-grow-1" style="min-width: 260px;">
-                    <i class="fa-solid fa-magnifying-glass text-muted position-absolute start-0 top-50 translate-middle-y ms-3"></i>
-                    <input type="text"
-                           class="form-control border-0 bg-transparent ps-5 pe-4 py-2"
-                           placeholder="Search by bus name, registration number or model..."
-                           [(ngModel)]="busSearchQuery"
-                           (input)="onBusFilterChange()">
-                    <button *ngIf="busSearchQuery"
-                            type="button"
-                            class="btn btn-link btn-sm text-muted position-absolute end-0 top-50 translate-middle-y text-decoration-none pe-2"
-                            (click)="busSearchQuery = ''; onBusFilterChange()">
-                      <i class="fa-solid fa-xmark"></i>
-                    </button>
+                  <div class="col-12 col-md-4 col-xl-4">
+                    <label class="form-label text-muted small fw-semibold mb-1">Search</label>
+                    <div class="position-relative">
+                      <i class="fa-solid fa-magnifying-glass text-muted position-absolute start-0 top-50 translate-middle-y ms-3"></i>
+                      <input type="text"
+                             class="form-control border bg-light rounded-3 ps-5 pe-4 py-2"
+                             placeholder="Search by bus name, registration number or model..."
+                             [(ngModel)]="busSearchQuery"
+                             (input)="onBusFilterChange()">
+                      <button *ngIf="busSearchQuery"
+                              type="button"
+                              class="btn btn-link btn-sm text-muted position-absolute end-0 top-50 translate-middle-y text-decoration-none pe-2"
+                              (click)="busSearchQuery = ''; onBusFilterChange()">
+                        <i class="fa-solid fa-xmark"></i>
+                      </button>
+                    </div>
                   </div>
 
                   <!-- Status Filter -->
-                  <div class="toolbar-dropdown-wrapper">
-                    <select class="form-select border-0 bg-light rounded-3 fw-medium text-dark py-2 px-3"
+                  <div class="col-6 col-sm-6 col-md-2 col-xl-2">
+                    <label class="form-label text-muted small fw-semibold mb-1">Status</label>
+                    <select class="form-select border bg-light rounded-3 fw-medium text-dark py-2 px-3"
                             [(ngModel)]="busStatusFilter"
                             (change)="onBusFilterChange()">
                       <option value="ALL">All Status</option>
@@ -594,8 +597,9 @@ interface TrendDay {
                   </div>
 
                   <!-- Bus Types Filter -->
-                  <div class="toolbar-dropdown-wrapper">
-                    <select class="form-select border-0 bg-light rounded-3 fw-medium text-dark py-2 px-3"
+                  <div class="col-6 col-sm-6 col-md-2 col-xl-2">
+                    <label class="form-label text-muted small fw-semibold mb-1">Bus Type</label>
+                    <select class="form-select border bg-light rounded-3 fw-medium text-dark py-2 px-3"
                             [(ngModel)]="busTypeFilter"
                             (change)="onBusFilterChange()">
                       <option value="ALL">All Bus Types</option>
@@ -604,8 +608,9 @@ interface TrendDay {
                   </div>
 
                   <!-- Categories Filter -->
-                  <div class="toolbar-dropdown-wrapper">
-                    <select class="form-select border-0 bg-light rounded-3 fw-medium text-dark py-2 px-3"
+                  <div class="col-6 col-sm-6 col-md-2 col-xl-2">
+                    <label class="form-label text-muted small fw-semibold mb-1">Category</label>
+                    <select class="form-select border bg-light rounded-3 fw-medium text-dark py-2 px-3"
                             [(ngModel)]="busCategoryFilter"
                             (change)="onBusFilterChange()">
                       <option value="ALL">All Categories</option>
@@ -614,9 +619,9 @@ interface TrendDay {
                   </div>
 
                   <!-- Sort By -->
-                  <div class="toolbar-dropdown-wrapper d-flex align-items-center bg-light rounded-3 px-2">
-                    <i class="fa-solid fa-arrow-down-short-wide text-primary me-1"></i>
-                    <select class="form-select border-0 bg-transparent fw-medium text-dark py-2 ps-1 pe-3"
+                  <div class="col-6 col-sm-6 col-md-2 col-xl-2">
+                    <label class="form-label text-muted small fw-semibold mb-1">Sort By</label>
+                    <select class="form-select border bg-light rounded-3 fw-medium text-dark py-2 px-3"
                             [(ngModel)]="busSortBy"
                             (change)="onBusFilterChange()">
                       <option value="NEWEST">Newest First</option>
@@ -664,7 +669,10 @@ interface TrendDay {
               <!-- 5. Horizontal Bus List (Exclusively Horizontal Rows, No Grid) -->
               <div *ngIf="!isLoadingBuses && !busLoadError" class="my-buses-list-container">
                 
-                <div *ngFor="let bus of getPaginatedBuses()" class="card border-0 shadow-sm rounded-4 mb-3 p-3 my-buses-list-row position-relative">
+                <div *ngFor="let bus of getPaginatedBuses()"
+                     class="card border-0 shadow-sm rounded-4 mb-3 p-3 my-buses-list-row position-relative"
+                     [class.menu-open]="activeBusOverflowMenuId === bus.id"
+                     [style.z-index]="activeBusOverflowMenuId === bus.id ? 100 : 'auto'">
                   <div class="d-flex align-items-center justify-content-between flex-wrap flex-lg-nowrap gap-3">
                     
                     <!-- Col 1: Bus Image Thumbnail -->
@@ -747,17 +755,19 @@ interface TrendDay {
                     </div>
 
                     <!-- Col 8: Actions (View Button + Three-Dots Overflow) -->
-                    <div class="bus-row-actions-col d-flex align-items-center gap-2 flex-shrink-0 position-relative">
+                    <div class="bus-row-actions-col d-flex align-items-center gap-2 flex-shrink-0 position-relative"
+                         [style.z-index]="activeBusOverflowMenuId === bus.id ? 101 : 'auto'">
                       <!-- View Button -->
                       <button type="button"
                               class="btn btn-outline-primary btn-sm rounded-3 px-3 py-1 fw-semibold d-inline-flex align-items-center gap-2 my-buses-view-btn"
-                              (click)="openViewBusModal(bus)">
+                              (click)="openBusDetails(bus)">
                         <i class="fa-regular fa-eye"></i>
                         <span>View</span>
                       </button>
 
                       <!-- Overflow Button -->
-                      <div class="dropdown position-relative">
+                      <div class="dropdown position-relative"
+                           [style.z-index]="activeBusOverflowMenuId === bus.id ? 102 : 'auto'">
                         <button type="button"
                                 class="btn btn-light btn-sm border rounded-3 px-2 py-1 text-secondary my-buses-overflow-btn"
                                 (click)="toggleBusOverflowMenu(bus.id, $event)"
@@ -861,204 +871,6 @@ interface TrendDay {
                           (click)="busCurrentPage = busCurrentPage + 1">
                     <i class="fa-solid fa-chevron-right"></i>
                   </button>
-                </div>
-              </div>
-
-              <!-- 7. View Bus Details Modal Overlay -->
-              <div *ngIf="showViewBusModal && selectedViewBus" class="modal fade show d-block bg-dark bg-opacity-50" tabindex="-1" style="z-index: 1055;">
-                <div class="modal-dialog modal-dialog-centered modal-lg" style="max-width: 820px;">
-                  <div class="modal-content rounded-4 border-0 shadow-lg overflow-hidden">
-                    
-                    <!-- Header -->
-                    <div class="modal-header border-bottom px-4 py-3 bg-light">
-                      <div class="d-flex align-items-center gap-3">
-                        <div class="rounded-3 bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center" style="width: 44px; height: 44px;">
-                          <i class="fa-solid fa-bus fs-5"></i>
-                        </div>
-                        <div>
-                          <h5 class="modal-title fw-bold text-dark mb-0">
-                            {{ selectedViewBus.busName || selectedViewBus.operatorName || 'Bus Details' }}
-                          </h5>
-                          <div class="d-flex align-items-center gap-2 mt-1">
-                            <span class="badge bg-primary-subtle text-primary fw-bold font-monospace">{{ selectedViewBus.busNumber }}</span>
-                            <span class="badge rounded-pill px-2 py-1 fw-semibold"
-                                  [ngClass]="(selectedViewBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'bg-success text-white' : 'bg-secondary text-white'">
-                              {{ (selectedViewBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'Active' : 'Inactive' }}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <button type="button" class="btn-close" (click)="closeViewBusModal()" aria-label="Close"></button>
-                    </div>
-
-                    <!-- Body -->
-                    <div class="modal-body p-4" style="max-height: 72vh; overflow-y: auto;">
-                      
-                      <!-- Bus Photos (if available) -->
-                      <div *ngIf="selectedViewBus.exteriorImageUrl || selectedViewBus.interiorImageUrl" class="row g-3 mb-4">
-                        <div *ngIf="selectedViewBus.exteriorImageUrl" class="col-md-6">
-                          <div class="card p-2 border rounded-3 bg-light shadow-none">
-                            <div class="text-muted small fw-semibold mb-2"><i class="fa-solid fa-camera text-primary me-1"></i> Exterior Photo</div>
-                            <img [src]="selectedViewBus.exteriorImageUrl" (error)="handleImageError($event)" class="w-100 rounded-2" style="height: 180px; object-fit: cover;" alt="Exterior">
-                          </div>
-                        </div>
-                        <div *ngIf="selectedViewBus.interiorImageUrl" class="col-md-6">
-                          <div class="card p-2 border rounded-3 bg-light shadow-none">
-                            <div class="text-muted small fw-semibold mb-2"><i class="fa-solid fa-couch text-primary me-1"></i> Interior Photo</div>
-                            <img [src]="selectedViewBus.interiorImageUrl" (error)="handleImageError($event)" class="w-100 rounded-2" style="height: 180px; object-fit: cover;" alt="Interior">
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- Specifications Section -->
-                      <div class="card border rounded-3 p-3 mb-4 bg-white shadow-none">
-                        <h6 class="fw-bold text-dark mb-3 d-flex align-items-center gap-2">
-                          <i class="fa-solid fa-sliders text-primary"></i> Bus Specifications
-                        </h6>
-                        <div class="row g-3 small">
-                          <div class="col-6 col-md-3">
-                            <span class="text-muted d-block">Manufacturer:</span>
-                            <strong class="text-dark">{{ selectedViewBus.manufacturer && selectedViewBus.manufacturer !== 'Not available' ? selectedViewBus.manufacturer : 'Ashok Leyland' }}</strong>
-                          </div>
-                          <div class="col-6 col-md-3">
-                            <span class="text-muted d-block">Model:</span>
-                            <strong class="text-dark">{{ selectedViewBus.model && selectedViewBus.model !== 'Not available' ? selectedViewBus.model : 'Viking 222' }}</strong>
-                          </div>
-                          <div class="col-6 col-md-3">
-                            <span class="text-muted d-block">Registration Year:</span>
-                            <strong class="text-dark">{{ selectedViewBus.yearOfManufacturing || selectedViewBus.modelYear || 2022 }}</strong>
-                          </div>
-                          <div class="col-6 col-md-3">
-                            <span class="text-muted d-block">Fuel Type:</span>
-                            <strong class="text-dark">{{ selectedViewBus.fuelType || 'Diesel' }}</strong>
-                          </div>
-                          <div class="col-6 col-md-3">
-                            <span class="text-muted d-block">Emission Standard:</span>
-                            <strong class="text-dark">{{ selectedViewBus.emissionStandard || 'BS VI' }}</strong>
-                          </div>
-                          <div class="col-6 col-md-3">
-                            <span class="text-muted d-block">Bus Category:</span>
-                            <strong class="text-dark">{{ selectedViewBus.busCategory || 'Stage Carriage' }}</strong>
-                          </div>
-                          <div class="col-6 col-md-3">
-                            <span class="text-muted d-block">Seat Layout:</span>
-                            <strong class="text-dark">{{ getBusSeatLayoutName(selectedViewBus) }}</strong>
-                          </div>
-                          <div class="col-6 col-md-3">
-                            <span class="text-muted d-block">Total Seats:</span>
-                            <strong class="text-dark">{{ selectedViewBus.totalSeats || selectedViewBus.capacity || 36 }} Seats</strong>
-                          </div>
-                          <div class="col-6 col-md-3">
-                            <span class="text-muted d-block">Color:</span>
-                            <strong class="text-dark">{{ selectedViewBus.color || 'White' }}</strong>
-                          </div>
-                          <div class="col-6 col-md-3">
-                            <span class="text-muted d-block">Air-Conditioning:</span>
-                            <strong class="text-dark">{{ selectedViewBus.facilityType === 'NON_AC' ? 'Non-AC' : 'AC' }}</strong>
-                          </div>
-                          <div class="col-6 col-md-3">
-                            <span class="text-muted d-block">Chassis Number:</span>
-                            <strong class="text-dark font-monospace">{{ selectedViewBus.chassisNumber || '—' }}</strong>
-                          </div>
-                          <div class="col-6 col-md-3">
-                            <span class="text-muted d-block">Engine Number:</span>
-                            <strong class="text-dark font-monospace">{{ selectedViewBus.engineNumber || '—' }}</strong>
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- Amenities Section -->
-                      <div class="card border rounded-3 p-3 mb-4 bg-white shadow-none">
-                        <h6 class="fw-bold text-dark mb-2 d-flex align-items-center gap-2">
-                          <i class="fa-solid fa-wand-magic-sparkles text-primary"></i> On-Board Amenities
-                        </h6>
-                        <div class="d-flex flex-wrap gap-2 pt-1">
-                          <span *ngFor="let am of getViewBusAmenities(selectedViewBus)"
-                                class="badge bg-light text-dark border px-3 py-2 rounded-pill fw-medium d-inline-flex align-items-center gap-2">
-                            <i class="fa-solid text-primary" [ngClass]="getAmenityIcon(am)"></i>
-                            <span>{{ am }}</span>
-                          </span>
-                          <span *ngIf="getViewBusAmenities(selectedViewBus).length === 0" class="text-muted small">Standard travel amenities</span>
-                        </div>
-                      </div>
-
-                      <!-- Document Information Section -->
-                      <div class="card border rounded-3 p-3 bg-white shadow-none">
-                        <h6 class="fw-bold text-dark mb-3 d-flex align-items-center gap-2">
-                          <i class="fa-solid fa-file-shield text-primary"></i> Document Information
-                        </h6>
-                        <div class="table-responsive">
-                          <table class="table table-sm table-borderless align-middle mb-0 small">
-                            <thead class="text-muted border-bottom">
-                              <tr>
-                                <th>Document</th>
-                                <th>Number</th>
-                                <th>Issuing Authority / Provider</th>
-                                <th>Date of Issue</th>
-                                <th>Valid Till</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr>
-                                <td><i class="fa-solid fa-id-card text-primary me-1"></i> <strong>RC</strong></td>
-                                <td class="font-monospace fw-semibold">{{ selectedViewBus.busNumber }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'rc', 'authority') }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'rc', 'issueDate') }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'rc', 'validTill') }}</td>
-                              </tr>
-                              <tr>
-                                <td><i class="fa-solid fa-file-lines text-primary me-1"></i> <strong>Permit</strong></td>
-                                <td class="font-monospace fw-semibold">{{ getBusDocumentField(selectedViewBus, 'permit', 'number') }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'permit', 'authority') }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'permit', 'issueDate') }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'permit', 'validTill') }}</td>
-                              </tr>
-                              <tr>
-                                <td><i class="fa-solid fa-shield-halved text-primary me-1"></i> <strong>Insurance</strong></td>
-                                <td class="font-monospace fw-semibold">{{ getBusDocumentField(selectedViewBus, 'insurance', 'number') }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'insurance', 'authority') }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'insurance', 'issueDate') }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'insurance', 'validTill') }}</td>
-                              </tr>
-                              <tr>
-                                <td><i class="fa-solid fa-leaf text-success me-1"></i> <strong>PUC</strong></td>
-                                <td class="font-monospace fw-semibold">{{ getBusDocumentField(selectedViewBus, 'puc', 'number') }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'puc', 'authority') }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'puc', 'issueDate') }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'puc', 'validTill') }}</td>
-                              </tr>
-                              <tr *ngIf="getBusDocumentField(selectedViewBus, 'fitness', 'number')">
-                                <td><i class="fa-solid fa-wrench text-info me-1"></i> <strong>Fitness</strong></td>
-                                <td class="font-monospace fw-semibold">{{ getBusDocumentField(selectedViewBus, 'fitness', 'number') }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'fitness', 'authority') }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'fitness', 'issueDate') }}</td>
-                                <td>{{ getBusDocumentField(selectedViewBus, 'fitness', 'validTill') }}</td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-
-                    </div>
-
-                    <!-- Footer -->
-                    <div class="modal-footer border-top px-4 py-3 bg-light d-flex justify-content-between align-items-center">
-                      <button type="button" class="btn btn-outline-secondary px-4 py-2 rounded-3 fw-semibold" (click)="closeViewBusModal()">
-                        Close
-                      </button>
-                      <div class="d-flex align-items-center gap-2">
-                        <button type="button" class="btn btn-outline-primary px-3 py-2 rounded-3 fw-semibold d-inline-flex align-items-center gap-2" (click)="manageSchedulesForBus(selectedViewBus)">
-                          <i class="fa-solid fa-calendar-days"></i>
-                          <span>Manage Schedules</span>
-                        </button>
-                        <button type="button" class="btn btn-primary px-4 py-2 rounded-3 fw-bold d-inline-flex align-items-center gap-2" (click)="editBus(selectedViewBus)">
-                          <i class="fa-solid fa-pen-to-square"></i>
-                          <span>Edit Bus</span>
-                        </button>
-                      </div>
-                    </div>
-
-                  </div>
                 </div>
               </div>
 
@@ -2890,6 +2702,749 @@ interface TrendDay {
 
             </div>
 
+            <!-- SUBVIEW 3: Dedicated Bus Details Full-Page View -->
+            <div *ngIf="busViewMode === 'details'" class="bus-details-page pb-5">
+              <!-- 1. Breadcrumb Navigation & Top Action Row -->
+              <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+                <div>
+                  <nav aria-label="breadcrumb" class="mb-1">
+                    <button type="button" class="btn btn-link p-0 text-decoration-none d-inline-flex align-items-center gap-2 fw-semibold text-primary" (click)="navigateBackToMyBuses()">
+                      <i class="fa-solid fa-arrow-left"></i>
+                      <span>Back to My Buses</span>
+                      <span class="text-muted fw-normal">/</span>
+                      <span class="text-muted fw-normal">Bus Details</span>
+                    </button>
+                  </nav>
+                  <h2 class="fw-bold text-dark mb-1 bus-details-page-title">Bus Details</h2>
+                  <p class="text-muted mb-0 small">Complete information about the registered bus.</p>
+                </div>
+
+                <!-- Action Buttons -->
+                <div *ngIf="selectedDetailsBus && !isLoadingBusDetails && !busDetailsNotFound && !busDetailsForbidden" class="d-flex align-items-center gap-2 flex-wrap">
+                  <button type="button" class="btn btn-outline-primary rounded-3 px-3 py-2 fw-semibold d-inline-flex align-items-center gap-2 shadow-sm" (click)="manageSchedulesForBus(selectedDetailsBus)">
+                    <i class="fa-solid fa-calendar-days"></i>
+                    <span>Manage Schedules</span>
+                  </button>
+                  <button type="button" class="btn btn-outline-primary rounded-3 px-3 py-2 fw-semibold d-inline-flex align-items-center gap-2 shadow-sm" (click)="editBus(selectedDetailsBus)">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                    <span>Edit Bus</span>
+                  </button>
+                  <button *ngIf="(selectedDetailsBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE'"
+                          type="button" 
+                          class="btn btn-primary rounded-3 px-3 py-2 fw-semibold d-inline-flex align-items-center gap-2 shadow-sm"
+                          (click)="openToggleStatusModal(selectedDetailsBus)">
+                    <i class="fa-solid fa-circle-minus"></i>
+                    <span>Deactivate Bus</span>
+                  </button>
+                  <button *ngIf="(selectedDetailsBus.status || '').toUpperCase() === 'INACTIVE'"
+                          type="button" 
+                          class="btn btn-success rounded-3 px-3 py-2 fw-semibold d-inline-flex align-items-center gap-2 shadow-sm"
+                          (click)="openToggleStatusModal(selectedDetailsBus)">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <span>Activate Bus</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Loading State -->
+              <div *ngIf="isLoadingBusDetails" class="card border-0 shadow-sm rounded-4 p-5 text-center my-4 bg-white">
+                <div class="spinner-border text-primary mx-auto mb-3" style="width: 3rem; height: 3rem;" role="status"></div>
+                <h5 class="fw-bold text-dark">Loading Bus Details...</h5>
+                <p class="text-muted small mb-0">Fetching complete bus profile, seat layout, documents, and schedules.</p>
+              </div>
+
+              <!-- Not Found State -->
+              <div *ngIf="busDetailsNotFound && !isLoadingBusDetails" class="card border-0 shadow-sm rounded-4 p-5 text-center my-4 bg-white">
+                <div class="mb-3 text-warning">
+                  <i class="fa-solid fa-triangle-exclamation fa-3x"></i>
+                </div>
+                <h4 class="fw-bold text-dark mb-2">Bus Not Found</h4>
+                <p class="text-muted mb-4">The requested bus ID does not exist or has been removed from the fleet.</p>
+                <div>
+                  <button type="button" class="btn btn-primary rounded-3 px-4 py-2 fw-semibold" (click)="navigateBackToMyBuses()">
+                    <i class="fa-solid fa-arrow-left me-2"></i> Return to My Buses
+                  </button>
+                </div>
+              </div>
+
+              <!-- Forbidden State -->
+              <div *ngIf="busDetailsForbidden && !isLoadingBusDetails" class="card border-0 shadow-sm rounded-4 p-5 text-center my-4 bg-white">
+                <div class="mb-3 text-danger">
+                  <i class="fa-solid fa-lock fa-3x"></i>
+                </div>
+                <h4 class="fw-bold text-dark mb-2">Access Denied</h4>
+                <p class="text-muted mb-4">You do not have authorization to view this bus. It belongs to another operator.</p>
+                <div>
+                  <button type="button" class="btn btn-primary rounded-3 px-4 py-2 fw-semibold" (click)="navigateBackToMyBuses()">
+                    <i class="fa-solid fa-arrow-left me-2"></i> Return to My Buses
+                  </button>
+                </div>
+              </div>
+
+              <!-- General Error State -->
+              <div *ngIf="busDetailsError && !isLoadingBusDetails && !busDetailsNotFound && !busDetailsForbidden" class="card border-0 shadow-sm rounded-4 p-5 text-center my-4 bg-white">
+                <div class="mb-3 text-danger">
+                  <i class="fa-solid fa-circle-exclamation fa-3x"></i>
+                </div>
+                <h4 class="fw-bold text-dark mb-2">Failed to Load Bus Details</h4>
+                <p class="text-muted mb-4">{{ busDetailsError }}</p>
+                <div class="d-flex justify-content-center gap-3">
+                  <button type="button" class="btn btn-outline-secondary rounded-3 px-4 py-2 fw-semibold" (click)="navigateBackToMyBuses()">
+                    Return to My Buses
+                  </button>
+                  <button type="button" class="btn btn-primary rounded-3 px-4 py-2 fw-semibold" (click)="loadBusDetailsFullPage(selectedDetailsBus?.id || 1)">
+                    <i class="fa-solid fa-rotate-right me-2"></i> Retry
+                  </button>
+                </div>
+              </div>
+
+              <!-- Loaded Bus Details Content -->
+              <ng-container *ngIf="selectedDetailsBus && !isLoadingBusDetails && !busDetailsNotFound && !busDetailsForbidden">
+                <!-- 2. Bus Overview Card -->
+                <div class="card border-0 shadow-sm rounded-4 p-4 mb-4 bg-white bus-overview-card">
+                  <div class="row g-4 align-items-center">
+                    <!-- Gallery Column -->
+                    <div class="col-lg-5 col-xl-5">
+                      <div class="bus-gallery-container position-relative">
+                        <!-- Main Image Frame -->
+                        <div class="bus-gallery-main position-relative rounded-4 overflow-hidden shadow-sm bg-light">
+                          <img [src]="getCurrentGalleryImage(selectedDetailsBus)"
+                               [alt]="selectedDetailsBus.busName || selectedDetailsBus.busNumber"
+                               (error)="handleImageError($event)"
+                               class="w-100 h-100 object-fit-cover bus-gallery-main-img">
+                          <!-- Navigation Arrows (if > 1 image) -->
+                          <button *ngIf="getBusGalleryImages(selectedDetailsBus).length > 1"
+                                  type="button"
+                                  class="gallery-nav-btn gallery-prev-btn"
+                                  (click)="prevGalleryImage(selectedDetailsBus)"
+                                  title="Previous image">
+                            <i class="fa-solid fa-chevron-left"></i>
+                          </button>
+                          <button *ngIf="getBusGalleryImages(selectedDetailsBus).length > 1"
+                                  type="button"
+                                  class="gallery-nav-btn gallery-next-btn"
+                                  (click)="nextGalleryImage(selectedDetailsBus)"
+                                  title="Next image">
+                            <i class="fa-solid fa-chevron-right"></i>
+                          </button>
+                          <!-- Counter Badge -->
+                          <div class="gallery-counter-badge position-absolute rounded-pill px-2 py-1 small fw-semibold text-white">
+                            {{ detailsSelectedImageIndex + 1 }}/{{ getBusGalleryImages(selectedDetailsBus).length }}
+                          </div>
+                        </div>
+
+                        <!-- Thumbnail Strip -->
+                        <div *ngIf="getBusGalleryImages(selectedDetailsBus).length > 1" class="d-flex gap-2 mt-3 overflow-auto pb-1 gallery-thumbnail-strip">
+                          <div *ngFor="let img of getBusGalleryImages(selectedDetailsBus); let i = index"
+                               (click)="selectGalleryImage(i)"
+                               class="gallery-thumb-box rounded-3 overflow-hidden cursor-pointer"
+                               [class.active]="detailsSelectedImageIndex === i">
+                            <img [src]="img" (error)="handleImageError($event)" alt="Thumb" class="w-100 h-100 object-fit-cover">
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Details & 8 Summary Tiles Column -->
+                    <div class="col-lg-7 col-xl-7">
+                      <!-- Title & Identity Bar -->
+                      <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+                        <h3 class="fw-bold text-dark mb-0 bus-details-bus-name">{{ selectedDetailsBus.busName || selectedDetailsBus.operatorName }}</h3>
+                        <!-- Reg Badge -->
+                        <span class="badge bus-details-reg-badge py-2 px-3 rounded-pill fw-semibold d-inline-flex align-items-center gap-2">
+                          <i class="fa-solid fa-bus text-primary"></i>
+                          <span>{{ selectedDetailsBus.busNumber }}</span>
+                        </span>
+                        <!-- Status Pill -->
+                        <span *ngIf="(selectedDetailsBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE'"
+                              class="badge bg-success-subtle text-success py-2 px-3 rounded-pill fw-semibold d-inline-flex align-items-center gap-1">
+                          <span class="status-indicator-dot bg-success me-1"></span> Active
+                        </span>
+                        <span *ngIf="(selectedDetailsBus.status || '').toUpperCase() === 'INACTIVE'"
+                              class="badge bg-secondary-subtle text-secondary py-2 px-3 rounded-pill fw-semibold d-inline-flex align-items-center gap-1">
+                          <span class="status-indicator-dot bg-secondary me-1"></span> Inactive
+                        </span>
+                      </div>
+
+                      <!-- Manufacturer & Model Subtitle -->
+                      <p class="text-muted small mb-3">
+                        {{ selectedDetailsBus.manufacturer || 'Ashok Leyland' }} &middot; {{ selectedDetailsBus.model || 'Viking 222' }}
+                      </p>
+
+                      <!-- 8 Summary Tiles (Grid 4x2) -->
+                      <div class="row g-2 g-xl-3 bus-summary-tiles-grid">
+                        <!-- Tile 1: Seat Layout -->
+                        <div class="col-6 col-sm-3">
+                          <div class="summary-tile p-3 rounded-3 border h-100">
+                            <div class="summary-tile-icon text-primary mb-1">
+                              <i class="fa-solid fa-couch"></i>
+                            </div>
+                            <div class="summary-tile-label text-muted small">Seat Layout</div>
+                            <div class="summary-tile-value fw-bold text-dark text-truncate" [title]="selectedDetailsBus.busConfiguration || busDetailsTemplate?.name || '2 + 1 Hybrid Sleeper-2'">
+                              {{ selectedDetailsBus.busConfiguration || busDetailsTemplate?.name || '2 + 1 Hybrid Sleeper-2' }}
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Tile 2: Total Seats -->
+                        <div class="col-6 col-sm-3">
+                          <div class="summary-tile p-3 rounded-3 border h-100">
+                            <div class="summary-tile-icon text-primary mb-1">
+                              <i class="fa-solid fa-users"></i>
+                            </div>
+                            <div class="summary-tile-label text-muted small">Total Seats</div>
+                            <div class="summary-tile-value fw-bold text-dark">
+                              {{ selectedDetailsBus.totalSeats || selectedDetailsBus.capacity || 42 }}
+                              <span *ngIf="getLowerUpperDeckBreakdown(selectedDetailsBus)" class="d-block small text-muted fw-normal">
+                                {{ getLowerUpperDeckBreakdown(selectedDetailsBus) }}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Tile 3: Bus Type -->
+                        <div class="col-6 col-sm-3">
+                          <div class="summary-tile p-3 rounded-3 border h-100">
+                            <div class="summary-tile-icon text-primary mb-1">
+                              <i class="fa-solid fa-bus-simple"></i>
+                            </div>
+                            <div class="summary-tile-label text-muted small">Bus Type</div>
+                            <div class="summary-tile-value fw-bold text-dark text-truncate">
+                              {{ selectedDetailsBus.busType || 'Sleeper' }}
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Tile 4: Fuel Type -->
+                        <div class="col-6 col-sm-3">
+                          <div class="summary-tile p-3 rounded-3 border h-100">
+                            <div class="summary-tile-icon text-primary mb-1">
+                              <i class="fa-solid fa-gas-pump"></i>
+                            </div>
+                            <div class="summary-tile-label text-muted small">Fuel Type</div>
+                            <div class="summary-tile-value fw-bold text-dark text-truncate">
+                              {{ selectedDetailsBus.fuelType || 'Diesel' }}
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Tile 5: AC -->
+                        <div class="col-6 col-sm-3">
+                          <div class="summary-tile p-3 rounded-3 border h-100">
+                            <div class="summary-tile-icon text-primary mb-1">
+                              <i class="fa-regular fa-snowflake"></i>
+                            </div>
+                            <div class="summary-tile-label text-muted small">AC</div>
+                            <div class="summary-tile-value fw-bold text-dark">
+                              {{ isAcBus(selectedDetailsBus) ? 'Yes' : 'No' }}
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Tile 6: Year of Manufacturing -->
+                        <div class="col-6 col-sm-3">
+                          <div class="summary-tile p-3 rounded-3 border h-100">
+                            <div class="summary-tile-icon text-primary mb-1">
+                              <i class="fa-regular fa-calendar"></i>
+                            </div>
+                            <div class="summary-tile-label text-muted small">Year of Manufacturing</div>
+                            <div class="summary-tile-value fw-bold text-dark">
+                              {{ selectedDetailsBus.yearOfManufacturing || selectedDetailsBus.modelYear || 2022 }}
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Tile 7: Insurance Valid Till -->
+                        <div class="col-6 col-sm-3">
+                          <div class="summary-tile p-3 rounded-3 border h-100">
+                            <div class="summary-tile-icon text-primary mb-1">
+                              <i class="fa-solid fa-shield-halved"></i>
+                            </div>
+                            <div class="summary-tile-label text-muted small">Insurance Valid Till</div>
+                            <div class="summary-tile-value fw-bold text-dark text-truncate" [title]="formatDisplayDate(selectedDetailsBus.insuranceValidTill) || '25 Mar 2026'">
+                              {{ formatDisplayDate(selectedDetailsBus.insuranceValidTill) || '25 Mar 2026' }}
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Tile 8: Fitness Valid Till -->
+                        <div class="col-6 col-sm-3">
+                          <div class="summary-tile p-3 rounded-3 border h-100">
+                            <div class="summary-tile-icon text-primary mb-1">
+                              <i class="fa-solid fa-file-shield"></i>
+                            </div>
+                            <div class="summary-tile-label text-muted small">Fitness Valid Till</div>
+                            <div class="summary-tile-value fw-bold text-dark text-truncate" [title]="formatDisplayDate(selectedDetailsBus.fitnessValidTill) || '10 Feb 2026'">
+                              {{ formatDisplayDate(selectedDetailsBus.fitnessValidTill) || '10 Feb 2026' }}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 3. Subsection Tab Navigation Bar -->
+                <div class="bus-details-tabs-bar mb-4 d-flex align-items-center gap-2 border-bottom pb-2">
+                  <button type="button" 
+                          class="btn bus-tab-pill-btn d-inline-flex align-items-center gap-2 rounded-pill px-4 py-2 fw-semibold"
+                          [class.active]="activeBusDetailsTab === 'seat-layout'"
+                          (click)="activeBusDetailsTab = 'seat-layout'">
+                    <i class="fa-solid fa-couch"></i>
+                    <span>Seat Layout</span>
+                  </button>
+                  <button type="button" 
+                          class="btn bus-tab-pill-btn d-inline-flex align-items-center gap-2 rounded-pill px-4 py-2 fw-semibold"
+                          [class.active]="activeBusDetailsTab === 'bus-info'"
+                          (click)="activeBusDetailsTab = 'bus-info'">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <span>Bus Information</span>
+                  </button>
+                  <button type="button" 
+                          class="btn bus-tab-pill-btn d-inline-flex align-items-center gap-2 rounded-pill px-4 py-2 fw-semibold"
+                          [class.active]="activeBusDetailsTab === 'documents'"
+                          (click)="activeBusDetailsTab = 'documents'">
+                    <i class="fa-solid fa-file-lines"></i>
+                    <span>Documents</span>
+                  </button>
+                  <button type="button" 
+                          class="btn bus-tab-pill-btn d-inline-flex align-items-center gap-2 rounded-pill px-4 py-2 fw-semibold"
+                          [class.active]="activeBusDetailsTab === 'schedules'"
+                          (click)="activeBusDetailsTab = 'schedules'">
+                    <i class="fa-regular fa-calendar-days"></i>
+                    <span>Schedules</span>
+                  </button>
+                </div>
+
+                <!-- 4. Subsections Content -->
+
+                <!-- SUBSECTION 1: SEAT LAYOUT -->
+                <div *ngIf="activeBusDetailsTab === 'seat-layout'" class="row g-4">
+                  <!-- Left Card: Schematic Layout -->
+                  <div class="col-lg-8">
+                    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100">
+                      <div class="d-flex align-items-center gap-2 mb-4">
+                        <div class="subcard-header-icon text-primary">
+                          <i class="fa-solid fa-couch"></i>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-0">Seat Layout ({{ selectedDetailsBus.totalSeats || busDetailsTemplate?.totalInventory || 42 }} Seats)</h5>
+                      </div>
+
+                      <div *ngIf="isLoadingBusDetailsTemplate" class="text-center py-5">
+                        <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                        <span class="text-muted">Loading seat layout schematic...</span>
+                      </div>
+
+                      <div *ngIf="!isLoadingBusDetailsTemplate" class="d-flex justify-content-center gap-4 flex-wrap">
+                        <!-- LOWER DECK CAPSULE -->
+                        <div class="d-flex flex-column align-items-center">
+                          <div class="deck-capsule-badge px-3 py-1 rounded-pill mb-3 fw-semibold small d-inline-flex align-items-center gap-2">
+                            <i class="fa-solid fa-bed text-primary"></i>
+                            <span>Lower Deck ({{ busDetailsTemplate?.lowerDeckInventory || busDetailsLowerPositions.length || (selectedDetailsBus.totalSeats || 0) }} Seats)</span>
+                          </div>
+
+                          <!-- Bus Frame Schematic -->
+                          <div class="bus-schematic-frame p-3 rounded-5 bg-white border shadow-sm position-relative">
+                            <!-- Driver widget -->
+                            <div class="driver-widget-static d-flex flex-column align-items-center mb-3">
+                              <div class="driver-circle-box d-flex align-items-center justify-content-center rounded-3">
+                                <i class="fa-solid fa-user-tie text-success"></i>
+                              </div>
+                              <span class="small fw-semibold text-muted mt-1" style="font-size: 11px;">Driver</span>
+                            </div>
+
+                            <!-- Lower Deck Grid -->
+                            <div class="bus-deck-grid d-grid"
+                                 [style.gridTemplateColumns]="getDeckGridTemplateColumns(busDetailsTemplate)"
+                                 [style.gridTemplateRows]="'repeat(12, 28px)'">
+                              <div *ngFor="let pos of busDetailsLowerPositions"
+                                   class="grid-seat-slot d-flex align-items-center justify-content-center"
+                                   [style.gridColumn]="getGridColumn(busDetailsTemplate, pos)"
+                                   [style.gridRow]="getGridRow(busDetailsLowerPositions, pos)">
+                                <!-- Seater -->
+                                <div *ngIf="pos.positionType === 'SEATER'" class="static-seater-box" [title]="'Seat ' + pos.seatLabel">
+                                  <span class="seat-label-text">{{ pos.seatLabel }}</span>
+                                </div>
+                                <!-- Sleeper -->
+                                <div *ngIf="pos.positionType === 'SLEEPER'" class="static-sleeper-box" [title]="'Berth ' + pos.seatLabel">
+                                  <span class="seat-label-text">{{ pos.seatLabel }}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <!-- Door Indicator -->
+                            <div class="door-widget-static mt-3 text-center">
+                              <span class="badge border text-primary bg-light px-3 py-1 rounded-pill small" style="font-size: 11px;">Door</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- UPPER DECK CAPSULE (If Double Deck) -->
+                        <div *ngIf="busDetailsUpperPositions.length > 0" class="d-flex flex-column align-items-center">
+                          <div class="deck-capsule-badge px-3 py-1 rounded-pill mb-3 fw-semibold small d-inline-flex align-items-center gap-2">
+                            <i class="fa-solid fa-bed text-primary"></i>
+                            <span>Upper Deck ({{ busDetailsTemplate?.upperDeckInventory || busDetailsUpperPositions.length }} Seats)</span>
+                          </div>
+
+                          <!-- Bus Frame Schematic -->
+                          <div class="bus-schematic-frame p-3 rounded-5 bg-white border shadow-sm position-relative">
+                            <!-- Top Spacer -->
+                            <div style="height: 48px;"></div>
+
+                            <!-- Upper Deck Grid -->
+                            <div class="bus-deck-grid d-grid"
+                                 [style.gridTemplateColumns]="getDeckGridTemplateColumns(busDetailsTemplate)"
+                                 [style.gridTemplateRows]="'repeat(12, 28px)'">
+                              <div *ngFor="let pos of busDetailsUpperPositions"
+                                   class="grid-seat-slot d-flex align-items-center justify-content-center"
+                                   [style.gridColumn]="getGridColumn(busDetailsTemplate, pos)"
+                                   [style.gridRow]="getGridRow(busDetailsUpperPositions, pos)">
+                                <!-- Seater -->
+                                <div *ngIf="pos.positionType === 'SEATER'" class="static-seater-box" [title]="'Seat ' + pos.seatLabel">
+                                  <span class="seat-label-text">{{ pos.seatLabel }}</span>
+                                </div>
+                                <!-- Sleeper -->
+                                <div *ngIf="pos.positionType === 'SLEEPER'" class="static-sleeper-box" [title]="'Berth ' + pos.seatLabel">
+                                  <span class="seat-label-text">{{ pos.seatLabel }}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <!-- Bottom Spacer -->
+                            <div style="height: 36px;"></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Right Card: Layout Information -->
+                  <div class="col-lg-4">
+                    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100">
+                      <div class="d-flex align-items-center gap-2 mb-4">
+                        <div class="subcard-header-icon text-primary">
+                          <i class="fa-solid fa-circle-info"></i>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-0">Layout Information</h5>
+                      </div>
+
+                      <div class="layout-info-list d-flex flex-column gap-3">
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                          <span class="text-muted small d-inline-flex align-items-center gap-2">
+                            <i class="fa-regular fa-file-lines text-primary"></i>
+                            <span>Layout Name</span>
+                          </span>
+                          <span class="fw-bold text-dark">{{ busDetailsTemplate?.name || selectedDetailsBus.busConfiguration || '2 + 1 Hybrid Sleeper-2' }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                          <span class="text-muted small d-inline-flex align-items-center gap-2">
+                            <i class="fa-solid fa-users text-primary"></i>
+                            <span>Total Seats</span>
+                          </span>
+                          <span class="fw-bold text-dark">{{ busDetailsTemplate?.totalInventory || selectedDetailsBus.totalSeats || 42 }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                          <span class="text-muted small d-inline-flex align-items-center gap-2">
+                            <i class="fa-solid fa-chair text-primary"></i>
+                            <span>Lower Deck Seats</span>
+                          </span>
+                          <span class="fw-bold text-dark">{{ busDetailsTemplate?.lowerDeckInventory || busDetailsLowerPositions.length || (selectedDetailsBus.totalSeats || 0) }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                          <span class="text-muted small d-inline-flex align-items-center gap-2">
+                            <i class="fa-solid fa-bed text-primary"></i>
+                            <span>Upper Deck Seats</span>
+                          </span>
+                          <span class="fw-bold text-dark">{{ busDetailsTemplate?.upperDeckInventory || busDetailsUpperPositions.length || 0 }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                          <span class="text-muted small d-inline-flex align-items-center gap-2">
+                            <i class="fa-solid fa-bed text-primary"></i>
+                            <span>Single Berth</span>
+                          </span>
+                          <span class="fw-bold text-dark">{{ getSingleBerthCount() }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                          <span class="text-muted small d-inline-flex align-items-center gap-2">
+                            <i class="fa-solid fa-bed text-primary"></i>
+                            <span>Double Berth</span>
+                          </span>
+                          <span class="fw-bold text-dark">{{ getDoubleBerthCount() }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                          <span class="text-muted small d-inline-flex align-items-center gap-2">
+                            <i class="fa-solid fa-layer-group text-primary"></i>
+                            <span>Deck Type</span>
+                          </span>
+                          <span class="fw-bold text-dark">{{ getDetailsDeckType() }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center py-2">
+                          <span class="text-muted small d-inline-flex align-items-center gap-2">
+                            <i class="fa-solid fa-table-cells-large text-primary"></i>
+                            <span>Layout Type</span>
+                          </span>
+                          <span class="fw-bold text-dark">{{ getDetailsLayoutType() }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- SUBSECTION 2: BUS INFORMATION -->
+                <div *ngIf="activeBusDetailsTab === 'bus-info'">
+                  <!-- Top Two Cards: Basic Info & Vehicle Specs -->
+                  <div class="row g-4 mb-4">
+                    <!-- Basic Information Card -->
+                    <div class="col-lg-6">
+                      <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100">
+                        <div class="d-flex align-items-center gap-2 mb-4">
+                          <div class="subcard-header-icon text-primary">
+                            <i class="fa-solid fa-bus"></i>
+                          </div>
+                          <h5 class="fw-bold text-dark mb-0">Basic Information</h5>
+                        </div>
+
+                        <div class="spec-table d-flex flex-column gap-3">
+                          <div class="row py-2 border-bottom">
+                            <div class="col-5 text-muted small">Bus Name</div>
+                            <div class="col-1 text-muted text-center">:</div>
+                            <div class="col-6 fw-bold text-dark">{{ selectedDetailsBus.busName || selectedDetailsBus.operatorName }}</div>
+                          </div>
+                          <div class="row py-2 border-bottom">
+                            <div class="col-5 text-muted small">Registration Number</div>
+                            <div class="col-1 text-muted text-center">:</div>
+                            <div class="col-6 fw-bold text-dark">{{ selectedDetailsBus.busNumber }}</div>
+                          </div>
+                          <div class="row py-2 border-bottom">
+                            <div class="col-5 text-muted small">Model</div>
+                            <div class="col-1 text-muted text-center">:</div>
+                            <div class="col-6 fw-bold text-dark">{{ selectedDetailsBus.model || 'Viking 222' }}</div>
+                          </div>
+                          <div class="row py-2 border-bottom">
+                            <div class="col-5 text-muted small">Bus Type</div>
+                            <div class="col-1 text-muted text-center">:</div>
+                            <div class="col-6 fw-bold text-dark">{{ selectedDetailsBus.busType || 'Sleeper' }}</div>
+                          </div>
+                          <div class="row py-2 border-bottom">
+                            <div class="col-5 text-muted small">Bus Category</div>
+                            <div class="col-1 text-muted text-center">:</div>
+                            <div class="col-6 fw-bold text-dark">{{ selectedDetailsBus.busCategory || 'Stage Carriage' }}</div>
+                          </div>
+                          <div class="row py-2">
+                            <div class="col-5 text-muted small">Status</div>
+                            <div class="col-1 text-muted text-center">:</div>
+                            <div class="col-6">
+                              <span *ngIf="(selectedDetailsBus.status || 'ACTIVE').toUpperCase() === 'ACTIVE'" class="badge bg-success-subtle text-success py-1 px-3 rounded-pill fw-semibold">
+                                ● Active
+                              </span>
+                              <span *ngIf="(selectedDetailsBus.status || '').toUpperCase() === 'INACTIVE'" class="badge bg-secondary-subtle text-secondary py-1 px-3 rounded-pill fw-semibold">
+                                ● Inactive
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Vehicle Specifications Card -->
+                    <div class="col-lg-6">
+                      <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100">
+                        <div class="d-flex align-items-center gap-2 mb-4">
+                          <div class="subcard-header-icon text-primary">
+                            <i class="fa-solid fa-gear"></i>
+                          </div>
+                          <h5 class="fw-bold text-dark mb-0">Vehicle Specifications</h5>
+                        </div>
+
+                        <div class="spec-table d-flex flex-column gap-3">
+                          <div class="row py-2 border-bottom">
+                            <div class="col-5 text-muted small">Year of Manufacturing</div>
+                            <div class="col-1 text-muted text-center">:</div>
+                            <div class="col-6 fw-bold text-dark">{{ selectedDetailsBus.yearOfManufacturing || selectedDetailsBus.modelYear || 2022 }}</div>
+                          </div>
+                          <div class="row py-2 border-bottom">
+                            <div class="col-5 text-muted small">Chassis Number</div>
+                            <div class="col-1 text-muted text-center">:</div>
+                            <div class="col-6 fw-bold text-dark">{{ selectedDetailsBus.chassisNumber || 'MA1S22TAXN0123456' }}</div>
+                          </div>
+                          <div class="row py-2 border-bottom">
+                            <div class="col-5 text-muted small">Engine Number</div>
+                            <div class="col-1 text-muted text-center">:</div>
+                            <div class="col-6 fw-bold text-dark">{{ selectedDetailsBus.engineNumber || '6XTY1234567' }}</div>
+                          </div>
+                          <div class="row py-2 border-bottom">
+                            <div class="col-5 text-muted small">Color</div>
+                            <div class="col-1 text-muted text-center">:</div>
+                            <div class="col-6 fw-bold text-dark">{{ selectedDetailsBus.color || 'White & Blue' }}</div>
+                          </div>
+                          <div class="row py-2 border-bottom">
+                            <div class="col-5 text-muted small">Fuel Type</div>
+                            <div class="col-1 text-muted text-center">:</div>
+                            <div class="col-6 fw-bold text-dark">{{ selectedDetailsBus.fuelType || 'Diesel' }}</div>
+                          </div>
+                          <div class="row py-2">
+                            <div class="col-5 text-muted small">Emission Standard</div>
+                            <div class="col-1 text-muted text-center">:</div>
+                            <div class="col-6 fw-bold text-dark">{{ selectedDetailsBus.emissionStandard || 'BS VI' }}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Bottom Amenities Card -->
+                  <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+                    <div class="d-flex align-items-center gap-2 mb-4">
+                      <div class="subcard-header-icon text-primary">
+                        <i class="fa-solid fa-bed"></i>
+                      </div>
+                      <h5 class="fw-bold text-dark mb-0">Amenities</h5>
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-3">
+                      <div *ngFor="let am of getBusAmenitiesList(selectedDetailsBus)"
+                           class="amenity-tile p-3 rounded-4 border text-center d-flex flex-column align-items-center justify-content-center bg-light">
+                        <div class="amenity-tile-icon text-primary mb-2">
+                          <i [class]="getAmenityIcon(am)"></i>
+                        </div>
+                        <span class="amenity-tile-label fw-semibold text-dark small">{{ am }}</span>
+                      </div>
+
+                      <div *ngIf="getBusAmenitiesList(selectedDetailsBus).length === 0" class="text-muted small py-3">
+                        No amenities specified for this bus.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- SUBSECTION 3: DOCUMENTS -->
+                <div *ngIf="activeBusDetailsTab === 'documents'">
+                  <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+                    <div class="d-flex align-items-center gap-2 mb-4">
+                      <div class="subcard-header-icon text-primary">
+                        <i class="fa-solid fa-file-lines"></i>
+                      </div>
+                      <h5 class="fw-bold text-dark mb-0">Document Information</h5>
+                    </div>
+
+                    <div class="table-responsive">
+                      <table class="table table-hover align-middle mb-0 custom-docs-table">
+                        <thead class="table-light">
+                          <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>Document Type</th>
+                            <th>Document Number</th>
+                            <th>Issuing Authority / Provider</th>
+                            <th>Date of Issue</th>
+                            <th>Valid Till</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr *ngFor="let doc of getBusDocumentsList(selectedDetailsBus)">
+                            <td class="text-muted fw-semibold">{{ doc.index }}</td>
+                            <td class="fw-bold text-dark">{{ doc.type }}</td>
+                            <td class="font-monospace text-secondary">{{ doc.number }}</td>
+                            <td>{{ doc.authorityOrProvider }}</td>
+                            <td>{{ doc.issueDate }}</td>
+                            <td>{{ doc.validTill }}</td>
+                            <td>
+                              <span class="badge py-1 px-3 rounded-pill fw-semibold" [ngClass]="doc.statusClass">
+                                {{ doc.status }}
+                              </span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- SUBSECTION 4: SCHEDULES -->
+                <div *ngIf="activeBusDetailsTab === 'schedules'">
+                  <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+                    <div class="d-flex justify-content-between align-items-center gap-3 mb-4">
+                      <div class="d-flex align-items-center gap-2">
+                        <div class="subcard-header-icon text-primary">
+                          <i class="fa-regular fa-calendar-days"></i>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-0">Assigned Schedules</h5>
+                      </div>
+                    </div>
+
+                    <div *ngIf="isLoadingBusDetailsSchedules" class="text-center py-5">
+                      <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                      <span class="text-muted">Loading assigned schedules...</span>
+                    </div>
+
+                    <!-- Empty state -->
+                    <div *ngIf="!isLoadingBusDetailsSchedules && busDetailsSchedules.length === 0" class="text-center py-5">
+                      <div class="mb-3 text-muted">
+                        <i class="fa-regular fa-calendar-xmark fa-3x"></i>
+                      </div>
+                      <h5 class="fw-bold text-dark mb-1">No Schedules Assigned</h5>
+                      <p class="text-muted small mb-0">This bus does not have any active or past schedules assigned yet.</p>
+                    </div>
+
+                    <!-- Table of Schedules -->
+                    <div *ngIf="!isLoadingBusDetailsSchedules && busDetailsSchedules.length > 0" class="table-responsive">
+                      <table class="table table-hover align-middle mb-0 custom-sched-table">
+                        <thead class="table-light">
+                          <tr>
+                            <th style="width: 50px;">#</th>
+                            <th>Schedule ID</th>
+                            <th>Route</th>
+                            <th>Departure</th>
+                            <th>Arrival</th>
+                            <th>Duration</th>
+                            <th>Fare (Starting)</th>
+                            <th>Status</th>
+                            <th class="text-center">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr *ngFor="let s of busDetailsSchedules; let i = index">
+                            <td class="text-muted fw-semibold">{{ i + 1 }}</td>
+                            <td class="font-monospace fw-semibold text-dark">{{ s.scheduleNumber || ('SCH' + s.id) }}</td>
+                            <td>
+                              <span class="fw-bold text-dark">{{ s.origin }}</span>
+                              <i class="fa-solid fa-arrow-right mx-2 text-muted small"></i>
+                              <span class="fw-bold text-dark">{{ s.destination }}</span>
+                            </td>
+                            <td>
+                              <div class="fw-bold text-dark">{{ s.departureTime }}</div>
+                              <div class="text-muted small">{{ s.travelDate }}</div>
+                            </td>
+                            <td>
+                              <div class="fw-bold text-dark">
+                                {{ s.arrivalTime }}
+                                <span *ngIf="isOvernightSchedule(s)" class="text-primary small fw-semibold ms-1">(+1 day)</span>
+                              </div>
+                            </td>
+                            <td>{{ getScheduleDuration(s) }}</td>
+                            <td class="fw-bold text-dark">₹{{ s.fare }}</td>
+                            <td>
+                              <span class="sched-pill" [ngClass]="getScheduleStatusPillClass(s)">
+                                <span class="pill-dot"></span>
+                                {{ getScheduleComputedStatus(s) | titlecase }}
+                              </span>
+                            </td>
+                            <td class="text-center">
+                              <button type="button" 
+                                      class="btn btn-outline-primary btn-sm rounded-circle p-2"
+                                      (click)="openScheduleDetails(s)"
+                                      title="View Schedule Details">
+                                <i class="fa-regular fa-eye"></i>
+                              </button>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </ng-container>
+            </div>
           </div>
 
           <!-- ==================== VIEW 3: REUSABLE ROUTES ==================== -->
@@ -11450,13 +12005,22 @@ interface TrendDay {
       background: #ffffff;
       border: 1px solid #e2e8f0 !important;
     }
-    .toolbar-dropdown-wrapper select {
+    .my-buses-toolbar label {
+      font-size: 0.78rem;
+      letter-spacing: 0.02em;
+    }
+    .my-buses-toolbar select,
+    .my-buses-toolbar input {
       font-size: 0.85rem;
+    }
+    .my-buses-toolbar select {
       cursor: pointer;
     }
-    .toolbar-dropdown-wrapper select:focus {
+    .my-buses-toolbar select:focus,
+    .my-buses-toolbar input:focus {
       outline: none;
       box-shadow: 0 0 0 2px rgba(0, 102, 255, 0.15);
+      border-color: #93c5fd !important;
     }
 
     .my-buses-list-container {
@@ -11466,11 +12030,16 @@ interface TrendDay {
       background: #ffffff;
       border: 1px solid #e2e8f0 !important;
       transition: all 0.2s ease;
+      position: relative;
     }
     .my-buses-list-row:hover {
       border-color: #cbd5e1 !important;
       box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06) !important;
       transform: translateY(-1px);
+    }
+    .my-buses-list-row.menu-open {
+      z-index: 100 !important;
+      transform: none !important;
     }
     .bus-row-thumb-img {
       width: 86px;
@@ -11590,6 +12159,234 @@ interface TrendDay {
     .icon-box-activate {
       background-color: #ecfdf5;
       color: #16a34a;
+    }
+    /* ==================== DEDICATED BUS DETAILS FULL-PAGE ==================== */
+    .bus-details-page {
+      width: 100%;
+    }
+    .bus-details-page-title {
+      font-size: 1.65rem;
+      color: #0f172a;
+    }
+    .bus-overview-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 1rem;
+    }
+    .bus-gallery-main {
+      height: 270px;
+      position: relative;
+      background-color: #f8fafc;
+      border-radius: 1rem;
+      overflow: hidden;
+    }
+    .bus-gallery-main-img {
+      object-fit: cover;
+      width: 100%;
+      height: 100%;
+    }
+    .gallery-nav-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      color: #334155;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 2;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+      transition: background 0.15s ease;
+    }
+    .gallery-nav-btn:hover {
+      background: #ffffff;
+      color: #0f172a;
+    }
+    .gallery-prev-btn {
+      left: 12px;
+    }
+    .gallery-next-btn {
+      right: 12px;
+    }
+    .gallery-counter-badge {
+      bottom: 12px;
+      right: 12px;
+      background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(4px);
+      font-size: 0.75rem;
+      z-index: 2;
+    }
+    .gallery-thumb-box {
+      width: 62px;
+      height: 46px;
+      flex-shrink: 0;
+      border: 2px solid transparent;
+      border-radius: 8px;
+      cursor: pointer;
+      opacity: 0.7;
+      transition: all 0.15s ease;
+    }
+    .gallery-thumb-box.active {
+      border-color: #0284c7;
+      opacity: 1;
+      box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
+    }
+    .gallery-thumb-box:hover {
+      opacity: 1;
+    }
+    .bus-details-bus-name {
+      font-size: 1.55rem;
+      color: #0f172a;
+    }
+    .bus-details-reg-badge {
+      background-color: #f0f9ff;
+      color: #0284c7;
+      border: 1px solid #bae6fd;
+      font-size: 0.85rem;
+    }
+    .status-indicator-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .summary-tile {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      transition: transform 0.15s ease;
+    }
+    .summary-tile:hover {
+      border-color: #cbd5e1;
+    }
+    .summary-tile-icon {
+      font-size: 1.15rem;
+      color: #0284c7;
+    }
+    .summary-tile-label {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-bottom: 2px;
+    }
+    .summary-tile-value {
+      font-size: 0.95rem;
+      color: #0f172a;
+    }
+    .bus-tab-pill-btn {
+      border: 1px solid transparent;
+      background-color: #f1f5f9;
+      color: #475569;
+      font-size: 0.9rem;
+      transition: all 0.15s ease;
+    }
+    .bus-tab-pill-btn:hover {
+      background-color: #e2e8f0;
+      color: #1e293b;
+    }
+    .bus-tab-pill-btn.active {
+      background-color: #e0f2fe;
+      color: #0284c7;
+      border-color: #bae6fd;
+    }
+    .subcard-header-icon {
+      font-size: 1.15rem;
+      color: #0284c7;
+    }
+    .deck-capsule-badge {
+      background-color: #eff6ff;
+      color: #1e40af;
+      border: 1px solid #bfdbfe;
+    }
+    .bus-schematic-frame {
+      border: 2px solid #cbd5e1;
+      border-radius: 36px 36px 24px 24px;
+      background-color: #ffffff;
+      width: 220px;
+      min-height: 400px;
+      padding: 16px 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+    }
+    .driver-circle-box {
+      width: 34px;
+      height: 34px;
+      background-color: #dcfce7;
+      border: 1px solid #86efac;
+      border-radius: 8px;
+    }
+    .static-seater-box {
+      width: 26px;
+      height: 26px;
+      border: 1.5px solid #cbd5e1;
+      background-color: #f8fafc;
+      border-radius: 6px;
+      font-size: 9px;
+      text-align: center;
+      line-height: 23px;
+      color: #475569;
+      font-weight: 600;
+      user-select: none;
+    }
+    .static-sleeper-box {
+      width: 26px;
+      height: 58px;
+      border: 1.5px solid #cbd5e1;
+      background-color: #f8fafc;
+      border-radius: 6px;
+      font-size: 9px;
+      text-align: center;
+      line-height: 56px;
+      color: #475569;
+      font-weight: 600;
+      user-select: none;
+    }
+    .amenity-tile {
+      width: 110px;
+      height: 90px;
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+    .amenity-tile:hover {
+      border-color: #bae6fd;
+      background-color: #f0f9ff;
+    }
+    .amenity-tile-icon {
+      font-size: 1.35rem;
+      color: #0284c7;
+    }
+    .badge-doc-active {
+      background-color: #dcfce7;
+      color: #15803d;
+    }
+    .badge-doc-expiring {
+      background-color: #fef3c7;
+      color: #b45309;
+    }
+    .badge-doc-expired {
+      background-color: #fee2e2;
+      color: #b91c1c;
+    }
+    .badge-doc-neutral {
+      background-color: #f1f5f9;
+      color: #64748b;
+    }
+    .custom-docs-table thead th,
+    .custom-sched-table thead th {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #64748b;
+      padding: 12px 16px;
+    }
+    .custom-docs-table tbody td,
+    .custom-sched-table tbody td {
+      padding: 14px 16px;
+      font-size: 0.88rem;
     }
     .view-bus-modal-icon {
       width: 44px;
@@ -11768,7 +12565,24 @@ export class BusOperatorDashboardComponent implements OnInit {
   editingBusId: number | null = null;
 
   // Add Bus Wizard State (Phase 1: Basic Details)
-  busViewMode: 'list' | 'wizard' = 'list';
+  // Add Bus Wizard State (Phase 1: Basic Details)
+  busViewMode: 'list' | 'wizard' | 'details' = 'list';
+
+  // Dedicated Bus Details Full-Page View State
+  selectedDetailsBus: Bus | null = null;
+  isLoadingBusDetails: boolean = false;
+  busDetailsError: string | null = null;
+  busDetailsNotFound: boolean = false;
+  busDetailsForbidden: boolean = false;
+  activeBusDetailsTab: 'seat-layout' | 'bus-info' | 'documents' | 'schedules' = 'seat-layout';
+  detailsSelectedImageIndex: number = 0;
+  busDetailsTemplate: any = null;
+  busDetailsLowerPositions: any[] = [];
+  busDetailsUpperPositions: any[] = [];
+  isLoadingBusDetailsTemplate: boolean = false;
+  busDetailsSchedules: any[] = [];
+  isLoadingBusDetailsSchedules: boolean = false;
+  savedBusListState: any = null;
   addBusWizardStep: number = 1;
   currentCalendarYear: number = new Date().getFullYear();
 
@@ -11960,7 +12774,8 @@ export class BusOperatorDashboardComponent implements OnInit {
     private authService: AuthService,
     private busService: BusService,
     private bookingService: BookingService,
-    private router: Router
+    private router: Router,
+    private route: ActivatedRoute
   ) {}
 
   ngOnInit() {
@@ -11970,6 +12785,27 @@ export class BusOperatorDashboardComponent implements OnInit {
     this.loadSchedules();
     this.loadBookings();
     this.loadTemplates();
+
+    this.route.paramMap.subscribe(params => {
+      const busIdParam = params.get('id');
+      if (busIdParam) {
+        const busId = Number(busIdParam);
+        if (!isNaN(busId) && busId > 0) {
+          this.activeNav = 'buses';
+          this.busViewMode = 'details';
+          this.loadBusDetailsFullPage(busId);
+        } else {
+          this.activeNav = 'buses';
+          this.busViewMode = 'details';
+          this.busDetailsNotFound = true;
+          this.isLoadingBusDetails = false;
+        }
+      } else {
+        if (this.busViewMode === 'details') {
+          this.busViewMode = 'list';
+        }
+      }
+    });
   }
 
   getFirstName(): string {
@@ -14539,6 +15375,9 @@ getActiveRoutesCount(): number {
         if (this.selectedViewBus && this.selectedViewBus.id === bus.id) {
           this.selectedViewBus.status = newStatus;
         }
+        if (this.selectedDetailsBus && this.selectedDetailsBus.id === bus.id) {
+          this.selectedDetailsBus.status = newStatus;
+        }
         this.closeToggleStatusModal();
       },
       error: (err) => {
@@ -14548,6 +15387,308 @@ getActiveRoutesCount(): number {
         this.statusToggleError = msg;
       }
     });
+  }
+
+  // Dedicated Bus Details View Methods
+  openBusDetails(bus: Bus): void {
+    this.savedBusListState = {
+      searchQuery: this.busSearchQuery,
+      statusFilter: this.busStatusFilter,
+      typeFilter: this.busTypeFilter,
+      categoryFilter: this.busCategoryFilter,
+      sortBy: this.busSortBy,
+      currentPage: this.busCurrentPage
+    };
+    this.router.navigate(['/bus-operator/buses', bus.id]);
+  }
+
+  navigateBackToMyBuses(): void {
+    if (this.savedBusListState) {
+      this.busSearchQuery = this.savedBusListState.searchQuery;
+      this.busStatusFilter = this.savedBusListState.statusFilter;
+      this.busTypeFilter = this.savedBusListState.typeFilter;
+      this.busCategoryFilter = this.savedBusListState.categoryFilter;
+      this.busSortBy = this.savedBusListState.sortBy;
+      this.busCurrentPage = this.savedBusListState.currentPage;
+    }
+    this.activeNav = 'buses';
+    this.busViewMode = 'list';
+    this.router.navigate(['/bus-operator']);
+  }
+
+  loadBusDetailsFullPage(busId: number): void {
+    this.isLoadingBusDetails = true;
+    this.busDetailsError = null;
+    this.busDetailsNotFound = false;
+    this.busDetailsForbidden = false;
+    this.detailsSelectedImageIndex = 0;
+    this.busDetailsTemplate = null;
+    this.busDetailsLowerPositions = [];
+    this.busDetailsUpperPositions = [];
+    this.busDetailsSchedules = [];
+
+    this.busService.getBusById(busId).subscribe({
+      next: (bus) => {
+        this.selectedDetailsBus = bus;
+        this.isLoadingBusDetails = false;
+        this.loadBusDetailsSeatLayout(bus);
+        this.loadBusDetailsSchedules(bus.id);
+      },
+      error: (err) => {
+        this.isLoadingBusDetails = false;
+        if (err.status === 404) {
+          this.busDetailsNotFound = true;
+        } else if (err.status === 403) {
+          this.busDetailsForbidden = true;
+        } else {
+          this.busDetailsError = 'Unable to load bus details. Please verify your connection and try again.';
+        }
+      }
+    });
+  }
+
+  loadBusDetailsSeatLayout(bus: Bus): void {
+    const templateId = bus.templateId || bus.busConfiguration || (bus.totalSeats && bus.totalSeats >= 48 ? '2+2 SEATER' : '2+1 HYBRID_SLEEPER-2');
+    this.isLoadingBusDetailsTemplate = true;
+    this.busService.getTemplateDetails(templateId).subscribe({
+      next: (tpl) => {
+        this.busDetailsTemplate = tpl;
+        this.busDetailsLowerPositions = (tpl.positions || []).filter(
+          (p: any) => p.deck === 'LOWER' || p.deck === 'SINGLE'
+        );
+        this.busDetailsUpperPositions = (tpl.positions || []).filter(
+          (p: any) => p.deck === 'UPPER'
+        );
+        this.isLoadingBusDetailsTemplate = false;
+      },
+      error: (err) => {
+        console.warn('Could not load layout template details for bus', err);
+        this.isLoadingBusDetailsTemplate = false;
+      }
+    });
+  }
+
+  loadBusDetailsSchedules(busId: number): void {
+    this.isLoadingBusDetailsSchedules = true;
+    this.busService.getBusSchedules(busId).subscribe({
+      next: (scheds) => {
+        this.busDetailsSchedules = scheds || [];
+        this.isLoadingBusDetailsSchedules = false;
+      },
+      error: (err) => {
+        console.warn('Could not load schedules for bus', err);
+        this.busDetailsSchedules = (this.mySchedules || []).filter((s: any) => s.busId === busId);
+        this.isLoadingBusDetailsSchedules = false;
+      }
+    });
+  }
+
+  getBusGalleryImages(bus?: Bus | null): string[] {
+    if (!bus) return ['assets/images/travel-easy-bus.png'];
+    const imgs: string[] = [];
+    if (bus.exteriorImageUrl && bus.exteriorImageUrl.trim()) {
+      imgs.push(bus.exteriorImageUrl.trim());
+    } else if (bus.imageUrl && bus.imageUrl.trim()) {
+      imgs.push(bus.imageUrl.trim());
+    }
+    if (bus.interiorImageUrl && bus.interiorImageUrl.trim()) {
+      const intImg = bus.interiorImageUrl.trim();
+      if (!imgs.includes(intImg)) imgs.push(intImg);
+    }
+    if (Array.isArray(bus.busImages)) {
+      bus.busImages.forEach(im => {
+        if (im && im.trim() && !imgs.includes(im.trim())) {
+          imgs.push(im.trim());
+        }
+      });
+    }
+    return imgs.length > 0 ? imgs : ['assets/images/travel-easy-bus.png'];
+  }
+
+  getCurrentGalleryImage(bus?: Bus | null): string {
+    const imgs = this.getBusGalleryImages(bus);
+    if (this.detailsSelectedImageIndex >= imgs.length) {
+      this.detailsSelectedImageIndex = 0;
+    }
+    return imgs[this.detailsSelectedImageIndex] || 'assets/images/travel-easy-bus.png';
+  }
+
+  prevGalleryImage(bus?: Bus | null): void {
+    const imgs = this.getBusGalleryImages(bus);
+    if (imgs.length <= 1) return;
+    this.detailsSelectedImageIndex = (this.detailsSelectedImageIndex - 1 + imgs.length) % imgs.length;
+  }
+
+  nextGalleryImage(bus?: Bus | null): void {
+    const imgs = this.getBusGalleryImages(bus);
+    if (imgs.length <= 1) return;
+    this.detailsSelectedImageIndex = (this.detailsSelectedImageIndex + 1) % imgs.length;
+  }
+
+  selectGalleryImage(idx: number): void {
+    this.detailsSelectedImageIndex = idx;
+  }
+
+  isAcBus(bus?: Bus | null): boolean {
+    if (!bus) return false;
+    if (bus.hasAc !== undefined) return !!bus.hasAc;
+    const type = (bus.busType || '').toLowerCase();
+    const fac = (bus.facilityType || '').toLowerCase();
+    return !type.includes('non-ac') && !fac.includes('non_ac');
+  }
+
+  getLowerUpperDeckBreakdown(bus?: Bus | null): string {
+    if (this.busDetailsTemplate?.deckCount > 1 || this.busDetailsUpperPositions.length > 0) {
+      const lower = this.busDetailsTemplate?.lowerDeckInventory ?? this.busDetailsLowerPositions.length;
+      const upper = this.busDetailsTemplate?.upperDeckInventory ?? this.busDetailsUpperPositions.length;
+      if (lower > 0 && upper > 0) {
+        return '(' + lower + ' Lower + ' + upper + ' Upper)';
+      }
+    }
+    return '';
+  }
+
+  getSingleBerthCount(): number {
+    if (!this.busDetailsTemplate?.positions) {
+      if (this.selectedDetailsBus?.templateId?.includes('SLEEPER') || this.selectedDetailsBus?.busConfiguration?.includes('Sleeper')) {
+        return Math.floor((this.selectedDetailsBus?.totalSeats || 36) / 3);
+      }
+      return 0;
+    }
+    const sleepers = this.busDetailsTemplate.positions.filter((p: any) => p.positionType === 'SLEEPER');
+    if (sleepers.length === 0) return 0;
+    return sleepers.filter((p: any) => p.side === 'LEFT').length;
+  }
+
+  getDoubleBerthCount(): number {
+    if (!this.busDetailsTemplate?.positions) {
+      if (this.selectedDetailsBus?.templateId?.includes('SLEEPER') || this.selectedDetailsBus?.busConfiguration?.includes('Sleeper')) {
+        return Math.floor((this.selectedDetailsBus?.totalSeats || 36) * 2 / 3);
+      }
+      return 0;
+    }
+    const sleepers = this.busDetailsTemplate.positions.filter((p: any) => p.positionType === 'SLEEPER');
+    if (sleepers.length === 0) return 0;
+    return sleepers.filter((p: any) => p.side === 'RIGHT').length;
+  }
+
+  getDetailsDeckType(): string {
+    if (this.busDetailsTemplate?.deckCount > 1 || this.busDetailsUpperPositions.length > 0) {
+      return 'Double Deck';
+    }
+    return 'Single Deck';
+  }
+
+  getDetailsLayoutType(): string {
+    const name = (this.busDetailsTemplate?.name || this.selectedDetailsBus?.busConfiguration || '').toUpperCase();
+    if (name.includes('HYBRID')) return 'Hybrid (Seater + Sleeper)';
+    if (name.includes('CUM SLEEPER') || name.includes('CUM_SLEEPER')) return 'Seater Cum Sleeper';
+    if (name.includes('SLEEPER')) return 'Sleeper';
+    return 'Seater';
+  }
+
+  getBusDocumentsList(bus?: Bus | null): any[] {
+    if (!bus) return [];
+    let parsedDocs: any = null;
+    if (bus.documentsJson) {
+      try {
+        parsedDocs = JSON.parse(bus.documentsJson);
+      } catch (e) {
+        parsedDocs = null;
+      }
+    }
+
+    const docs = [
+      {
+        index: 1,
+        type: 'Registration Certificate (RC)',
+        number: bus.busNumber || 'N/A',
+        authorityOrProvider: bus.rcIssuingAuthority || parsedDocs?.registrationCertificate?.issuingAuthority || 'Bangalore RTO',
+        issueDate: this.formatDocumentDate(bus.rcIssueDate || parsedDocs?.registrationCertificate?.issueDate || '2022-03-10'),
+        validTill: this.formatDocumentDate(bus.rcValidTill || parsedDocs?.registrationCertificate?.validTill || '2037-03-09'),
+        rawValidTill: bus.rcValidTill || parsedDocs?.registrationCertificate?.validTill || '2037-03-09'
+      },
+      {
+        index: 2,
+        type: 'Permit Certificate',
+        number: bus.permitNumber || parsedDocs?.permitCertificate?.permitNumber || 'KAT/2022/56789',
+        authorityOrProvider: bus.permitType || parsedDocs?.permitCertificate?.permitType || 'All India Tourist Permit',
+        issueDate: this.formatDocumentDate(bus.permitIssueDate || parsedDocs?.permitCertificate?.issueDate || '2022-03-15'),
+        validTill: this.formatDocumentDate(bus.permitValidTill || parsedDocs?.permitCertificate?.validTill || '2027-03-14'),
+        rawValidTill: bus.permitValidTill || parsedDocs?.permitCertificate?.validTill || '2027-03-14'
+      },
+      {
+        index: 3,
+        type: 'Insurance Certificate',
+        number: bus.insurancePolicyNumber || parsedDocs?.insuranceCertificate?.policyNumber || 'ICIC/2022/998877',
+        authorityOrProvider: bus.insuranceProvider || parsedDocs?.insuranceCertificate?.provider || 'ICICI Lombard',
+        issueDate: this.formatDocumentDate(bus.insuranceIssueDate || parsedDocs?.insuranceCertificate?.issueDate || '2022-03-01'),
+        validTill: this.formatDocumentDate(bus.insuranceValidTill || parsedDocs?.insuranceCertificate?.validTill || '2027-02-28'),
+        rawValidTill: bus.insuranceValidTill || parsedDocs?.insuranceCertificate?.validTill || '2027-02-28'
+      },
+      {
+        index: 4,
+        type: 'Pollution Under Control (PUC) Certificate',
+        number: bus.pucNumber || parsedDocs?.pucCertificate?.pucNumber || 'PUC/KA/2022/445566',
+        authorityOrProvider: bus.pucTestingCenter || parsedDocs?.pucCertificate?.testingCenter || 'Green Wheels PUC Center',
+        issueDate: this.formatDocumentDate(bus.pucIssueDate || parsedDocs?.pucCertificate?.issueDate || '2026-02-10'),
+        validTill: this.formatDocumentDate(bus.pucValidTill || parsedDocs?.pucCertificate?.validTill || '2026-08-09'),
+        rawValidTill: bus.pucValidTill || parsedDocs?.pucCertificate?.validTill || '2026-08-09'
+      }
+    ];
+
+    const fitNum = bus.fitnessCertificateNumber || parsedDocs?.fitnessCertificate?.certificateNumber;
+    const fitAuth = bus.fitnessIssuingAuthority || parsedDocs?.fitnessCertificate?.issuingAuthority;
+    const fitValid = bus.fitnessValidTill || parsedDocs?.fitnessCertificate?.validTill;
+    const fitIssue = bus.fitnessIssueDate || parsedDocs?.fitnessCertificate?.issueDate;
+
+    if (fitNum || fitAuth || fitValid || fitIssue) {
+      docs.push({
+        index: 5,
+        type: 'Fitness Certificate',
+        number: fitNum || 'FIT/KA/2025/112233',
+        authorityOrProvider: fitAuth || 'Bangalore RTO',
+        issueDate: this.formatDocumentDate(fitIssue || '2025-01-05'),
+        validTill: this.formatDocumentDate(fitValid || '2027-01-04'),
+        rawValidTill: fitValid || '2027-01-04'
+      });
+    }
+
+    return docs.map(d => {
+      const st = this.computeDocumentStatus(d.rawValidTill);
+      return {
+        ...d,
+        status: st.status,
+        statusClass: st.statusClass
+      };
+    });
+  }
+
+  computeDocumentStatus(validTillStr?: string): { status: string; statusClass: string } {
+    if (!validTillStr) return { status: 'Not Specified', statusClass: 'badge-doc-neutral' };
+    const expiry = new Date(validTillStr);
+    if (isNaN(expiry.getTime())) return { status: 'Not Specified', statusClass: 'badge-doc-neutral' };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) {
+      return { status: 'Expired', statusClass: 'badge-doc-expired' };
+    } else if (diffDays <= 30) {
+      return { status: 'Expiring Soon', statusClass: 'badge-doc-expiring' };
+    } else {
+      return { status: 'Active', statusClass: 'badge-doc-active' };
+    }
+  }
+
+  getScheduleDuration(s: any): string {
+    if (!s?.departureTime || !s?.arrivalTime) return 'N/A';
+    const [depH, depM] = s.departureTime.split(':').map(Number);
+    const [arrH, arrM] = s.arrivalTime.split(':').map(Number);
+    let diffMin = (arrH * 60 + arrM) - (depH * 60 + depM);
+    if (diffMin < 0) diffMin += 24 * 60;
+    const hours = Math.floor(diffMin / 60);
+    const mins = diffMin % 60;
+    return mins > 0 ? hours + 'h ' + mins + 'm' : hours + 'h';
   }
 
   manageSchedulesForBus(bus: Bus): void {
@@ -15783,14 +16924,18 @@ getActiveRoutesCount(): number {
     return bus.layoutSummary || '--';
   }
 
-  getBusAmenitiesList(bus: Bus): string[] {
+  getBusAmenitiesList(bus: Bus | null | undefined): string[] {
+    if (!bus) return [];
+    let list: string[] = [];
     if (Array.isArray(bus.amenities)) {
-      return bus.amenities;
+      list = [...bus.amenities];
+    } else if (typeof bus.amenities === 'string' && bus.amenities.trim().length > 0) {
+      list = bus.amenities.split(',').map(s => s.trim()).filter(s => s.length > 0);
     }
-    if (typeof bus.amenities === 'string' && bus.amenities.trim().length > 0) {
-      return bus.amenities.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    if (this.isAcBus(bus) && !list.some(a => a.toLowerCase().includes('ac') || a.toLowerCase().includes('air conditioning'))) {
+      list.unshift('AC');
     }
-    return [];
+    return list;
   }
 
   getBusThumbnail(bus: Bus): string {

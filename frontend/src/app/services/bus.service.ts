@@ -52,6 +52,16 @@ export class BusService {
     );
   }
 
+  getBusById(id: number): Observable<Bus> {
+    return this.http.get<any>(`${this.apiUrl}/${id}`).pipe(
+      map(b => this.normalizeBus(b))
+    );
+  }
+
+  getBusSchedules(busId: number): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/${busId}/schedules`);
+  }
+
   normalizeBus(b: any): Bus {
     const templateId = b.templateId || '';
     let layoutSummary = '--';

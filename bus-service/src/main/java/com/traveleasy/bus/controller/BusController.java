@@ -443,10 +443,99 @@ public class BusController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<?> getBusById(@PathVariable Long id) {
-        return busRepository.findById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<?> getBusById(
+            @PathVariable Long id,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Authentication required to access bus details"));
+        }
+
+        String token = authHeader.substring(7).trim();
+        if (!securityService.validateToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Invalid or expired authorization token"));
+        }
+
+        String callerRole = securityService.extractRole(token);
+        if (callerRole == null || callerRole.isBlank()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Missing or invalid role claim"));
+        }
+
+        boolean isAdmin = "ROLE_ADMIN".equalsIgnoreCase(callerRole);
+        boolean isOperator = "ROLE_BUS_OPERATOR".equalsIgnoreCase(callerRole);
+
+        if (!isAdmin && !isOperator) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Bus Operator role required"));
+        }
+
+        Long callerUserId = securityService.extractUserId(token);
+        if (callerUserId == null || callerUserId <= 0) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Missing or invalid user identity in token"));
+        }
+
+        Optional<Bus> busOpt = busRepository.findById(id);
+        if (busOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Bus not found with ID: " + id));
+        }
+
+        Bus bus = busOpt.get();
+        if (isOperator && !callerUserId.equals(bus.getOperatorId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Cannot access bus details for another operator"));
+        }
+
+        return ResponseEntity.ok(bus);
+    }
+
+    @GetMapping("/{id}/schedules")
+    public ResponseEntity<?> getBusSchedules(
+            @PathVariable Long id,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Authentication required to access bus schedules"));
+        }
+
+        String token = authHeader.substring(7).trim();
+        if (!securityService.validateToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Invalid or expired authorization token"));
+        }
+
+        String callerRole = securityService.extractRole(token);
+        boolean isAdmin = "ROLE_ADMIN".equalsIgnoreCase(callerRole);
+        boolean isOperator = "ROLE_BUS_OPERATOR".equalsIgnoreCase(callerRole);
+
+        if (!isAdmin && !isOperator) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Bus Operator role required"));
+        }
+
+        Long callerUserId = securityService.extractUserId(token);
+        if (callerUserId == null || callerUserId <= 0) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Missing or invalid user identity in token"));
+        }
+
+        Optional<Bus> busOpt = busRepository.findById(id);
+        if (busOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Bus not found with ID: " + id));
+        }
+
+        Bus bus = busOpt.get();
+        if (isOperator && !callerUserId.equals(bus.getOperatorId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Cannot access schedules for another operator's bus"));
+        }
+
+        List<BusSchedule> schedules = scheduleRepository.findByBusId(id);
+        return ResponseEntity.ok(schedules);
     }
 
     @PutMapping("/{id}")

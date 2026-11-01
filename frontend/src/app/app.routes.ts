@@ -47,6 +47,12 @@ export const routes: Routes = [
     canActivate: [roleGuard],
     data: { roles: ['ROLE_BUS_OPERATOR', 'ROLE_ADMIN'] }
   },
+  {
+    path: 'bus-operator/buses/:id',
+    component: BusOperatorDashboardComponent,
+    canActivate: [roleGuard],
+    data: { roles: ['ROLE_BUS_OPERATOR', 'ROLE_ADMIN'] }
+  },
   { path: 'hotel-manager', component: HotelManagerDashboardComponent },
   { path: 'admin', component: AdminDashboardComponent },
   { path: '**', redirectTo: 'home' }

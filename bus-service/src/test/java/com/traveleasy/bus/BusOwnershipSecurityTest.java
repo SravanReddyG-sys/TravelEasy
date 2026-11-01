@@ -354,4 +354,98 @@ public class BusOwnershipSecurityTest {
         assertNotNull(created);
         assertEquals(888L, created.getOperatorId());
     }
+
+    // ==================== 4. GET /api/buses/{id} & /api/buses/{id}/schedules TESTS ====================
+
+    @Test
+    @DisplayName("Unit: GET /api/buses/{id} - Unauthenticated request rejected with 401")
+    public void testGetBusById_Unauthenticated_Returns401() {
+        Bus bus = createAndSaveBus(888L, "ACTIVE");
+        ResponseEntity<Map> res = restTemplate.exchange(
+                getBaseUrl() + "/" + bus.getId(),
+                HttpMethod.GET,
+                new HttpEntity<>(null, authHeaders(null)),
+                Map.class);
+        assertEquals(HttpStatus.UNAUTHORIZED, res.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Unit: GET /api/buses/{id} - Customer role rejected with 403")
+    public void testGetBusById_CustomerRole_Returns403() {
+        Bus bus = createAndSaveBus(888L, "ACTIVE");
+        String customerToken = createTestToken(555L, "ROLE_CUSTOMER", "cust@example.com");
+        ResponseEntity<Map> res = restTemplate.exchange(
+                getBaseUrl() + "/" + bus.getId(),
+                HttpMethod.GET,
+                new HttpEntity<>(null, authHeaders(customerToken)),
+                Map.class);
+        assertEquals(HttpStatus.FORBIDDEN, res.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Unit: GET /api/buses/{id} - Cross-operator access denied with 403")
+    public void testGetBusById_CrossOperator_Returns403() {
+        Bus bus = createAndSaveBus(888L, "ACTIVE");
+        String otherOperatorToken = createTestToken(999L, "ROLE_BUS_OPERATOR", "other@operator.com");
+        ResponseEntity<Map> res = restTemplate.exchange(
+                getBaseUrl() + "/" + bus.getId(),
+                HttpMethod.GET,
+                new HttpEntity<>(null, authHeaders(otherOperatorToken)),
+                Map.class);
+        assertEquals(HttpStatus.FORBIDDEN, res.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Unit: GET /api/buses/{id} - Authorized operator views bus details")
+    public void testGetBusById_AuthorizedOperator_Returns200() {
+        Bus bus = createAndSaveBus(888L, "ACTIVE");
+        String operatorToken = createTestToken(888L, "ROLE_BUS_OPERATOR", "op888@traveleasy.com");
+        ResponseEntity<Bus> res = restTemplate.exchange(
+                getBaseUrl() + "/" + bus.getId(),
+                HttpMethod.GET,
+                new HttpEntity<>(null, authHeaders(operatorToken)),
+                Bus.class);
+        assertEquals(HttpStatus.OK, res.getStatusCode());
+        assertNotNull(res.getBody());
+        assertEquals(bus.getId(), res.getBody().getId());
+        assertEquals(888L, res.getBody().getOperatorId());
+    }
+
+    @Test
+    @DisplayName("Unit: GET /api/buses/{id} - Non-existent bus returns 404")
+    public void testGetBusById_NotFound_Returns404() {
+        String operatorToken = createTestToken(888L, "ROLE_BUS_OPERATOR", "op888@traveleasy.com");
+        ResponseEntity<Map> res = restTemplate.exchange(
+                getBaseUrl() + "/999999",
+                HttpMethod.GET,
+                new HttpEntity<>(null, authHeaders(operatorToken)),
+                Map.class);
+        assertEquals(HttpStatus.NOT_FOUND, res.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Unit: GET /api/buses/{id}/schedules - Authorized operator fetches assigned schedules")
+    public void testGetBusSchedules_AuthorizedOperator_Returns200() {
+        Bus bus = createAndSaveBus(888L, "ACTIVE");
+        BusSchedule schedule = BusSchedule.builder()
+                .busId(bus.getId())
+                .operatorId(888L)
+                .origin("Bengaluru")
+                .destination("Hyderabad")
+                .travelDate(LocalDate.now().plusDays(2))
+                .fare(650.0)
+                .status("SCHEDULED")
+                .build();
+        scheduleRepository.save(schedule);
+
+        String operatorToken = createTestToken(888L, "ROLE_BUS_OPERATOR", "op888@traveleasy.com");
+        ResponseEntity<List> res = restTemplate.exchange(
+                getBaseUrl() + "/" + bus.getId() + "/schedules",
+                HttpMethod.GET,
+                new HttpEntity<>(null, authHeaders(operatorToken)),
+                List.class);
+        assertEquals(HttpStatus.OK, res.getStatusCode());
+        assertNotNull(res.getBody());
+        assertFalse(res.getBody().isEmpty());
+    }
 }

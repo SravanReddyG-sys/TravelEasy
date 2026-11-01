@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: com.traveleasy.bus.SeatSegmentReservationTest
 -------------------------------------------------------------------------------
-Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 5.727 s -- in com.traveleasy.bus.SeatSegmentReservationTest
+Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 5.574 s -- in com.traveleasy.bus.SeatSegmentReservationTest
