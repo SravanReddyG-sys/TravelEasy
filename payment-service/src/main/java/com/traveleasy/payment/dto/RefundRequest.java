@@ -12,4 +12,5 @@ import lombok.NoArgsConstructor;
 public class RefundRequest {
     private Double amount; // Nullable for full refund
     private String reason;
+    private String idempotencyKey;
 }

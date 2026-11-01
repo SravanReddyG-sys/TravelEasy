@@ -1,17 +1,133 @@
 export interface Bus {
   id: number;
+  operatorId?: number;
   busNumber: string;
   operatorName: string;
   busType: string;
-  capacity: number;
-  hasAc: boolean;
-  isSleeper: boolean;
+  capacity?: number;
+  totalSeats?: number;
+  hasAc?: boolean;
+  isSleeper?: boolean;
+  amenities?: string | string[];
+  facilityType?: string;
+  busConfiguration?: string;
+  templateId?: string;
+  status?: string;
+  busName?: string;
+  manufacturer?: string;
+  model?: string;
+  yearOfManufacturing?: number;
+  modelYear?: number;
+  fuelType?: string;
+  imageUrl?: string;
+  exteriorImageUrl?: string;
+  interiorImageUrl?: string;
+  chassisNumber?: string;
+  engineNumber?: string;
+  emissionStandard?: string;
+  color?: string;
+  busCategory?: string;
+  busImages?: string[];
+  layoutSummary?: string;
+
+  // Document Information Metadata (Step 3)
+  rcIssuingAuthority?: string;
+  rcIssueDate?: string;
+  rcValidTill?: string;
+  permitNumber?: string;
+  permitType?: string;
+  permitIssueDate?: string;
+  permitValidTill?: string;
+  insurancePolicyNumber?: string;
+  insuranceProvider?: string;
+  insuranceIssueDate?: string;
+  insuranceValidTill?: string;
+  pucNumber?: string;
+  pucTestingCenter?: string;
+  pucIssueDate?: string;
+  pucValidTill?: string;
+  fitnessCertificateNumber?: string;
+  fitnessIssuingAuthority?: string;
+  fitnessIssueDate?: string;
+  fitnessValidTill?: string;
+  documentsJson?: string;
+}
+
+export interface BusBasicDetailsForm {
+  busNumber: string;
+  busName: string;
+  manufacturer: string;
+  model: string;
+  busType: string;
+  fuelType: string;
+  chassisNumber: string;
+  yearOfManufacturing: number | null;
+  engineNumber: string;
+  emissionStandard: string;
+  color: string;
+  busCategory: string;
+  facilityType: string; // 'AC' or 'NON_AC'
   amenities: string[];
+  exteriorImageUrl?: string;
+  interiorImageUrl?: string;
+  exteriorImagePreview?: string;
+  interiorImagePreview?: string;
+  templateId?: string;
+  busConfiguration?: string;
+  totalSeats?: number;
+  documents?: BusDocumentsForm;
+}
+
+export interface RegistrationCertificateDoc {
+  registrationNumber: string;
+  issuingAuthority: string;
+  issueDate: string;
+  validTill: string;
+}
+
+export interface PermitCertificateDoc {
+  permitNumber: string;
+  permitType: string;
+  issueDate: string;
+  validTill: string;
+}
+
+export interface InsuranceCertificateDoc {
+  policyNumber: string;
+  provider: string;
+  customProviderName?: string;
+  issueDate: string;
+  validTill: string;
+}
+
+export interface PollutionCertificateDoc {
+  pucNumber: string;
+  testingCenter: string;
+  issueDate: string;
+  validTill: string;
+}
+
+export interface FitnessCertificateDoc {
+  certificateNumber: string;
+  issuingAuthority: string;
+  customAuthorityName?: string;
+  issueDate: string;
+  validTill: string;
+}
+
+export interface BusDocumentsForm {
+  registrationCertificate: RegistrationCertificateDoc;
+  permitCertificate: PermitCertificateDoc;
+  insuranceCertificate: InsuranceCertificateDoc;
+  pollutionCertificate: PollutionCertificateDoc;
+  fitnessCertificate: FitnessCertificateDoc;
 }
 
 export interface Schedule {
   id: number;
+  operatorId?: number;
   busId: number;
+  routeId?: number;
   origin: string;
   destination: string;
   travelDate: string;
@@ -25,9 +141,18 @@ export interface Schedule {
   bus?: Bus;
   operatorName?: string;
   busType?: string;
+  busNumber?: string;
   amenities?: string[];
   hasAc?: boolean;
   isSleeper?: boolean;
+  arrivalDate?: string;
+  departureDateTime?: string;
+  arrivalDateTime?: string;
+  capacity?: number;
+  totalSeats?: number;
+  status?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Seat {
@@ -93,6 +218,19 @@ export interface DeckLayout {
   positions: SeatPosition[];
 }
 
+export interface ScheduleStop {
+  id?: number;
+  scheduleId?: number;
+  stopOrder: number;
+  stopName: string;
+  stopType?: string;
+  arrivalTime?: string;
+  departureTime?: string;
+  distanceKm?: number;
+  consecutiveFare?: number;
+  haltMinutes?: number;
+}
+
 export interface TripSeatLayout {
   scheduleId: number;
   busId: number;
@@ -116,4 +254,92 @@ export interface TripSeatLayout {
   boardingPoints?: string;
   droppingPoints?: string;
   decks: DeckLayout[];
+  fromOrder?: number;
+  toOrder?: number;
+  fromStopName?: string;
+  toStopName?: string;
+  stops?: ScheduleStop[];
 }
+
+export interface RoutePoint {
+  id?: number;
+  routeId?: number;
+  routeStopId?: number;
+  pointName: string;
+  pointType: 'BOARDING' | 'DROPPING';
+  address?: string;
+  timeSlot?: string;
+  active?: boolean;
+}
+
+export interface RouteStop {
+  id?: number;
+  routeId?: number;
+  stopOrder: number;
+  stopName: string;
+  stopType: 'ORIGIN' | 'INTERMEDIATE' | 'DESTINATION';
+  distanceKm?: number;
+  boardingPoints: RoutePoint[];
+  droppingPoints: RoutePoint[];
+}
+
+export interface Route {
+  id: number;
+  operatorId: number;
+  routeCode: string;
+  routeName: string;
+  origin: string;
+  destination: string;
+  description?: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'DRAFT' | string;
+  createdAt: string;
+  updatedAt: string;
+  stops?: RouteStop[];
+  scheduleCount?: number;
+}
+
+export interface CreateRouteRequest {
+  routeCode?: string;
+  routeName: string;
+  origin: string;
+  destination: string;
+  description?: string;
+  status?: string;
+  stops: {
+    stopOrder: number;
+    stopName: string;
+    distanceKm?: number;
+    boardingPoints: { pointName: string; address?: string; timeSlot?: string }[];
+    droppingPoints: { pointName: string; address?: string; timeSlot?: string }[];
+  }[];
+}
+
+export interface FareMatrixEntry {
+  fromStopOrder: number;
+  fromStopName: string;
+  toStopOrder: number;
+  toStopName: string;
+  distanceKm?: number;
+  calculatedFare: number;
+  customFare?: number | null;
+  effectiveFare: number;
+  isOverridden: boolean;
+  segmentCount?: number;
+}
+
+export interface FareOverrideItem {
+  fromStopOrder: number;
+  toStopOrder: number;
+  fromStopName?: string;
+  toStopName?: string;
+  customFare: number | null;
+}
+
+export interface ScheduleFareMatrixResponse {
+  scheduleId?: number | null;
+  totalStops: number;
+  totalPairs: number;
+  stops: ScheduleStop[];
+  matrix: FareMatrixEntry[];
+}
+

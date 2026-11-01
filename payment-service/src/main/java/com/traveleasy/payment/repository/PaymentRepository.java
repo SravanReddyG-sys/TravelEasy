@@ -10,4 +10,5 @@ public interface PaymentRepository extends JpaRepository<PaymentTransaction, Lon
     Optional<PaymentTransaction> findByRazorpayOrderId(String razorpayOrderId);
     Optional<PaymentTransaction> findByRazorpayPaymentId(String razorpayPaymentId);
     Optional<PaymentTransaction> findByRefundId(String refundId);
+    Optional<PaymentTransaction> findByIdempotencyKey(String idempotencyKey);
 }

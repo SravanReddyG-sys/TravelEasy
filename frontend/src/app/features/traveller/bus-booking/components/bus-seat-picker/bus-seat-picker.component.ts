@@ -1,7 +1,7 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges, NgZone, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { TripSeatLayout, DeckLayout, SeatPosition } from '../../../../../models/bus.model';
+import { TripSeatLayout, DeckLayout, SeatPosition, ScheduleStop } from '../../../../../models/bus.model';
 import { BookingService } from '../../../../../services/booking.service';
 import { BusService } from '../../../../../services/bus.service';
 
@@ -384,10 +384,22 @@ export interface PassengerInfo {
           <div class="bg-white rounded-3 border p-3 shadow-xs collapsible-card points-selector-card">
             <div class="d-flex justify-content-between align-items-center cursor-pointer mb-2" 
                  (click)="pointsExpanded = !pointsExpanded">
-              <h6 class="fw-bold text-navy mb-0" style="font-size: 0.95rem;">Boarding and Dropping Points</h6>
+              <div class="d-flex align-items-center gap-2">
+                <h6 class="fw-bold text-navy mb-0" style="font-size: 0.95rem;">Boarding & Dropping Points</h6>
+                <span *ngIf="routeStops && routeStops.length > 2" class="badge bg-primary bg-opacity-10 text-primary small py-0 px-2 rounded-pill">
+                  Multi-Stop Route ({{ routeStops.length }} Stops)
+                </span>
+              </div>
               <button class="btn btn-sm btn-link p-0 text-secondary">
                 <i class="fa-solid fa-xs" [class.fa-chevron-up]="pointsExpanded" [class.fa-chevron-down]="!pointsExpanded"></i>
               </button>
+            </div>
+
+            <!-- Segment Notice / Warning Banner -->
+            <div *ngIf="segmentConflictNotice" class="alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mb-2 rounded-2">
+              <i class="fa-solid fa-triangle-exclamation text-warning"></i>
+              <span class="flex-grow-1">{{ segmentConflictNotice }}</span>
+              <button type="button" class="btn-close btn-close-xs" (click)="segmentConflictNotice = null" aria-label="Close"></button>
             </div>
 
             <!-- Collapsed Summary Chips -->
@@ -447,6 +459,15 @@ export interface PassengerInfo {
                   </select>
                 </div>
 
+              </div>
+
+              <!-- Route Segment Info Badge -->
+              <div *ngIf="routeStops && routeStops.length > 2 && selectedBoardingPoint && selectedDroppingPoint" class="mt-3 pt-2 border-top d-flex justify-content-between align-items-center text-muted smaller">
+                <span>
+                  <i class="fa-solid fa-route me-1 text-primary"></i>
+                  Segment Fare: <strong class="text-navy">₹{{ layout?.baseFare || schedule?.fare }}</strong> / seat
+                </span>
+                <span *ngIf="isLoadingSegmentLayout" class="spinner-border spinner-border-sm text-primary" role="status"></span>
               </div>
             </div>
 
@@ -2585,6 +2606,12 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
   pointsExpanded = true;
   activeDeckView: 'ALL' | 'LOWER' | 'UPPER' = 'ALL';
 
+  routeStops: ScheduleStop[] = [];
+  selectedFromOrder: number | null = null;
+  selectedToOrder: number | null = null;
+  isLoadingSegmentLayout = false;
+  segmentConflictNotice: string | null = null;
+
   passengers: PassengerInfo[] = [];
   contactEmail = '';
   contactPhone = '';
@@ -2607,19 +2634,80 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
   ngOnInit() {
     this.initContactDefaults();
     this.syncPassengers();
-    this.ensureDefaultPoints();
+    this.loadRouteStopsAndLayout();
   }
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes['selectedSeats']) {
       this.syncPassengers();
     }
-    if (changes['schedule'] || changes['layout']) {
-      this.ensureDefaultPoints();
+    if (changes['schedule']) {
+      this.loadRouteStopsAndLayout();
     }
     if (changes['currentUser']) {
       this.initContactDefaults();
     }
+  }
+
+  loadRouteStopsAndLayout() {
+    if (!this.schedule?.id) return;
+    this.busService.getScheduleStops(this.schedule.id).subscribe({
+      next: (stops: ScheduleStop[]) => {
+        if (stops && stops.length >= 2) {
+          this.routeStops = stops;
+          let fromStop: ScheduleStop | undefined;
+          let toStop: ScheduleStop | undefined;
+
+          if (this.origin) {
+            fromStop = stops.find(s => s.stopName.toLowerCase().includes(this.origin.trim().toLowerCase()));
+          }
+          if (this.destination) {
+            toStop = stops.find(s => s.stopName.toLowerCase().includes(this.destination.trim().toLowerCase()));
+          }
+
+          if (fromStop && toStop && fromStop.stopOrder < toStop.stopOrder) {
+            this.selectedFromOrder = fromStop.stopOrder;
+            this.selectedToOrder = toStop.stopOrder;
+            this.selectedBoardingPoint = fromStop.stopName;
+            this.selectedDroppingPoint = toStop.stopName;
+          } else {
+            this.selectedFromOrder = stops[0].stopOrder;
+            this.selectedToOrder = stops[stops.length - 1].stopOrder;
+            this.selectedBoardingPoint = stops[0].stopName;
+            this.selectedDroppingPoint = stops[stops.length - 1].stopName;
+          }
+
+          this.boardingPointChanged.emit(this.selectedBoardingPoint);
+          this.droppingPointChanged.emit(this.selectedDroppingPoint);
+
+          if (this.selectedFromOrder !== null && this.selectedToOrder !== null) {
+            this.reloadSegmentLayout(this.selectedFromOrder, this.selectedToOrder);
+          }
+        } else {
+          this.ensureDefaultPoints();
+        }
+      },
+      error: () => {
+        this.ensureDefaultPoints();
+      }
+    });
+  }
+
+  reloadSegmentLayout(fromOrder: number | null, toOrder: number | null) {
+    if (!this.schedule?.id || fromOrder === null || toOrder === null) return;
+    this.isLoadingSegmentLayout = true;
+    this.busService.getScheduleLayout(this.schedule.id, fromOrder, toOrder).subscribe({
+      next: (segmentLayout: TripSeatLayout) => {
+        this.layout = segmentLayout;
+        this.isLoadingSegmentLayout = false;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('Failed to load segment layout:', err);
+        this.isLoadingSegmentLayout = false;
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   private initContactDefaults() {
@@ -2704,19 +2792,33 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
     return '2+2 Seater (Push Back)';
   }
 
+  get selectedBoardingStop(): ScheduleStop | null {
+    if (!this.routeStops || this.routeStops.length === 0) return null;
+    return this.routeStops.find(s => s.stopName === this.selectedBoardingPoint || s.stopOrder === this.selectedFromOrder) || null;
+  }
+
+  get selectedDroppingStop(): ScheduleStop | null {
+    if (!this.routeStops || this.routeStops.length === 0) return null;
+    return this.routeStops.find(s => s.stopName === this.selectedDroppingPoint || s.stopOrder === this.selectedToOrder) || null;
+  }
+
   get displayOrigin(): string {
+    if (this.selectedBoardingPoint) return this.selectedBoardingPoint;
     return this.layout?.origin || this.schedule?.origin || this.origin || 'Hyderabad';
   }
 
   get displayDestination(): string {
+    if (this.selectedDroppingPoint) return this.selectedDroppingPoint;
     return this.layout?.destination || this.schedule?.destination || this.destination || 'Vijayawada';
   }
 
   get departureTime(): string {
+    if (this.selectedBoardingStop?.departureTime) return this.selectedBoardingStop.departureTime;
     return this.layout?.departureTime || this.schedule?.departureTime || '21:30';
   }
 
   get arrivalTime(): string {
+    if (this.selectedDroppingStop?.arrivalTime) return this.selectedDroppingStop.arrivalTime;
     return this.layout?.arrivalTime || this.schedule?.arrivalTime || '05:45';
   }
 
@@ -2958,7 +3060,18 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
 
   // --- Boarding & Dropping Points ---
 
-  get boardingList(): { name: string; time: string }[] {
+  get boardingList(): { name: string; time: string; order?: number }[] {
+    if (this.routeStops && this.routeStops.length >= 2) {
+      const maxOrder = this.selectedToOrder !== null ? this.selectedToOrder : this.routeStops.length - 1;
+      return this.routeStops
+        .filter(s => s.stopOrder < maxOrder)
+        .map(s => ({
+          name: s.stopName,
+          time: this.formatTime12(s.departureTime || s.arrivalTime || this.departureTime),
+          order: s.stopOrder
+        }));
+    }
+
     const raw = this.layout?.boardingPoints || this.schedule?.boardingPoints || '';
     if (raw && raw.trim().length > 0) {
       const parts = raw.split(',').map(s => s.trim()).filter(s => s.length > 0);
@@ -2974,7 +3087,18 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
     ];
   }
 
-  get droppingList(): { name: string; time: string }[] {
+  get droppingList(): { name: string; time: string; order?: number }[] {
+    if (this.routeStops && this.routeStops.length >= 2) {
+      const minOrder = this.selectedFromOrder !== null ? this.selectedFromOrder : -1;
+      return this.routeStops
+        .filter(s => s.stopOrder > minOrder)
+        .map(s => ({
+          name: s.stopName,
+          time: this.formatTime12(s.arrivalTime || s.departureTime || this.arrivalTime),
+          order: s.stopOrder
+        }));
+    }
+
     const raw = this.layout?.droppingPoints || this.schedule?.droppingPoints || '';
     if (raw && raw.trim().length > 0) {
       const parts = raw.split(',').map(s => s.trim()).filter(s => s.length > 0);
@@ -3004,11 +3128,45 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
   onBoardingChange(val: string) {
     this.selectedBoardingPoint = val;
     this.boardingPointChanged.emit(val);
+    this.segmentConflictNotice = null;
+
+    if (this.routeStops && this.routeStops.length >= 2) {
+      const match = this.routeStops.find(s => s.stopName === val);
+      if (match) {
+        this.selectedFromOrder = match.stopOrder;
+        if (this.selectedToOrder === null || this.selectedToOrder <= this.selectedFromOrder) {
+          const nextStop = this.routeStops.find(s => s.stopOrder === this.selectedFromOrder! + 1);
+          if (nextStop) {
+            this.selectedToOrder = nextStop.stopOrder;
+            this.selectedDroppingPoint = nextStop.stopName;
+            this.droppingPointChanged.emit(this.selectedDroppingPoint);
+          }
+        }
+        if (this.selectedSeats.length > 0) {
+          this.onResetSeats();
+          this.segmentConflictNotice = 'Boarding point updated. Seats have been reset for this journey segment.';
+        }
+        this.reloadSegmentLayout(this.selectedFromOrder, this.selectedToOrder);
+      }
+    }
   }
 
   onDroppingChange(val: string) {
     this.selectedDroppingPoint = val;
     this.droppingPointChanged.emit(val);
+    this.segmentConflictNotice = null;
+
+    if (this.routeStops && this.routeStops.length >= 2) {
+      const match = this.routeStops.find(s => s.stopName === val);
+      if (match) {
+        this.selectedToOrder = match.stopOrder;
+        if (this.selectedSeats.length > 0) {
+          this.onResetSeats();
+          this.segmentConflictNotice = 'Dropping point updated. Seats have been reset for this journey segment.';
+        }
+        this.reloadSegmentLayout(this.selectedFromOrder, this.selectedToOrder);
+      }
+    }
   }
 
   // --- Selection Actions ---
@@ -3181,9 +3339,19 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
     const customerName = this.currentUser?.fullName || (this.passengers[0]?.name) || 'Traveller';
     const customerEmail = this.contactEmail || this.currentUser?.email || 'traveller@traveleasy.com';
 
-    // Step 1: Pre-booking inventory hold in BUS (Authoritative 15-minute hold)
-    this.busService.bookSeats(this.schedule.id, this.selectedSeats).subscribe({
-      next: () => {
+    const clientBookingRef = 'BK-BUS-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+
+    // Step 1: Pre-booking inventory hold in BUS (Authoritative 15-minute hold with segment awareness)
+    this.busService.bookSeats(
+      this.schedule.id,
+      this.selectedSeats,
+      clientBookingRef,
+      this.selectedFromOrder,
+      this.selectedToOrder
+    ).subscribe({
+      next: (holdRes: any) => {
+        const effectiveBookingRef = holdRes?.bookingRef || clientBookingRef;
+
         // Step 2: Create Booking in BKG
         const bookingPayload = {
           customerId: customerId,
@@ -3191,10 +3359,11 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
           customerEmail: customerEmail,
           serviceType: 'BUS',
           serviceId: this.schedule.id,
-          providerId: this.schedule.busId || 1,
+          providerId: this.schedule.operatorId || this.schedule.busId || 1,
           serviceTitle: `${this.schedule.operatorName} (${this.displayOrigin} to ${this.displayDestination})`,
           totalAmount: this.calculatedTotalAmount,
-          detailsJson: detailsJson
+          detailsJson: detailsJson,
+          bookingRef: effectiveBookingRef
         };
 
         this.bookingService.createBooking(bookingPayload).subscribe({
@@ -3365,10 +3534,14 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
           }
         });
       },
-      error: () => {
+      error: (err: any) => {
         this.ngZone.run(() => {
           this.isProcessingPayment = false;
-          this.paymentError = 'Selected seat(s) could not be reserved or are no longer available. Please choose another seat.';
+          this.currentStage = 1;
+          const msg = err?.error?.message || 'Selected seat(s) are already reserved for this journey segment. Please select different seats.';
+          this.paymentError = msg;
+          this.segmentConflictNotice = msg;
+          this.reloadSegmentLayout(this.selectedFromOrder, this.selectedToOrder);
           this.cdr.detectChanges();
         });
       }

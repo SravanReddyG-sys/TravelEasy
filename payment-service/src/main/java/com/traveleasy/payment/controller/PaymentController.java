@@ -66,8 +66,15 @@ public class PaymentController {
     @PostMapping("/refund/{transactionRef}")
     public ResponseEntity<RefundResponse> processRefund(
             @PathVariable String transactionRef,
-            @RequestBody(required = false) RefundRequest request) {
-        log.info("Received refund request for transaction {}", transactionRef);
+            @RequestBody(required = false) RefundRequest request,
+            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKeyHeader) {
+        if (request == null) {
+            request = new RefundRequest();
+        }
+        if (request.getIdempotencyKey() == null && idempotencyKeyHeader != null) {
+            request.setIdempotencyKey(idempotencyKeyHeader);
+        }
+        log.info("Received refund request for transaction {} with idempotencyKey {}", transactionRef, request.getIdempotencyKey());
         RefundResponse response = paymentService.processRefund(transactionRef, request);
         return ResponseEntity.ok(response);
     }
@@ -78,8 +85,15 @@ public class PaymentController {
     @PostMapping("/refund/booking/{bookingRef}")
     public ResponseEntity<RefundResponse> processRefundByBooking(
             @PathVariable String bookingRef,
-            @RequestBody(required = false) RefundRequest request) {
-        log.info("Received refund request for booking {}", bookingRef);
+            @RequestBody(required = false) RefundRequest request,
+            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKeyHeader) {
+        if (request == null) {
+            request = new RefundRequest();
+        }
+        if (request.getIdempotencyKey() == null && idempotencyKeyHeader != null) {
+            request.setIdempotencyKey(idempotencyKeyHeader);
+        }
+        log.info("Received refund request for booking {} with idempotencyKey {}", bookingRef, request.getIdempotencyKey());
         RefundResponse response = paymentService.processRefundByBooking(bookingRef, request);
         return ResponseEntity.ok(response);
     }

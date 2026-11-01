@@ -9,6 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -39,6 +41,9 @@ public class SeatLayoutService {
     private final TemplatePositionRepository positionRepository;
     private final BusRepository busRepository;
     private final SeatRepository seatRepository;
+    private final SeatSegmentReservationRepository segmentReservationRepository;
+    private final FareMatrixService fareMatrixService;
+    private final RouteStopsService routeStopsService;
 
     @PostConstruct
     @Transactional
@@ -492,6 +497,11 @@ public class SeatLayoutService {
      */
     @Transactional(readOnly = true)
     public TripSeatLayoutResponse getTripLayout(BusSchedule schedule, Bus bus) {
+        return getTripLayout(schedule, bus, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public TripSeatLayoutResponse getTripLayout(BusSchedule schedule, Bus bus, Integer fromStopOrder, Integer toStopOrder) {
         String templateId = bus != null ? bus.getTemplateId() : null;
         SeatLayoutTemplate template = null;
         if (templateId != null) {
@@ -504,6 +514,46 @@ public class SeatLayoutService {
         List<Seat> scheduleSeats = seatRepository.findByScheduleId(schedule.getId());
         Map<String, Seat> seatByNumber = scheduleSeats.stream()
                 .collect(Collectors.toMap(Seat::getSeatNumber, s -> s, (s1, s2) -> s1));
+
+        // Evaluate segment-level reservations & fare if segment range specified
+        Double effectiveFare = schedule.getFare();
+        Set<String> segmentReservedSeats = null;
+        if (fromStopOrder != null && toStopOrder != null && fromStopOrder < toStopOrder) {
+            try {
+                effectiveFare = fareMatrixService.getEffectiveFare(schedule.getId(), fromStopOrder, toStopOrder);
+            } catch (Exception e) {
+                log.debug("Segment fare lookup fallback for schedule {}: {}", schedule.getId(), e.getMessage());
+            }
+
+            List<SeatSegmentReservation> activeSeg = segmentReservationRepository.findActiveByScheduleAndSegmentRange(
+                    schedule.getId(), fromStopOrder, toStopOrder, LocalDateTime.now());
+            segmentReservedSeats = activeSeg.stream()
+                    .map(SeatSegmentReservation::getSeatNumber)
+                    .collect(Collectors.toSet());
+        }
+
+        List<ScheduleStop> stops = routeStopsService != null ? routeStopsService.getStopsForSchedule(schedule.getId()) : Collections.emptyList();
+        List<ScheduleStopDto> stopDtos = stops.stream()
+                .map(s -> ScheduleStopDto.builder()
+                        .id(s.getId())
+                        .stopOrder(s.getStopOrder())
+                        .stopName(s.getStopName())
+                        .stopType(s.getStopType())
+                        .arrivalTime(s.getArrivalTime())
+                        .departureTime(s.getDepartureTime())
+                        .distanceKm(s.getDistanceKm())
+                        .consecutiveFare(s.getConsecutiveFare())
+                        .build())
+                .collect(Collectors.toList());
+
+        String fromStopName = null;
+        String toStopName = null;
+        if (fromStopOrder != null) {
+            fromStopName = stops.stream().filter(s -> s.getStopOrder().equals(fromStopOrder)).map(ScheduleStop::getStopName).findFirst().orElse(null);
+        }
+        if (toStopOrder != null) {
+            toStopName = stops.stream().filter(s -> s.getStopOrder().equals(toStopOrder)).map(ScheduleStop::getStopName).findFirst().orElse(null);
+        }
 
         TripSeatLayoutResponse response = TripSeatLayoutResponse.builder()
                 .scheduleId(schedule.getId())
@@ -519,7 +569,7 @@ public class SeatLayoutService {
                 .amenities(bus != null ? bus.getAmenities() : "")
                 .totalInventory(template.getTotalInventory())
                 .availableSeats(schedule.getAvailableSeats())
-                .baseFare(schedule.getFare())
+                .baseFare(effectiveFare)
                 .origin(schedule.getOrigin())
                 .destination(schedule.getDestination())
                 .travelDate(schedule.getTravelDate() != null ? schedule.getTravelDate().toString() : null)
@@ -527,27 +577,43 @@ public class SeatLayoutService {
                 .arrivalTime(schedule.getArrivalTime())
                 .boardingPoints(schedule.getBoardingPoints())
                 .droppingPoints(schedule.getDroppingPoints())
+                .fromOrder(fromStopOrder)
+                .toOrder(toStopOrder)
+                .fromStopName(fromStopName)
+                .toStopName(toStopName)
+                .stops(stopDtos)
                 .decks(new ArrayList<>())
                 .build();
 
         // Organize positions into DeckLayoutDto
         List<TemplatePosition> allPositions = positionRepository.findByTemplate_IdOrderByVisualOrderAsc(template.getId());
 
+        int totalAvailableInDecks = 0;
         if (template.getDeckCount() == 1) {
-            DeckLayoutDto singleDeck = buildDeckLayout(DECK_SINGLE, "Main Deck", template.getLowerRows(), template.getLowerColumns(), allPositions, seatByNumber, schedule.getFare());
+            DeckLayoutDto singleDeck = buildDeckLayout(DECK_SINGLE, "Main Deck", template.getLowerRows(), template.getLowerColumns(),
+                    allPositions, seatByNumber, effectiveFare, segmentReservedSeats);
             response.getDecks().add(singleDeck);
+            totalAvailableInDecks += singleDeck.getAvailableCount();
         } else {
             List<TemplatePosition> lowerPositions = allPositions.stream()
                     .filter(p -> DECK_LOWER.equalsIgnoreCase(p.getDeck()))
                     .collect(Collectors.toList());
-            DeckLayoutDto lowerDeck = buildDeckLayout(DECK_LOWER, "Lower Deck", template.getLowerRows(), template.getLowerColumns(), lowerPositions, seatByNumber, schedule.getFare());
+            DeckLayoutDto lowerDeck = buildDeckLayout(DECK_LOWER, "Lower Deck", template.getLowerRows(), template.getLowerColumns(),
+                    lowerPositions, seatByNumber, effectiveFare, segmentReservedSeats);
             response.getDecks().add(lowerDeck);
+            totalAvailableInDecks += lowerDeck.getAvailableCount();
 
             List<TemplatePosition> upperPositions = allPositions.stream()
                     .filter(p -> DECK_UPPER.equalsIgnoreCase(p.getDeck()))
                     .collect(Collectors.toList());
-            DeckLayoutDto upperDeck = buildDeckLayout(DECK_UPPER, "Upper Deck", template.getUpperRows(), template.getUpperColumns(), upperPositions, seatByNumber, schedule.getFare());
+            DeckLayoutDto upperDeck = buildDeckLayout(DECK_UPPER, "Upper Deck", template.getUpperRows(), template.getUpperColumns(),
+                    upperPositions, seatByNumber, effectiveFare, segmentReservedSeats);
             response.getDecks().add(upperDeck);
+            totalAvailableInDecks += upperDeck.getAvailableCount();
+        }
+
+        if (segmentReservedSeats != null) {
+            response.setAvailableSeats(totalAvailableInDecks);
         }
 
         return response;
@@ -555,7 +621,7 @@ public class SeatLayoutService {
 
     private DeckLayoutDto buildDeckLayout(String deckCode, String deckName, Integer rows, Integer cols,
                                           List<TemplatePosition> positions, Map<String, Seat> seatByNumber,
-                                          Double fallbackFare) {
+                                          Double fallbackFare, Set<String> segmentReservedSeats) {
         DeckLayoutDto deck = DeckLayoutDto.builder()
                 .deck(deckCode)
                 .deckName(deckName)
@@ -568,8 +634,23 @@ public class SeatLayoutService {
         int availCount = 0;
         for (TemplatePosition pos : positions) {
             Seat s = seatByNumber.get(pos.getSeatLabel());
-            String status = s != null ? s.getStatus() : "AVAILABLE";
-            Double price = s != null && s.getPrice() != null ? s.getPrice() : fallbackFare;
+            String status;
+            if (segmentReservedSeats != null) {
+                // Segment-level evaluation
+                if (segmentReservedSeats.contains(pos.getSeatLabel())) {
+                    status = "BOOKED";
+                } else {
+                    status = "AVAILABLE";
+                }
+            } else {
+                // Whole-trip fallback
+                status = s != null ? s.getStatus() : "AVAILABLE";
+            }
+
+            Double price = fallbackFare;
+            if (price == null && s != null) {
+                price = s.getPrice();
+            }
 
             if ("AVAILABLE".equalsIgnoreCase(status) && Boolean.TRUE.equals(pos.getIsBookable())) {
                 availCount++;

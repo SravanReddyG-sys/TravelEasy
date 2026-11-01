@@ -17,6 +17,7 @@ import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import org.mockito.ArgumentCaptor;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -170,5 +171,36 @@ public class PaymentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.transactionRef").value("TXN-BK-1"))
                 .andExpect(jsonPath("$.status").value("SUCCESS"));
+    }
+
+    @Test
+    @DisplayName("Unit 3.3: POST /api/payments/refund/booking/{bookingRef} - Passes X-Idempotency-Key to service")
+    void testProcessRefundByBooking_WithIdempotencyHeader() throws Exception {
+        RefundRequest request = RefundRequest.builder()
+                .amount(1500.0)
+                .reason("Cancelled by operator")
+                .build();
+
+        RefundResponse response = RefundResponse.builder()
+                .refundId("rfnd_ctrl_idemp_1")
+                .transactionRef("TXN-CTRL-IDEMP")
+                .bookingRef("BK-CTRL-IDEMP")
+                .refundAmount(1500.0)
+                .refundStatus("PROCESSED")
+                .build();
+
+        ArgumentCaptor<RefundRequest> captor = ArgumentCaptor.forClass(RefundRequest.class);
+        when(paymentService.processRefundByBooking(eq("BK-CTRL-IDEMP"), captor.capture())).thenReturn(response);
+
+        mockMvc.perform(post("/api/payments/refund/booking/BK-CTRL-IDEMP")
+                        .header("X-Idempotency-Key", "rfnd_BK-CTRL-IDEMP_99")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.refundId").value("rfnd_ctrl_idemp_1"))
+                .andExpect(jsonPath("$.refundStatus").value("PROCESSED"));
+
+        RefundRequest passedRequest = captor.getValue();
+        org.junit.jupiter.api.Assertions.assertEquals("rfnd_BK-CTRL-IDEMP_99", passedRequest.getIdempotencyKey());
     }
 }

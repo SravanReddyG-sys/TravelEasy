@@ -227,6 +227,12 @@ import { FormsModule } from '@angular/forms';
                 <span class="badge-status-pill" [ngClass]="b.statusBadgeClass">
                   {{ b.statusDisplay }}
                 </span>
+                <span *ngIf="b.status === 'CANCELLED' && b.refundStatus === 'PROCESSED'" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 smaller px-2 py-1 rounded-pill">
+                  <i class="fa-solid fa-check me-1"></i>Refunded
+                </span>
+                <span *ngIf="b.status === 'CANCELLED' && b.refundStatus === 'FAILED_RETRYABLE'" class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 smaller px-2 py-1 rounded-pill">
+                  <i class="fa-solid fa-clock-rotate-left me-1"></i>Refund Pending
+                </span>
                 <div class="booking-card-price">
                   ₹{{ b.totalAmount | number }}
                 </div>
@@ -400,6 +406,21 @@ import { FormsModule } from '@angular/forms';
       border: 1px solid #FDE68A;
     }
     .badge-status-cancelled {
+      background: #FEF2F2;
+      color: #DC2626;
+      border: 1px solid #FECACA;
+    }
+    .badge-status-expired {
+      background: #F1F5F9;
+      color: #64748B;
+      border: 1px solid #CBD5E1;
+    }
+    .badge-status-completed {
+      background: #F0FDF4;
+      color: #16A34A;
+      border: 1px solid #BBF7D0;
+    }
+    .badge-status-failed {
       background: #FEF2F2;
       color: #DC2626;
       border: 1px solid #FECACA;

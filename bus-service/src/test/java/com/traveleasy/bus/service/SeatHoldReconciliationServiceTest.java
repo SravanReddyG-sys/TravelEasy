@@ -37,6 +37,9 @@ public class SeatHoldReconciliationServiceTest {
     @Mock
     private RestTemplate restTemplate;
 
+    @Mock
+    private SeatSegmentReservationService seatSegmentReservationService;
+
     @InjectMocks
     private SeatHoldReconciliationService reconciliationService;
 

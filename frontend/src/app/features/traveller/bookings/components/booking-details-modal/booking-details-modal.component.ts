@@ -65,6 +65,25 @@ import { CommonModule } from '@angular/common';
               <div class="text-secondary smaller text-uppercase fw-bold mb-1">Reservation Specs & Notes</div>
               <div class="text-dark small">{{ booking.detailsJson }}</div>
             </div>
+
+            <!-- Refund Information for Cancelled Bookings -->
+            <div class="p-3 bg-light rounded-3 mb-2" *ngIf="booking.status === 'CANCELLED'">
+              <div class="text-secondary smaller text-uppercase fw-bold mb-2">Refund & Settlement</div>
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="small text-secondary">Refund Status:</span>
+                <span class="badge" [ngClass]="booking.refundStatus === 'PROCESSED' ? 'bg-success' : (booking.refundStatus === 'FAILED_RETRYABLE' ? 'bg-warning text-dark' : 'bg-secondary')">
+                  {{ booking.refundStatus || 'NOT_APPLICABLE' }}
+                </span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center mb-1" *ngIf="booking.refundId">
+                <span class="small text-secondary">Razorpay Refund ID:</span>
+                <span class="small fw-semibold text-dark">{{ booking.refundId }}</span>
+              </div>
+              <div class="d-flex justify-content-between align-items-center" *ngIf="booking.refundAmount">
+                <span class="small text-secondary">Refunded Amount:</span>
+                <span class="small fw-bold text-success">₹{{ booking.refundAmount }}</span>
+              </div>
+            </div>
           </div>
           <div class="modal-footer bg-light border-top px-4 py-3 d-flex justify-content-between">
             <div>

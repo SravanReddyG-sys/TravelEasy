@@ -51,6 +51,10 @@ public class PaymentTransaction {
     private Double refundAmount;
     private LocalDateTime refundedAt;
 
+    // Idempotency Key
+    @Column(length = 100)
+    private String idempotencyKey;
+
     // Error Auditing
     @Column(length = 100)
     private String errorCode;
