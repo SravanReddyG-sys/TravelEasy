@@ -26,9 +26,12 @@ import { BusResultCardComponent } from '../bus-result-card/bus-result-card.compo
           <select class="form-select form-select-sm rounded-pill w-auto fw-semibold text-navy bg-white" [(ngModel)]="sortBy" (change)="onSortChange()">
             <option value="depEarliest">Departure: Earliest First</option>
             <option value="depLatest">Departure: Latest First</option>
-            <option value="fareLow">Price: Low to High</option>
-            <option value="fareHigh">Price: High to Low</option>
+            <option value="fareLow">Fare: Lowest First</option>
+            <option value="fareHigh">Fare: Highest First</option>
             <option value="durationShort">Duration: Shortest First</option>
+            <option value="durationLong">Duration: Longest First</option>
+            <option value="ratingHigh">Rating: Highest First</option>
+            <option value="ratingLow">Rating: Lowest First</option>
           </select>
         </div>
       </div>

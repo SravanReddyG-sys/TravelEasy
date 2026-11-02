@@ -11,17 +11,18 @@ import { Schedule } from '../../../../../models/bus.model';
       <div class="row align-items-center g-3">
         
         <!-- Col 1: Bus & Operator Details -->
-        <div class="col-xl-4 col-lg-4 col-md-5">
+        <div class="col-xl-4 col-lg-5 col-md-5">
           <div class="d-flex align-items-start gap-3">
             <img [src]="getBusThumbnail(bus)" class="bus-card-thumb shadow-sm" alt="Bus photo" (error)="onBusImgError($event)">
-            <div class="flex-grow-1">
+            <div class="flex-grow-1 min-w-0">
               <div class="d-flex align-items-center justify-content-between">
-                <span class="bus-operator-name">{{ bus.operatorName }}</span>
+                <span class="bus-operator-name text-truncate" [title]="operatorBusinessName">{{ operatorBusinessName }}</span>
                 <button class="btn btn-link p-0 border-0 ms-2" (click)="saveToFavourites.emit(bus)" [title]="isSaved ? 'Saved' : 'Save to Favourites'">
                   <i [class]="isSaved ? 'fa-solid fa-heart text-danger' : 'fa-regular fa-heart text-muted'"></i>
                 </button>
               </div>
               
+              <!-- Rating & Reviews -->
               <div class="d-flex align-items-center gap-2 mt-1">
                 <span class="badge bg-warning bg-opacity-25 text-dark fw-bold smaller py-1 px-2 rounded-2">
                   ★ {{ busRating.rating }}
@@ -29,12 +30,24 @@ import { Schedule } from '../../../../../models/bus.model';
                 <span class="text-muted smaller">({{ busRating.reviews }} reviews)</span>
               </div>
 
-              <div class="mt-2">
-                <span class="bus-type-tag">{{ bus.busType }}</span>
+              <!-- Registered Manufacturer & Model -->
+              <div *ngIf="manufacturerModel" class="bus-mfr-model mt-1 text-truncate" [title]="manufacturerModel">
+                <i class="fa-solid fa-bus-simple me-1 text-muted smaller"></i>{{ manufacturerModel }}
+              </div>
+
+              <!-- Tags: Bus Type, AC / Non-AC, Seat Layout -->
+              <div class="d-flex flex-wrap gap-1 mt-2 align-items-center">
+                <span class="bus-type-tag">{{ bus.busType || bus.bus?.busType || 'Standard' }}</span>
+                <span class="badge-ac-tag" [class.is-ac]="isAc" [class.is-non-ac]="!isAc">
+                  <i [class]="isAc ? 'fa-solid fa-snowflake me-1' : 'fa-solid fa-fan me-1'"></i>{{ isAc ? 'AC' : 'Non-AC' }}
+                </span>
+                <span class="bus-layout-tag text-truncate" style="max-width: 160px;" [title]="seatLayoutName">
+                  {{ seatLayoutName }}
+                </span>
               </div>
 
               <!-- Amenities Row (Icon + Text) -->
-              <div class="d-flex flex-wrap gap-1 mt-2">
+              <div class="d-flex flex-wrap gap-1 mt-2" *ngIf="amenities.length > 0">
                 <span *ngFor="let amen of amenities.slice(0, 3)" class="amenity-tag" [title]="amen">
                   <i [class]="getAmenityIcon(amen) + ' me-1 text-primary'"></i>
                   <span>{{ amen }}</span>
@@ -48,7 +61,7 @@ import { Schedule } from '../../../../../models/bus.model';
         </div>
 
         <!-- Col 2: Departure, Duration & Arrival Timeline -->
-        <div class="col-xl-5 col-lg-5 col-md-4 text-center">
+        <div class="col-xl-5 col-lg-4 col-md-4 text-center">
           <div class="d-flex justify-content-between align-items-center px-2">
             
             <!-- Departure -->
@@ -90,10 +103,8 @@ import { Schedule } from '../../../../../models/bus.model';
           </div>
 
           <button class="btn btn-select-seats" 
-                  [class.btn-selected]="isSelected"
                   (click)="selectSeats.emit(bus)">
-            <span>{{ isSelected ? 'Hide Seats' : 'Select Seats' }}</span>
-            <i class="fa-solid" [class.fa-chevron-up]="isSelected" [class.fa-chevron-down]="!isSelected"></i>
+            <span>Select Seats</span>
           </button>
         </div>
 
@@ -113,22 +124,57 @@ import { Schedule } from '../../../../../models/bus.model';
       border-color: #CBD5E1;
     }
     .bus-card-thumb {
-      width: 76px;
-      height: 76px;
+      width: 84px;
+      height: 84px;
       border-radius: 12px;
       object-fit: cover;
       flex-shrink: 0;
+      background: #F1F5F9;
+      border: 1px solid #E2E8F0;
     }
     .bus-operator-name {
       font-size: 1.05rem;
       font-weight: 700;
       color: #0F172A;
     }
+    .bus-mfr-model {
+      font-size: 0.76rem;
+      color: #475569;
+      font-weight: 600;
+    }
     .bus-type-tag {
-      font-size: 0.72rem;
+      font-size: 0.70rem;
       background: #F1F5F9;
       color: #475569;
-      padding: 3px 8px;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-weight: 600;
+      display: inline-block;
+    }
+    .badge-ac-tag {
+      font-size: 0.70rem;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+    }
+    .badge-ac-tag.is-ac {
+      background: #E0F2FE;
+      color: #0284C7;
+      border: 1px solid #BAE6FD;
+    }
+    .badge-ac-tag.is-non-ac {
+      background: #F1F5F9;
+      color: #64748B;
+      border: 1px solid #E2E8F0;
+    }
+    .bus-layout-tag {
+      font-size: 0.70rem;
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      color: #334155;
+      padding: 2px 7px;
       border-radius: 6px;
       font-weight: 600;
       display: inline-block;
@@ -230,11 +276,11 @@ import { Schedule } from '../../../../../models/bus.model';
       background: #0662be;
       box-shadow: 0 4px 12px rgba(8, 117, 225, 0.3);
     }
-    .btn-select-seats.btn-selected {
-      background: #0F172A;
-    }
     .smaller {
       font-size: 0.75rem;
+    }
+    .min-w-0 {
+      min-width: 0;
     }
   `]
 })
@@ -246,15 +292,65 @@ export class BusResultCardComponent {
   @Output() selectSeats = new EventEmitter<any>();
   @Output() saveToFavourites = new EventEmitter<any>();
 
-  get amenities(): string[] {
-    if (this.bus?.amenities && Array.isArray(this.bus.amenities)) {
-      return this.bus.amenities;
-    }
-    return ['Charging Point', 'Reading Light', 'Blanket'];
+  get operatorBusinessName(): string {
+    return this.bus?.businessName || this.bus?.bus?.operatorName || this.bus?.operatorName || 'TravelEasy Partner';
   }
 
-  get busRating(): { rating: string; reviews: number } {
-    const hash = ((this.bus?.id || 1) * 31) % 100;
+  get manufacturerModel(): string {
+    const m = this.bus?.bus?.manufacturer || this.bus?.manufacturer;
+    const mdl = this.bus?.bus?.model || this.bus?.model;
+    if (m && mdl && m !== 'Not available' && mdl !== 'Not available') {
+      return `${m} ${mdl}`;
+    }
+    if (m && m !== 'Not available') return m;
+    if (mdl && mdl !== 'Not available') return mdl;
+    return '';
+  }
+
+  get isAc(): boolean {
+    const fac = (this.bus?.bus?.facilityType || this.bus?.facilityType || '').toUpperCase();
+    if (fac === 'AC') return true;
+    if (fac === 'NON_AC') return false;
+    if (this.bus?.hasAc !== undefined) return !!this.bus.hasAc;
+    if (this.bus?.bus?.hasAc !== undefined) return !!this.bus.bus.hasAc;
+    return /AC/i.test(this.bus?.busType || '') && !/Non-AC/i.test(this.bus?.busType || '');
+  }
+
+  get seatLayoutName(): string {
+    const tid = this.bus?.bus?.templateId || this.bus?.templateId;
+    if (tid) {
+      const map: Record<string, string> = {
+        '1+1 SEATER': '1 + 1 Seater',
+        '2+1 HYBRID_SLEEPER-1': '2 + 1 Hybrid Sleeper-1',
+        '2+1 HYBRID_SLEEPER-2': '2 + 1 Hybrid Sleeper-2',
+        '2+1 SEATER': '2 + 1 Seater',
+        '2+1 SEATER_CUM_SLEEPER': '2 + 1 Seater Cum Sleeper',
+        '2+1 SLEEPER': '2 + 1 Sleeper',
+        '2+2 SEATER': '2 + 2 Seater',
+      };
+      const upper = tid.toUpperCase().trim();
+      if (map[upper]) return map[upper];
+      return tid.replace(/_/g, ' ');
+    }
+    return this.bus?.busType || 'Standard Layout';
+  }
+
+  get amenities(): string[] {
+    const raw = this.bus?.bus?.amenities || this.bus?.amenities;
+    if (Array.isArray(raw)) {
+      return raw.map((s: any) => String(s).trim()).filter(Boolean);
+    }
+    if (typeof raw === 'string' && raw.trim().length > 0) {
+      return raw.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+    return [];
+  }
+
+  get busRating(): { rating: string | number; reviews: number } {
+    if (this.bus?.rating !== undefined && this.bus?.reviewCount !== undefined) {
+      return { rating: this.bus.rating, reviews: this.bus.reviewCount };
+    }
+    const hash = Math.abs(((this.bus?.id || 1) * 31) % 100);
     const rating = (4.0 + (hash % 10) / 10).toFixed(1);
     const reviews = 45 + (hash * 3);
     return { rating, reviews };
@@ -286,32 +382,44 @@ export class BusResultCardComponent {
   }
 
   getBusThumbnail(b: any): string {
-    const photos = [
-      'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=300&q=80',
-      'https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=300&q=80',
-      'https://images.unsplash.com/photo-1596464716127-f2a829822301?auto=format&fit=crop&w=300&q=80',
-      'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=300&q=80'
-    ];
-    const idx = (b?.id || 1) % photos.length;
-    return photos[idx];
+    const img = b?.bus?.exteriorImageUrl || b?.exteriorImageUrl || b?.imageUrl;
+    if (!img) {
+      return 'assets/images/travel-easy-bus.png';
+    }
+    if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('assets/')) {
+      return img;
+    }
+    const cleanUrl = img.startsWith('/') ? img : `/${img}`;
+    const base = (typeof window !== 'undefined' && window.location && window.location.port === '4200')
+      ? 'http://localhost:8080'
+      : '';
+    return `${base}${cleanUrl}`;
   }
 
   onBusImgError(e: any) {
-    e.target.src = 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=300&q=80';
+    e.target.src = 'assets/images/travel-easy-bus.png';
   }
 
   getAmenityIcon(amenity: string): string {
     const map: Record<string, string> = {
       'WiFi': 'fa-solid fa-wifi',
+      'Wi-Fi': 'fa-solid fa-wifi',
       'Water Bottle': 'fa-solid fa-bottle-water',
       'Blanket': 'fa-solid fa-bed',
+      'Blankets': 'fa-solid fa-bed',
       'Charging Point': 'fa-solid fa-bolt',
+      'USB Charging': 'fa-solid fa-plug',
       'Reading Light': 'fa-regular fa-lightbulb',
       'Track My Bus': 'fa-solid fa-location-crosshairs',
-      'Snacks': 'fa-solid fa-cookie-bite',
       'Live Tracking': 'fa-solid fa-location-dot',
+      'GPS Tracking': 'fa-solid fa-location-arrow',
+      'Snacks': 'fa-solid fa-cookie-bite',
       'Emergency Exit': 'fa-solid fa-door-open',
-      'Pillow': 'fa-solid fa-mattress-pillow'
+      'Pillow': 'fa-solid fa-mattress-pillow',
+      'Footrest': 'fa-solid fa-socks',
+      'Curtains': 'fa-solid fa-person-booth',
+      'Luggage Space': 'fa-solid fa-suitcase-rolling',
+      'AC': 'fa-solid fa-snowflake'
     };
     return map[amenity] || 'fa-solid fa-check';
   }

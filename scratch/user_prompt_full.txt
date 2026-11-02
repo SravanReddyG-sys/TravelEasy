@@ -1,0 +1,472 @@
+<USER_REQUEST>
+# Phase 6.2.1 – Implement Bus Search Page Compatibility Corrections
+
+## Objective
+
+Implement the identified inconsistencies in the Traveller Bus Search Page, specifically:
+
+1. Bus search result card information.
+2. Integration of actual bus, operator, and route-related attributes.
+3. Filtering and sorting functionalities based on the updated Bus, Route, and Schedule models.
+
+The objective is to align the traveller-facing search experience with the updated operator-side bus registration and schedule management functionality.
+
+**Important:** The existing traveller bus search and booking functionality is already working. This task is a compatibility correction, not a redevelopment of the bus search module.
+
+---
+
+## 1. Mandatory preliminary investigation
+
+Before modifying any code, inspect the existing implementation and understand:
+
+- Traveller bus search page components.
+- Angular services responsible for bus search API requests.
+- Search request parameters and response DTOs.
+- Bus Service entities, DTOs, controllers, and repositories.
+- Bus registration data and image storage implementation.
+- Operator/business information and its relationship with registered buses.
+- Route and schedule data models.
+- Existing search filtering and sorting implementation.
+- Existing seat inventory and remaining-seat calculations.
+
+Trace the complete data flow:
+
+`Angular Search Page → Angular API Service → API Gateway → Bus Service API → Response DTO → Search Result Card`
+
+Identify the actual source of every attribute displayed on the search result card.
+
+Do not assume that frontend property names correspond directly to backend entity fields. Inspect the actual API contracts and mappings.
+
+Do not make unrelated modifications to other modules.
+
+---
+
+## 2. Bus Search Result Card – Required Changes
+
+## Refine the existing bus search result card to display the following information.
+
+### A. Bus exterior image
+
+**Current issue:** Search result cards use predefined/static images.
+
+**Expected implementation:**
+
+- Display the actual exterior image uploaded by the bus operator during bus registration.
+- Retrieve the image reference from the registered Bus information.
+- Use the existing backend image-serving mechanism.
+- Ensure the image URL/path is correctly resolved by the Angular application.
+- Do not introduce another image-upload mechanism.
+- Do not use a hardcoded image as the normal image source.
+- If the exterior image is unavailable or fails to load, display a neutral fallback image.
+- Do not substitute the interior image for the exterior image.
+
+### B. Operator business name
+
+**Current issue:** The search card currently displays the operator's personal full name (for example, "Sravan Reddy").
+
+**Expected implementation:**
+
+- Display the actual legal business name associated with the bus operator, such as "GSR Travels".
+- Retrieve the business name from the existing operator/business information.
+- Trace the relationship between the authenticated operator, operator profile, and registered bus.
+- Do not derive the business name from the operator's personal name.
+- Do not hardcode business names.
+- Do not create duplicate operator profile information merely to support the search card.
+
+If the existing backend does not expose the required business name, identify the minimum API/DTO changes necessary to expose it.
+
+### C. Rating and review count – Fabricated demo values
+
+**Important clarification:**
+
+The current application does not have an implemented Review/Rating model or functional review system.
+
+For this phase, we intentionally want to continue displaying fabricated ratings and review counts for demonstration purposes.
+
+Implement the following:
+
+- Maintain a predefined collection of plausible rating and review-count combinations.
+- Randomly assign one combination to each bus search result.
+- Example combinations:
+  - 4.5 rating – 150 reviews
+  - 4.2 rating – 98 reviews
+  - 4.7 rating – 215 reviews
+  - 4.3 rating – 124 reviews
+  - 4.6 rating – 186 reviews
+- Keep the assigned values stable while the same search results are being displayed.
+- Filtering and sorting must not regenerate the rating/review values.
+- Avoid regenerating values on every Angular change detection cycle or component refresh.
+- Use a deterministic assignment for the lifetime of the current search result set, or another lightweight approach that preserves stable assignments.
+- These values must not be persisted as actual customer reviews or stored in the Bus database.
+
+Do not:
+
+- Create a Review/Rating entity.
+- Create new Review/Rating APIs.
+- Modify the Review Service.
+- Introduce a new microservice.
+- Integrate fabricated values with actual customer feedback.
+
+Treat these values strictly as temporary demonstration data.
+
+### D. Manufacturer and model
+
+**Current issue:** The search result card does not display the registered bus manufacturer and model.
+
+**Expected implementation:**
+
+Display both attributes together.
+
+Example:
+
+`Volvo 9600`
+
+Requirements:
+
+- Manufacturer must come from the registered Bus information.
+- Model must come from the registered Bus information.
+- Do not use hardcoded manufacturer/model values.
+- Handle missing optional information gracefully.
+
+### E. AC / Non-AC attribute
+
+**Current issue:** The search card does not indicate whether the bus is AC or Non-AC.
+
+**Expected implementation:**
+
+Display the actual AC status from the registered bus information.
+
+Examples:
+
+- AC
+- Non-AC
+
+Important:
+
+- Use the dedicated AC attribute from the Bus model.
+- Do not infer AC status solely from the amenities list.
+- Do not confuse AC status with the bus type.
+
+### F. Actual seat layout name
+
+Display the actual registered seat layout name associated with the bus.
+
+Use the existing supported layout definitions:
+
+1. 2 + 2 Seater
+2. 2 + 1 Seater
+3. 1 + 1 Seater
+4. 2 + 1 Sleeper
+5. 2 + 1 Seater Cum Sleeper
+6. 2 + 1 Hybrid Sleeper-1
+7. 2 + 1 Hybrid Sleeper-2
+
+Important:
+
+- Retrieve the actual selected layout from the registered bus.
+- Do not derive the layout name from seat counts or bus type.
+- Do not introduce another seat layout catalogue.
+- Preserve compatibility with the existing traveller seat-layout rendering and seat inventory implementation.
+
+### G. Actual amenities
+
+**Current issue:** Search result cards display predefined amenities rather than the amenities configured during bus registration.
+
+**Expected implementation:**
+
+- Retrieve the actual amenities associated with the registered bus.
+- Display the actual registered amenities in the search result card.
+- Remove the hardcoded/predefined amenities currently used as normal search result data.
+- Do not assume every bus has the same amenities.
+- Do not generate or assign amenities randomly.
+- If the bus has no registered amenities, handle the empty state gracefully.
+- If there are more amenities than can reasonably fit in the card, display a limited number and provide an appropriate indication of additional amenities without hiding the actual underlying data.
+
+---
+
+## 3. Required Search Result Card Information
+
+The final search result card must contain the following information:
+
+| Information            | Source                               |
+| ---------------------- | ------------------------------------ |
+| Bus exterior image     | Actual registered bus exterior image |
+| Operator business name | Actual operator legal business name  |
+| Rating                 | Fabricated demo value                |
+| Review count           | Fabricated demo value                |
+| Manufacturer + model   | Actual registered bus details        |
+| AC / Non-AC            | Actual registered AC attribute       |
+| Seat layout name       | Actual registered seat layout        |
+| Amenities              | Actual registered bus amenities      |
+| Remaining seat count   | Existing schedule-specific inventory |
+| Departure time         | Existing schedule-specific timing    |
+| Arrival time           | Existing schedule-specific timing    |
+| Source                 | Selected route/search journey        |
+| Destination            | Selected route/search journey        |
+| Journey duration       | Existing schedule duration           |
+| Starting fare          | Existing schedule fare calculation   |
+
+Use the existing application's visual language as design references.
+
+Keep the existing search result card structure where practical. Refine its information hierarchy and spacing to accommodate the additional attributes without making the card unnecessarily large or cluttered.
+
+Do not introduce unrelated visual redesigns elsewhere on the search page.
+
+---
+
+## 4. Filtering Functionality
+
+Review the existing search page filters and ensure they work using the updated Bus, Route, and Schedule information.
+
+Inspect the existing API capabilities before implementing new filters.
+
+### Candidate filters
+
+Implement the following where the current search API and data model support them:
+
+1. **AC Type**
+
+   - AC
+   - Non-AC
+
+2. **Bus Type**
+
+   - Seater
+   - Sleeper
+   - Seater Cum Sleeper
+
+3. **Seat Layout**
+
+   - Filter by the actual registered seat layout.
+
+4. **Amenities**
+
+   - Filter using actual registered bus amenities.
+   - A bus should match the selected amenities according to a clearly defined and consistent selection rule.
+
+5. **Departure Time**
+
+   - Morning
+   - Afternoon
+   - Evening
+   - Night
+
+6. **Fare Range**
+
+   - Filter using the actual starting fare for the selected journey.
+
+7. **Rating**
+
+   - If the existing UI provides a rating filter, it may continue to operate using the fabricated demo ratings.
+   - Do not introduce Review Service integration.
+
+### Filtering requirements
+
+- Filters must operate on the actual search-result attributes.
+- Multiple selected filters must work together.
+- Clearing filters must restore the appropriate unfiltered search results.
+- Filtering must not modify the underlying Bus, Route, or Schedule records.
+- Filtering must not change seat inventory or booking availability.
+- Ensure the filter state remains consistent with the displayed search results.
+
+Do not introduce filters that cannot be supported reliably by the current data or search API.
+
+If an existing filter is incompatible with the updated models, identify the issue and implement the smallest appropriate correction.
+
+---
+
+## 5. Sorting Functionality
+
+Review and implement the following sorting options where supported by the existing search data:
+
+1. Departure Time – Earliest First
+2. Departure Time – Latest First
+3. Fare – Low to High
+4. Fare – High to Low
+5. Duration – Shortest First
+6. Duration – Longest First
+7. Rating – Highest First
+8. Rating – Lowest First
+
+Requirements:
+
+- Sorting must use the actual schedule departure time, fare, and duration.
+- Rating sorting may use the fabricated demo rating values.
+- Sorting must work together with the selected filters.
+- Sorting must not regenerate fabricated ratings.
+- Sorting must not alter the underlying API response or persisted data.
+- Ensure that sorting handles dates and times correctly, including schedules arriving on the following day.
+- Preserve the existing default search-result ordering unless there is a clear reason to change it.
+
+If some sorting options are already implemented correctly, preserve them instead of unnecessarily rewriting them.
+
+---
+
+## 6. Data Mapping and API Compatibility
+
+The updated Bus Service is now the source of truth for registered bus, route, schedule information.
+
+Ensure the traveller-facing search API exposes the necessary information without duplicating business data.
+
+Verify the following mappings:
+
+| Traveller search attribute | Expected backend source                   |
+| -------------------------- | ----------------------------------------- |
+| Exterior image             | Bus registration exterior image reference |
+| Business name              | Existing operator/business profile        |
+| Manufacturer               | Registered Bus manufacturer               |
+| Model                      | Registered Bus model                      |
+| AC status                  | Registered Bus AC attribute               |
+| Seat layout                | Registered Bus seat layout                |
+| Amenities                  | Registered Bus amenities                  |
+| Bus type                   | Registered Bus type                       |
+| Route information          | Assigned Route                            |
+| Departure/arrival          | Schedule-specific stop timings            |
+| Starting fare              | Schedule segment fare calculation         |
+| Remaining seats            | Existing journey-specific inventory       |
+
+If the current search response DTO is missing any necessary fields:
+
+1. Identify the missing fields.
+2. Trace their existing source.
+3. Extend the existing API response DTO or mapping with the minimum necessary changes.
+4. Preserve existing response fields and API compatibility wherever possible.
+5. Do not expose internal database entities directly to the frontend.
+6. Do not duplicate data that can already be retrieved through existing service relationships.
+
+Respect the database-per-service architecture. Do not introduce direct cross-service database access.
+
+---
+
+## 7. Critical Business Logic – Must Remain Unchanged
+
+The following functionality is already working and must be preserved:
+
+### Search and schedule information
+
+- Existing source and destination selection.
+- Route and schedule association.
+- Departure and arrival timings.
+- Cross-midnight schedule handling.
+- Journey duration.
+- Starting fare calculation.
+- Remaining seat count.
+
+### Seat inventory and booking
+
+- Existing seat layout rendering.
+- Existing journey-specific seat availability.
+- Segment-based inventory.
+- Seat selection.
+- Seat-hold creation and expiration.
+- Existing 15-minute seat-hold mechanism.
+- Booking creation and confirmation.
+- Razorpay payment flow.
+- Payment verification and webhook handling.
+- Existing booking reconciliation mechanisms.
+
+Do not rewrite these workflows as part of this task.
+
+Do not replace journey-specific seat availability with static bus seat capacity.
+
+Do not calculate remaining seats from the registered bus's total seat count.
+
+Do not modify booking, payment, or seat-hold APIs unless an actual incompatibility is discovered and separately justified.
+
+---
+
+## 8. Implementation Restrictions
+
+1. Implement only the Bus Search Page corrections described in this prompt.
+2. Do not modify the Add Bus Wizard or Bus Operator Dashboard.
+3. Do not modify the completed Route Creation or Schedule Creation workflows.
+4. Do not introduce a new Review/Rating model or service.
+5. Do not create duplicate operator/business information.
+6. Do not introduce hardcoded bus information or amenities.
+7. Do not modify existing schedule fare calculations.
+8. Do not modify existing seat inventory or booking logic.
+9. Do not perform unrelated refactoring.
+10. Reuse existing components, services, DTOs, and conventions wherever appropriate.
+11. Preserve existing API consumers and avoid unnecessary breaking changes.
+12. Do not change database schemas unless absolutely necessary and supported by a clearly documented reason.
+
+---
+
+## 9. Testing and Verification
+
+After implementation, perform the following checks.
+
+### A. Bus information
+
+- Verify that the search card displays the correct exterior image for each bus.
+- Verify that the correct operator business name is displayed.
+- Verify manufacturer and model.
+- Verify AC / Non-AC.
+- Verify the registered seat layout name.
+- Verify actual registered amenities.
+- Verify missing optional information is handled gracefully.
+
+### B. Fabricated ratings
+
+- Verify ratings and review counts are assigned to search results.
+- Verify assignments remain stable during filtering and sorting.
+- Verify no Review/Rating backend model or API was introduced.
+
+### C. Filtering
+
+- Verify every implemented filter.
+- Verify combinations of multiple filters.
+- Verify clearing filters.
+- Verify filters use the correct actual bus and schedule attributes.
+
+### D. Sorting
+
+- Verify all implemented sorting options.
+- Verify sorting works together with filters.
+- Verify sorting does not regenerate fabricated ratings.
+- Verify date/time ordering across midnight.
+
+### E. Regression testing
+
+- Verify source and destination.
+- Verify departure and arrival.
+- Verify duration.
+- Verify starting fare.
+- Verify remaining seat count.
+- Navigate from search results to seat selection.
+- Verify the selected bus, schedule, and seat layout remain correct.
+- Confirm that existing seat availability and booking workflows remain unaffected.
+
+Run the relevant frontend build and backend tests.
+
+Do not claim that browser-level behaviour has been verified unless it has actually been tested.
+
+---
+
+## 10. Final Implementation Report
+
+After completing the work, provide a structured report containing:
+
+1. Summary of implemented changes.
+2. Files modified (frontend and backend separately).
+3. API endpoints or DTOs modified.
+4. Field-level mapping between Bus Service data and traveller search results.
+5. Filtering and sorting options implemented.
+6. Explanation of the fabricated rating assignment mechanism.
+7. Tests executed and their results.
+8. Confirmation that existing seat inventory, seat holds, booking, and payment logic were preserved.
+9. Any identified limitations or unsupported filters/sorting options.
+10. Any database changes, if applicable, with justification.
+
+Clearly distinguish between:
+
+- Implemented and tested.
+- Implemented but not browser-verified.
+- Not implemented, with reasons.
+
+**Final instruction:** Work incrementally, preserve existing functionality, and prioritize correctness of data mapping over unnecessary code changes. The updated Bus Service models are the source of truth for registered bus information. The existing traveller booking workflow must continue to operate as before.
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-11-02T12:48:54+05:30.
+</ADDITIONAL_METADATA>

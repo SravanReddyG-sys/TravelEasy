@@ -2771,7 +2771,12 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
   // --- Display Getters ---
 
   get displayOperatorName(): string {
-    return this.layout?.operatorName || this.schedule?.operatorName || 'Travel Easy Express';
+    return this.schedule?.businessName ||
+           this.layout?.businessName ||
+           this.schedule?.bus?.operatorName ||
+           this.schedule?.operatorName ||
+           this.layout?.operatorName ||
+           'TravelEasy Partner';
   }
 
   get displayFacilityType(): string {
@@ -2839,13 +2844,26 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
   }
 
   get busThumbnail(): string {
-    if (this.schedule?.busImage) return this.schedule.busImage;
-    if (this.schedule?.thumbnailUrl) return this.schedule.thumbnailUrl;
-    return 'assets/images/travel-easy-bus.png';
+    const img = this.schedule?.bus?.exteriorImageUrl ||
+                this.schedule?.exteriorImageUrl ||
+                this.layout?.exteriorImageUrl ||
+                this.schedule?.busImage ||
+                this.schedule?.thumbnailUrl;
+    if (!img) {
+      return 'assets/images/travel-easy-bus.png';
+    }
+    if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('assets/')) {
+      return img;
+    }
+    const cleanUrl = img.startsWith('/') ? img : `/${img}`;
+    const base = (typeof window !== 'undefined' && window.location && window.location.port === '4200')
+      ? 'http://localhost:8080'
+      : '';
+    return `${base}${cleanUrl}`;
   }
 
   onThumbError(e: any) {
-    e.target.src = 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=300&q=80';
+    e.target.src = 'assets/images/travel-easy-bus.png';
   }
 
   get isOvernight(): boolean {
@@ -3360,7 +3378,7 @@ export class BusSeatPickerComponent implements OnInit, OnChanges {
           serviceType: 'BUS',
           serviceId: this.schedule.id,
           providerId: this.schedule.operatorId || this.schedule.busId || 1,
-          serviceTitle: `${this.schedule.operatorName} (${this.displayOrigin} to ${this.displayDestination})`,
+          serviceTitle: `${this.displayOperatorName} (${this.displayOrigin} to ${this.displayDestination})`,
           totalAmount: this.calculatedTotalAmount,
           detailsJson: detailsJson,
           bookingRef: effectiveBookingRef

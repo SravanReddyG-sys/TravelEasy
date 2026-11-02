@@ -162,6 +162,46 @@ public class BookingController {
 
     private static final List<String> CONFIRMED_BOOKING_STATUSES = List.of("CONFIRMED", "CANCELLED", "COMPLETED");
 
+    private final Map<Long, Map<String, Object>> busScheduleCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private void enrichBookingWithBusDetails(Booking b) {
+        if (b == null || !"BUS".equalsIgnoreCase(b.getServiceType()) || b.getServiceId() == null) {
+            return;
+        }
+        Long scheduleId = b.getServiceId();
+        try {
+            Map<String, Object> details = busScheduleCache.computeIfAbsent(scheduleId, id -> {
+                try {
+                    String url = busServiceUrl + "/api/buses/schedules/" + id + "/layout";
+                    ResponseEntity<Map> res = restTemplate.getForEntity(url, Map.class);
+                    if (res != null && res.getStatusCode().is2xxSuccessful() && res.getBody() != null) {
+                        return (Map<String, Object>) res.getBody();
+                    }
+                } catch (Exception e) {
+                    // Fall back cleanly if schedule layout lookup fails
+                }
+                return Collections.emptyMap();
+            });
+
+            if (details != null && !details.isEmpty()) {
+                if (details.get("exteriorImageUrl") != null) {
+                    b.setExteriorImageUrl(String.valueOf(details.get("exteriorImageUrl")));
+                }
+                if (details.get("busType") != null) {
+                    b.setBusType(String.valueOf(details.get("busType")));
+                }
+                if (details.get("facilityType") != null) {
+                    b.setFacilityType(String.valueOf(details.get("facilityType")));
+                }
+                if (details.get("businessName") != null) {
+                    b.setOperatorBusinessName(String.valueOf(details.get("businessName")));
+                } else if (details.get("operatorName") != null) {
+                    b.setOperatorBusinessName(String.valueOf(details.get("operatorName")));
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
 
 
     @GetMapping("/customer/{customerId}")
@@ -248,8 +288,11 @@ public class BookingController {
 
 
 
-        if (includeUnconfirmed) {
+        for (Booking b : allCustomerBookings) {
+            enrichBookingWithBusDetails(b);
+        }
 
+        if (includeUnconfirmed) {
             return ResponseEntity.ok(allCustomerBookings);
 
         }
@@ -318,39 +361,36 @@ public class BookingController {
     }
 
     @GetMapping("/admin/all")
-
     public ResponseEntity<List<Booking>> getAllBookings() {
-
-        return ResponseEntity.ok(bookingRepository.findAll());
-
+        List<Booking> all = bookingRepository.findAll();
+        for (Booking b : all) {
+            enrichBookingWithBusDetails(b);
+        }
+        return ResponseEntity.ok(all);
     }
 
 
 
     @GetMapping("/{id}")
-
     public ResponseEntity<?> getBookingById(@PathVariable Long id) {
-
         return bookingRepository.findById(id)
-
-                .map(ResponseEntity::ok)
-
+                .map(b -> {
+                    enrichBookingWithBusDetails(b);
+                    return ResponseEntity.ok(b);
+                })
                 .orElse(ResponseEntity.notFound().build());
-
     }
 
 
 
     @GetMapping("/ref/{bookingRef}")
-
     public ResponseEntity<?> getBookingByRef(@PathVariable String bookingRef) {
-
         return bookingRepository.findByBookingRef(bookingRef)
-
-                .map(ResponseEntity::ok)
-
+                .map(b -> {
+                    enrichBookingWithBusDetails(b);
+                    return ResponseEntity.ok(b);
+                })
                 .orElse(ResponseEntity.notFound().build());
-
     }
 
 

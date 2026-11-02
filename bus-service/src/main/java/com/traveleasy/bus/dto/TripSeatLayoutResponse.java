@@ -20,6 +20,8 @@ public class TripSeatLayoutResponse {
     private String referenceImage;
     private String busNumber;
     private String operatorName;
+    private String businessName;
+    private String exteriorImageUrl;
     private String busType;
     private String busConfiguration; // "SINGLE_DECK", "DOUBLE_DECK"
     private String facilityType;     // "AC", "NON_AC"

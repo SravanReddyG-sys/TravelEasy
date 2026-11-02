@@ -28,4 +28,8 @@ export interface Booking {
   statusBadgeClass?: string;
   formattedAmount?: string;
   raw?: any;
+  exteriorImageUrl?: string;
+  busType?: string;
+  facilityType?: string;
+  operatorBusinessName?: string;
 }

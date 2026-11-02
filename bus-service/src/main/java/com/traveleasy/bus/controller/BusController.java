@@ -97,8 +97,33 @@ public class BusController {
 
 
 
-    @org.springframework.beans.factory.annotation.Value("${seat.hold.duration.minutes:15}")
+    @org.springframework.beans.factory.annotation.Value("${auth.service.url:http://localhost:8081}")
+    private String authServiceUrl;
 
+    private org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
+
+    private final java.util.Map<Long, String> operatorBusinessNameCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private String resolveOperatorBusinessName(Long operatorId, String defaultName) {
+        if (operatorId == null) return defaultName;
+        return operatorBusinessNameCache.computeIfAbsent(operatorId, id -> {
+            try {
+                String url = (authServiceUrl != null ? authServiceUrl : "http://localhost:8081") + "/api/users/" + id;
+                org.springframework.http.ResponseEntity<Map> resp = restTemplate.getForEntity(url, Map.class);
+                if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
+                    Object orgName = resp.getBody().get("legalOrganizationName");
+                    if (orgName != null && !orgName.toString().trim().isEmpty()) {
+                        return orgName.toString().trim();
+                    }
+                }
+            } catch (Exception e) {
+                // Fallback gracefully
+            }
+            return (defaultName != null && !defaultName.isBlank()) ? defaultName : "TravelEasy Operator";
+        });
+    }
+
+    @org.springframework.beans.factory.annotation.Value("${seat.hold.duration.minutes:15}")
     private int seatHoldDurationMinutes;
 
 
@@ -920,6 +945,21 @@ public class BusController {
 
         List<BusSchedule> schedules = scheduleRepository.searchSchedulesWithRouteStops(origin, destination, date);
         for (BusSchedule s : schedules) {
+            if (s.getBusId() != null) {
+                Bus b = busRepository.findById(s.getBusId()).orElse(null);
+                if (b != null) {
+                    s.setBus(b);
+                    if (s.getBusNumber() == null) s.setBusNumber(b.getBusNumber());
+                    if (s.getBusType() == null) s.setBusType(b.getBusType());
+                }
+            }
+            String resolvedBizName = resolveOperatorBusinessName(s.getOperatorId(), s.getOperatorName());
+            s.setBusinessName(resolvedBizName);
+            s.setOperatorName(resolvedBizName);
+            if (s.getBus() != null) {
+                s.getBus().setOperatorName(resolvedBizName);
+            }
+
             if (!s.getOrigin().equalsIgnoreCase(origin) || !s.getDestination().equalsIgnoreCase(destination)) {
                 try {
                     List<ScheduleStop> stops = routeStopsService.getStopsForSchedule(s.getId());
@@ -1018,6 +1058,14 @@ public class BusController {
 
         Bus bus = busRepository.findById(schedule.getBusId()).orElse(null);
         TripSeatLayoutResponse layout = seatLayoutService.getTripLayout(schedule, bus, fromOrder, toOrder);
+
+        String legalOrgName = resolveOperatorBusinessName(schedule.getOperatorId(), schedule.getOperatorName());
+        layout.setBusinessName(legalOrgName);
+        layout.setOperatorName(legalOrgName);
+        if (bus != null && bus.getExteriorImageUrl() != null && !bus.getExteriorImageUrl().isBlank()) {
+            layout.setExteriorImageUrl(bus.getExteriorImageUrl());
+        }
+
         return ResponseEntity.ok(layout);
     }
 
