@@ -351,13 +351,21 @@ export { Destination, DestinationAttraction };
                       [filterBusTypeNonAC]="filterBusTypeNonAC"
                       [filterSeatTypeSeater]="filterSeatTypeSeater"
                       [filterSeatTypeSleeper]="filterSeatTypeSleeper"
+                      [filterSeatTypeSeaterCumSleeper]="filterSeatTypeSeaterCumSleeper"
                       [filterSingleSeatOnly]="filterSingleSeatOnly"
+                      [selectedSeatLayouts]="selectedSeatLayouts"
+                      [layoutCounts]="layoutCounts"
+                      [filterMinRating]="filterMinRating"
+                      [countRating45]="countRating45"
+                      [countRating40]="countRating40"
+                      [countRating35]="countRating35"
                       [depBands]="depBands"
                       [arrBands]="arrBands"
                       [countBusTypeAC]="countBusTypeAC"
                       [countBusTypeNonAC]="countBusTypeNonAC"
                       [countSeatTypeSeater]="countSeatTypeSeater"
                       [countSeatTypeSleeper]="countSeatTypeSleeper"
+                      [countSeatTypeSeaterCumSleeper]="countSeatTypeSeaterCumSleeper"
                       [countDepBefore6am]="countDepBefore6am"
                       [countDep6to12]="countDep6to12"
                       [countDep12to18]="countDep12to18"
@@ -391,6 +399,8 @@ export { Destination, DestinationAttraction };
                       (togglePickupPoint)="togglePickupPoint($event)"
                       (toggleDroppingPoint)="toggleDroppingPoint($event)"
                       (toggleAmenity)="toggleAmenity($event)"
+                      (toggleSeatLayout)="toggleSeatLayout($event)"
+                      (ratingChange)="onRatingFilterChanged($event)"
                       (toggleSection)="toggleFilterSection($event)"
                     ></app-bus-filter-panel>
                   </div>
@@ -442,7 +452,7 @@ export { Destination, DestinationAttraction };
                 [selectedBoardingPoint]="selectedBoardingPoint"
                 [selectedDroppingPoint]="selectedDroppingPoint"
                 [currentUser]="currentUser"
-                (backToResults)="busViewMode = 'results'"
+                (backToResults)="returnToBusResults()"
                 (seatToggled)="toggleSeatByNumber($event)"
                 (seatRemoved)="removeSeatByNumber($event)"
                 (seatsReset)="resetSelectedSeats()"
@@ -1038,6 +1048,9 @@ export class CustomerDashboardComponent implements OnInit {
   filterBusTypeNonAC = false;
   filterSeatTypeSeater = false;
   filterSeatTypeSleeper = false;
+  filterSeatTypeSeaterCumSleeper = false;
+  selectedSeatLayouts: string[] = [];
+  filterMinRating = 0;
   filterSingleSeatOnly = false;
   depBands: { [key: string]: boolean } = {
     before6am: false,
@@ -1695,7 +1708,26 @@ export class CustomerDashboardComponent implements OnInit {
 
     this.busService.searchBuses(this.busOrigin.trim(), this.busDestination.trim(), this.busDate).subscribe({
       next: (res) => {
-        this.busResults = res || [];
+        const DEMO_RATINGS = [
+          { rating: 4.5, reviews: 150 },
+          { rating: 4.2, reviews: 98 },
+          { rating: 4.7, reviews: 215 },
+          { rating: 4.3, reviews: 124 },
+          { rating: 4.6, reviews: 186 },
+          { rating: 4.8, reviews: 240 },
+          { rating: 4.4, reviews: 112 },
+          { rating: 4.1, reviews: 85 }
+        ];
+
+        this.busResults = (res || []).map((b: any, idx: number) => {
+          const hash = Math.abs((b.id || idx)) % DEMO_RATINGS.length;
+          const demo = DEMO_RATINGS[hash];
+          return {
+            ...b,
+            rating: b.rating ?? demo.rating,
+            reviewCount: b.reviewCount ?? demo.reviews
+          };
+        });
         this.busesSearched = true;
         this.isSearchingBuses = false;
         this.initPriceRange();
@@ -1731,6 +1763,9 @@ export class CustomerDashboardComponent implements OnInit {
     this.filterBusTypeNonAC = false;
     this.filterSeatTypeSeater = false;
     this.filterSeatTypeSleeper = false;
+    this.filterSeatTypeSeaterCumSleeper = false;
+    this.selectedSeatLayouts = [];
+    this.filterMinRating = 0;
     this.filterSingleSeatOnly = false;
     this.depBands = { before6am: false, from6to12: false, from12to18: false, after6pm: false };
     this.arrBands = { before6am: false, from6to12: false, from12to18: false, after6pm: false };
@@ -1774,41 +1809,87 @@ export class CustomerDashboardComponent implements OnInit {
     this.applyFilters();
   }
 
+  toggleSeatLayout(layout: string) {
+    const idx = this.selectedSeatLayouts.indexOf(layout);
+    if (idx >= 0) {
+      this.selectedSeatLayouts.splice(idx, 1);
+    } else {
+      this.selectedSeatLayouts.push(layout);
+    }
+    this.applyFilters();
+  }
+
+  onRatingFilterChanged(minRating: number) {
+    this.filterMinRating = minRating;
+    this.applyFilters();
+  }
+
+  getBusSeatLayoutName(b: any): string {
+    const tid = b.bus?.templateId || b.templateId;
+    if (tid) {
+      const map: Record<string, string> = {
+        '1+1 SEATER': '1 + 1 Seater',
+        '2+1 HYBRID_SLEEPER-1': '2 + 1 Hybrid Sleeper-1',
+        '2+1 HYBRID_SLEEPER-2': '2 + 1 Hybrid Sleeper-2',
+        '2+1 SEATER': '2 + 1 Seater',
+        '2+1 SEATER_CUM_SLEEPER': '2 + 1 Seater Cum Sleeper',
+        '2+1 SLEEPER': '2 + 1 Sleeper',
+        '2+2 SEATER': '2 + 2 Seater',
+      };
+      const upper = tid.toUpperCase().trim();
+      if (map[upper]) return map[upper];
+      return tid.replace(/_/g, ' ');
+    }
+    return b.busType || 'Standard Layout';
+  }
+
   isBusAC(b: any): boolean {
-    if (!b.busType) return false;
-    return /AC/i.test(b.busType) && !/Non-AC/i.test(b.busType);
+    const fac = (b.bus?.facilityType || b.facilityType || '').toUpperCase();
+    if (fac === 'AC') return true;
+    if (fac === 'NON_AC') return false;
+    if (b.hasAc !== undefined) return !!b.hasAc;
+    if (b.bus?.hasAc !== undefined) return !!b.bus.hasAc;
+    return /AC/i.test(b.busType || '') && !/Non-AC/i.test(b.busType || '');
   }
 
   isBusNonAC(b: any): boolean {
-    if (!b.busType) return false;
-    return /Non-AC/i.test(b.busType);
+    const fac = (b.bus?.facilityType || b.facilityType || '').toUpperCase();
+    if (fac === 'NON_AC') return true;
+    if (fac === 'AC') return false;
+    if (b.hasAc !== undefined) return !b.hasAc;
+    if (b.bus?.hasAc !== undefined) return !b.bus.hasAc;
+    return /Non-AC/i.test(b.busType || '');
   }
 
   isBusSeater(b: any): boolean {
-    if (!b.busType) return false;
-    return /Seater/i.test(b.busType);
+    const type = b.busType || b.bus?.busType || '';
+    return /Seater/i.test(type) && !/Sleeper/i.test(type);
   }
 
   isBusSleeper(b: any): boolean {
-    if (!b.busType) return false;
-    return /Sleeper/i.test(b.busType);
+    const type = b.busType || b.bus?.busType || '';
+    return /Sleeper/i.test(type) && !/Seater/i.test(type);
+  }
+
+  isBusSeaterCumSleeper(b: any): boolean {
+    const type = b.busType || b.bus?.busType || '';
+    const template = b.bus?.templateId || b.templateId || '';
+    return /Seater.*Sleeper/i.test(type) || /Hybrid/i.test(type) || /Hybrid/i.test(template) || /SEATER_CUM_SLEEPER/i.test(template);
   }
 
   getBusAmenities(b: any): string[] {
+    const raw = b.bus?.amenities || b.amenities;
+    if (Array.isArray(raw)) {
+      return raw.map((s: any) => String(s).trim()).filter(Boolean);
+    }
+    if (typeof raw === 'string' && raw.trim().length > 0) {
+      return raw.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
     const fleet = this.busFleetMap.get(b.busId);
     if (fleet && fleet.amenities) {
-      return fleet.amenities.split(',').map((s: string) => s.trim());
+      return fleet.amenities.split(',').map((s: string) => s.trim()).filter(Boolean);
     }
-    const isAC = this.isBusAC(b);
-    const isSleeper = this.isBusSleeper(b);
-    const amenities = ['Charging Point', 'Water Bottle'];
-    if (isAC) {
-      amenities.push('Wi-Fi', 'GPS Tracking');
-    }
-    if (isSleeper) {
-      amenities.push('Blanket', 'Reading Light');
-    }
-    return amenities;
+    return [];
   }
 
   getAmenityIcon(amenityName: string): string {
@@ -1917,6 +1998,7 @@ export class CustomerDashboardComponent implements OnInit {
     if (state.filterBusTypeNonAC !== undefined) this.filterBusTypeNonAC = state.filterBusTypeNonAC;
     if (state.filterSeatTypeSeater !== undefined) this.filterSeatTypeSeater = state.filterSeatTypeSeater;
     if (state.filterSeatTypeSleeper !== undefined) this.filterSeatTypeSleeper = state.filterSeatTypeSleeper;
+    if (state.filterSeatTypeSeaterCumSleeper !== undefined) this.filterSeatTypeSeaterCumSleeper = state.filterSeatTypeSeaterCumSleeper;
     if (state.filterSingleSeatOnly !== undefined) this.filterSingleSeatOnly = state.filterSingleSeatOnly;
     if (state.depBands) this.depBands = state.depBands;
     if (state.arrBands) this.arrBands = state.arrBands;
@@ -2017,6 +2099,31 @@ export class CustomerDashboardComponent implements OnInit {
     return this.busResults.filter(b => this.isBusSleeper(b)).length;
   }
 
+  get countSeatTypeSeaterCumSleeper(): number {
+    return this.busResults.filter(b => this.isBusSeaterCumSleeper(b)).length;
+  }
+
+  get layoutCounts(): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const b of this.busResults) {
+      const layout = this.getBusSeatLayoutName(b);
+      counts[layout] = (counts[layout] || 0) + 1;
+    }
+    return counts;
+  }
+
+  get countRating45(): number {
+    return this.busResults.filter(b => (b.rating || 0) >= 4.5).length;
+  }
+
+  get countRating40(): number {
+    return this.busResults.filter(b => (b.rating || 0) >= 4.0).length;
+  }
+
+  get countRating35(): number {
+    return this.busResults.filter(b => (b.rating || 0) >= 3.5).length;
+  }
+
   get countDepBefore6am(): number {
     return this.busResults.filter(b => this.timeToMinutes(b.departureTime) < 360).length;
   }
@@ -2066,6 +2173,9 @@ export class CustomerDashboardComponent implements OnInit {
       this.filterBusTypeNonAC ||
       this.filterSeatTypeSeater ||
       this.filterSeatTypeSleeper ||
+      this.filterSeatTypeSeaterCumSleeper ||
+      this.selectedSeatLayouts.length > 0 ||
+      this.filterMinRating > 0 ||
       this.filterSingleSeatOnly ||
       Object.values(this.depBands).some(v => v) ||
       Object.values(this.arrBands).some(v => v) ||
@@ -2080,27 +2190,41 @@ export class CustomerDashboardComponent implements OnInit {
     if (!this.busResults || this.busResults.length === 0) return [];
 
     let list = this.busResults.filter(b => {
-      // 1. Bus Type
+      // 1. Bus AC / Non-AC Type
       if (this.filterBusTypeAC && !this.filterBusTypeNonAC) {
         if (!this.isBusAC(b)) return false;
       } else if (this.filterBusTypeNonAC && !this.filterBusTypeAC) {
         if (!this.isBusNonAC(b)) return false;
       }
 
-      // 2. Seat Type
-      if (this.filterSeatTypeSeater && !this.filterSeatTypeSleeper) {
-        if (!this.isBusSeater(b)) return false;
-      } else if (this.filterSeatTypeSleeper && !this.filterSeatTypeSeater) {
-        if (!this.isBusSleeper(b)) return false;
+      // 2. Bus / Seat Type (Seater, Sleeper, Seater Cum Sleeper)
+      const hasBusTypeFilter = this.filterSeatTypeSeater || this.filterSeatTypeSleeper || this.filterSeatTypeSeaterCumSleeper;
+      if (hasBusTypeFilter) {
+        const matches =
+          (this.filterSeatTypeSeater && this.isBusSeater(b)) ||
+          (this.filterSeatTypeSleeper && this.isBusSleeper(b)) ||
+          (this.filterSeatTypeSeaterCumSleeper && this.isBusSeaterCumSleeper(b));
+        if (!matches) return false;
       }
 
-      // 3. Single Seat Only
+      // 3. Seat Layout filter
+      if (this.selectedSeatLayouts.length > 0) {
+        const layoutName = this.getBusSeatLayoutName(b);
+        if (!this.selectedSeatLayouts.includes(layoutName)) return false;
+      }
+
+      // 4. Single Seat Only
       if (this.filterSingleSeatOnly) {
         const isSingle = (b.busType && (b.busType.includes('2+1') || b.busType.includes('Single'))) || (b.availableSeats && b.availableSeats > 0);
         if (!isSingle) return false;
       }
 
-      // 4. Departure Time
+      // 5. Rating filter
+      if (this.filterMinRating > 0) {
+        if ((b.rating || 0) < this.filterMinRating) return false;
+      }
+
+      // 6. Departure Time
       const anyDepSelected = Object.values(this.depBands).some(v => v);
       if (anyDepSelected) {
         const depMins = this.timeToMinutes(b.departureTime);
@@ -2112,7 +2236,7 @@ export class CustomerDashboardComponent implements OnInit {
         if (!matches) return false;
       }
 
-      // 5. Arrival Time
+      // 7. Arrival Time
       const anyArrSelected = Object.values(this.arrBands).some(v => v);
       if (anyArrSelected) {
         const arrMins = this.timeToMinutes(b.arrivalTime);
@@ -2124,28 +2248,28 @@ export class CustomerDashboardComponent implements OnInit {
         if (!matches) return false;
       }
 
-      // 6. Pickup Points
+      // 8. Pickup Points
       if (this.selectedPickupPoints.length > 0) {
         const busPoints = this.extractPointNames(b.boardingPoints);
         const hasPoint = this.selectedPickupPoints.some(p => busPoints.includes(p));
         if (!hasPoint) return false;
       }
 
-      // 7. Dropping Points
+      // 9. Dropping Points
       if (this.selectedDroppingPoints.length > 0) {
         const busPoints = this.extractPointNames(b.droppingPoints);
         const hasPoint = this.selectedDroppingPoints.some(p => busPoints.includes(p));
         if (!hasPoint) return false;
       }
 
-      // 8. Amenities
+      // 10. Amenities
       if (this.selectedAmenities.length > 0) {
         const busAmen = this.getBusAmenities(b);
         const hasAll = this.selectedAmenities.every(a => busAmen.includes(a));
         if (!hasAll) return false;
       }
 
-      // 9. Price Range
+      // 11. Price Range
       if (b.fare < this.filterMinPrice || b.fare > this.filterMaxPrice) {
         return false;
       }
@@ -2153,7 +2277,7 @@ export class CustomerDashboardComponent implements OnInit {
       return true;
     });
 
-    // Sorting
+    // 8 Sorting criteria
     list = [...list].sort((a, b) => {
       if (this.busSortBy === 'depLatest') {
         return (b.departureTime || '').localeCompare(a.departureTime || '');
@@ -2162,9 +2286,13 @@ export class CustomerDashboardComponent implements OnInit {
       } else if (this.busSortBy === 'fareHigh') {
         return (b.fare || 0) - (a.fare || 0);
       } else if (this.busSortBy === 'durationShort') {
-        const aDur = this.getDurationMinutes(a);
-        const bDur = this.getDurationMinutes(b);
-        return aDur - bDur;
+        return this.getDurationMinutes(a) - this.getDurationMinutes(b);
+      } else if (this.busSortBy === 'durationLong') {
+        return this.getDurationMinutes(b) - this.getDurationMinutes(a);
+      } else if (this.busSortBy === 'ratingHigh') {
+        return (b.rating || 0) - (a.rating || 0);
+      } else if (this.busSortBy === 'ratingLow') {
+        return (a.rating || 0) - (b.rating || 0);
       } else {
         // depEarliest
         return (a.departureTime || '').localeCompare(b.departureTime || '');
@@ -2205,6 +2333,13 @@ export class CustomerDashboardComponent implements OnInit {
     this.applyFilters();
   }
 
+  returnToBusResults() {
+    this.busViewMode = 'results';
+    this.selectedSchedule = null;
+    this.selectedSeatNumbers = [];
+    this.currentTripLayout = null;
+  }
+
   openBusSeatMap(schedule: any) {
     console.log('[DEBUG-SEAT] openBusSeatMap called for schedule:', schedule?.id, schedule?.operatorName);
     this.selectedSchedule = schedule;
@@ -2241,7 +2376,8 @@ export class CustomerDashboardComponent implements OnInit {
     this.checkoutServiceType = 'BUS';
     this.checkoutServiceId = payload.schedule.id;
     this.checkoutProviderId = payload.schedule.operatorId || payload.schedule.busId || 1;
-    this.checkoutServiceTitle = `${payload.schedule.operatorName} (${payload.schedule.origin || this.busOrigin} to ${payload.schedule.destination || this.busDestination})`;
+    const opName = payload.schedule.businessName || payload.schedule.operatorName || 'TravelEasy Partner';
+    this.checkoutServiceTitle = `${opName} (${payload.schedule.origin || this.busOrigin} to ${payload.schedule.destination || this.busDestination})`;
 
     const passList = (payload.passengers || []).map((p: any) => `${p.name} (Seat ${p.seatNumber}, Age: ${p.age}, ${p.gender})`).join('; ');
     this.checkoutDetails = `Seats: ${payload.selectedSeats.join(', ')} | Boarding: ${payload.boardingPoint} | Dropping: ${payload.droppingPoint} | Passengers: ${passList} | Date: ${payload.schedule.travelDate || this.busDate}`;
@@ -2264,7 +2400,8 @@ export class CustomerDashboardComponent implements OnInit {
     this.checkoutServiceType = 'BUS';
     this.checkoutServiceId = schedule.id;
     this.checkoutProviderId = schedule.operatorId || schedule.busId || 1;
-    this.checkoutServiceTitle = `${schedule.operatorName} (${schedule.origin} to ${schedule.destination})`;
+    const opName2 = schedule.businessName || schedule.operatorName || 'TravelEasy Partner';
+    this.checkoutServiceTitle = `${opName2} (${schedule.origin} to ${schedule.destination})`;
     this.checkoutDetails = `Seats: ${this.selectedSeatNumbers.join(', ')} | Journey Date: ${schedule.travelDate || this.busDate}`;
     this.checkoutAmount = this.selectedSeatNumbers.length * schedule.fare;
     this.showCheckoutModal = true;
@@ -2451,7 +2588,7 @@ export class CustomerDashboardComponent implements OnInit {
             metaString: b.detailsJson,
             status: b.status,
             thumbnail: b.serviceType === 'BUS'
-              ? 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=300&q=80'
+              ? this.resolveBusImageUrl(b.exteriorImageUrl)
               : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=300&q=80'
           }));
         } else {
@@ -2531,6 +2668,18 @@ export class CustomerDashboardComponent implements OnInit {
     );
   }
 
+  resolveBusImageUrl(img: string | undefined | null): string {
+    if (!img) return 'assets/images/travel-easy-bus.png';
+    if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('assets/')) {
+      return img;
+    }
+    const cleanUrl = img.startsWith('/') ? img : `/${img}`;
+    const base = (typeof window !== 'undefined' && window.location && window.location.port === '4200')
+      ? 'http://localhost:8080'
+      : '';
+    return `${base}${cleanUrl}`;
+  }
+
   parseBooking(b: any) {
     if (!b) return null;
     const isBus = b.serviceType === 'BUS';
@@ -2542,18 +2691,42 @@ export class CustomerDashboardComponent implements OnInit {
 
     if (isBus) {
       const match = displayTitle.match(/^(.*?)\s*\((.*?)\s+to\s+(.*?)\)$/i);
+      let operator = b.operatorBusinessName || '';
+      let origin = '';
+      let dest = '';
       if (match) {
-        const operator = match[1].trim();
-        const origin = match[2].trim();
-        const dest = match[3].trim();
+        if (!operator) operator = match[1].trim();
+        origin = match[2].trim();
+        dest = match[3].trim();
         displayTitle = `${origin} → ${dest}`;
-        displaySubtitle = `${operator} • AC Sleeper`;
       } else if (displayTitle.toLowerCase().includes(' to ')) {
         displayTitle = displayTitle.replace(/\s+to\s+/i, ' → ');
-        displaySubtitle = 'AC Sleeper';
-      } else {
-        displaySubtitle = 'AC Sleeper';
       }
+      if (!operator) operator = 'TravelEasy Partner';
+
+      // Correction B: Dedicated AC / Non-AC classification from registered Bus
+      let acClassification = 'AC';
+      const facility = (b.facilityType || b.bus?.facilityType || '').toUpperCase();
+      if (facility.includes('NON')) {
+        acClassification = 'Non-AC';
+      } else if (facility === 'AC') {
+        acClassification = 'AC';
+      } else if (b.hasAc !== undefined) {
+        acClassification = b.hasAc ? 'AC' : 'Non-AC';
+      }
+
+      // Correction C: Registered Bus Type (Seater, Sleeper, Seater Cum Sleeper)
+      let busType = b.busType || b.bus?.busType || 'Sleeper';
+      const upperType = busType.toUpperCase();
+      if (upperType.includes('SEATER CUM SLEEPER') || upperType.includes('SEATER / SLEEPER') || upperType.includes('HYBRID')) {
+        busType = 'Seater Cum Sleeper';
+      } else if (upperType.includes('SEATER')) {
+        busType = 'Seater';
+      } else if (upperType.includes('SLEEPER')) {
+        busType = 'Sleeper';
+      }
+
+      displaySubtitle = `${operator} • ${acClassification} ${busType}`;
     } else {
       const match = displayTitle.match(/^(.*?)\s*\((.*?)\)$/);
       if (match) {
@@ -2614,15 +2787,12 @@ export class CustomerDashboardComponent implements OnInit {
       parsedDate = !isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : '';
     }
 
-    const busThumbnails = [
-      'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=400&q=80',
-      'https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=400&q=80'
-    ];
     const hotelThumbnails = [
       'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80',
       'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=400&q=80'
     ];
-    const thumb = isBus ? busThumbnails[b.id % busThumbnails.length] : hotelThumbnails[b.id % hotelThumbnails.length];
+    const extImg = b.exteriorImageUrl || b.bus?.exteriorImageUrl || '';
+    const thumb = isBus ? this.resolveBusImageUrl(extImg) : hotelThumbnails[b.id % hotelThumbnails.length];
 
     let statusClass = 'badge-confirmed';
     let statusDisplay = 'Confirmed';
@@ -2949,7 +3119,7 @@ export class CustomerDashboardComponent implements OnInit {
     this.travellerService.addFavourite({
       itemType: 'BUS',
       itemId: schedule.id,
-      title: schedule.operatorName,
+      title: schedule.businessName || schedule.operatorName,
       subtitle: `${schedule.origin} to ${schedule.destination} (${schedule.busType})`,
       metadataJson: JSON.stringify({ fare: schedule.fare, travelDate: schedule.travelDate })
     }).subscribe({

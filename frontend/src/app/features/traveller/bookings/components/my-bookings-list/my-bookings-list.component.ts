@@ -530,6 +530,6 @@ export class MyBookingsListComponent {
   }
 
   onImgError(e: any) {
-    e.target.src = 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&w=400&q=80';
+    e.target.src = 'assets/images/travel-easy-bus.png';
   }
 }

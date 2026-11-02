@@ -20,9 +20,9 @@ import { FormsModule } from '@angular/forms';
         </button>
       </div>
 
-      <!-- A. Bus Type -->
+      <!-- A. AC Type -->
       <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleSection.emit('busType')">
-        <span class="filter-section-title mb-0">Bus Type</span>
+        <span class="filter-section-title mb-0">AC Type</span>
         <i class="fa-solid smaller text-muted" [class.fa-chevron-up]="filterSectionsOpen['busType']" [class.fa-chevron-down]="!filterSectionsOpen['busType']"></i>
       </div>
       <div *ngIf="filterSectionsOpen['busType']" class="mt-2">
@@ -38,9 +38,9 @@ import { FormsModule } from '@angular/forms';
 
       <div class="filter-divider"></div>
 
-      <!-- B. Seat Type -->
+      <!-- B. Bus / Seat Type -->
       <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleSection.emit('seatType')">
-        <span class="filter-section-title mb-0">Seat Type</span>
+        <span class="filter-section-title mb-0">Bus Type</span>
         <i class="fa-solid smaller text-muted" [class.fa-chevron-up]="filterSectionsOpen['seatType']" [class.fa-chevron-down]="!filterSectionsOpen['seatType']"></i>
       </div>
       <div *ngIf="filterSectionsOpen['seatType']" class="mt-2">
@@ -52,11 +52,32 @@ import { FormsModule } from '@angular/forms';
           <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="filterSeatTypeSleeper" (change)="onFilterChange()"> Sleeper</span>
           <span class="filter-count-badge">{{ countSeatTypeSleeper }}</span>
         </label>
+        <label class="filter-checkbox-label">
+          <span><input type="checkbox" class="form-check-input me-2" [(ngModel)]="filterSeatTypeSeaterCumSleeper" (change)="onFilterChange()"> Seater Cum Sleeper</span>
+          <span class="filter-count-badge">{{ countSeatTypeSeaterCumSleeper }}</span>
+        </label>
       </div>
 
       <div class="filter-divider"></div>
 
-      <!-- C. Single Seat Only -->
+      <!-- C. Seat Layout -->
+      <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleSection.emit('seatLayout')">
+        <span class="filter-section-title mb-0">Seat Layout</span>
+        <i class="fa-solid smaller text-muted" [class.fa-chevron-up]="filterSectionsOpen['seatLayout']" [class.fa-chevron-down]="!filterSectionsOpen['seatLayout']"></i>
+      </div>
+      <div *ngIf="filterSectionsOpen['seatLayout']" class="mt-2">
+        <label *ngFor="let layout of layoutDefinitions" class="filter-checkbox-label">
+          <span class="text-truncate" style="max-width: 170px;" [title]="layout">
+            <input type="checkbox" class="form-check-input me-2" [checked]="selectedSeatLayouts.includes(layout)" (change)="toggleSeatLayout.emit(layout)">
+            {{ layout }}
+          </span>
+          <span class="filter-count-badge">{{ getLayoutCount(layout) }}</span>
+        </label>
+      </div>
+
+      <div class="filter-divider"></div>
+
+      <!-- D. Single Seat Only -->
       <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleSection.emit('singleSeat')">
         <div class="d-flex align-items-center gap-1">
           <span class="filter-section-title mb-0">Single Seat</span>
@@ -72,7 +93,7 @@ import { FormsModule } from '@angular/forms';
 
       <div class="filter-divider"></div>
 
-      <!-- D. Departure Time -->
+      <!-- E. Departure Time -->
       <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleSection.emit('depTime')">
         <span class="filter-section-title mb-0">
           Departure Time <span class="text-muted fw-normal smaller text-capitalize">({{ busOrigin }})</span>
@@ -100,7 +121,7 @@ import { FormsModule } from '@angular/forms';
 
       <div class="filter-divider"></div>
 
-      <!-- E. Arrival Time -->
+      <!-- F. Arrival Time -->
       <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleSection.emit('arrTime')">
         <span class="filter-section-title mb-0">
           Arrival Time <span class="text-muted fw-normal smaller text-capitalize">({{ busDestination }})</span>
@@ -128,7 +149,7 @@ import { FormsModule } from '@angular/forms';
 
       <div class="filter-divider"></div>
 
-      <!-- F. Pickup Points -->
+      <!-- G. Pickup Points -->
       <div *ngIf="availablePickupPoints.length > 0">
         <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleSection.emit('boarding')">
           <span class="filter-section-title mb-0">Boarding Points</span>
@@ -152,7 +173,7 @@ import { FormsModule } from '@angular/forms';
         <div class="filter-divider"></div>
       </div>
 
-      <!-- G. Dropping Points -->
+      <!-- H. Dropping Points -->
       <div *ngIf="availableDroppingPoints.length > 0">
         <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleSection.emit('dropping')">
           <span class="filter-section-title mb-0">Dropping Points</span>
@@ -176,7 +197,7 @@ import { FormsModule } from '@angular/forms';
         <div class="filter-divider"></div>
       </div>
 
-      <!-- H. Amenities -->
+      <!-- I. Amenities -->
       <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleSection.emit('amenities')">
         <span class="filter-section-title mb-0">Amenities</span>
         <i class="fa-solid smaller text-muted" [class.fa-chevron-up]="filterSectionsOpen['amenities']" [class.fa-chevron-down]="!filterSectionsOpen['amenities']"></i>
@@ -194,7 +215,7 @@ import { FormsModule } from '@angular/forms';
 
       <div class="filter-divider"></div>
 
-      <!-- I. Price Range -->
+      <!-- J. Price Range -->
       <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleSection.emit('price')">
         <div class="d-flex justify-content-between align-items-center flex-grow-1 me-2">
           <span class="filter-section-title mb-0">Price Range</span>
@@ -211,6 +232,49 @@ import { FormsModule } from '@angular/forms';
           <span>₹{{ defaultMaxPrice }}</span>
         </div>
       </div>
+
+      <div class="filter-divider"></div>
+
+      <!-- K. Rating Filter -->
+      <div class="filter-section-header d-flex justify-content-between align-items-center cursor-pointer" (click)="toggleSection.emit('rating')">
+        <div class="d-flex justify-content-between align-items-center flex-grow-1 me-2">
+          <span class="filter-section-title mb-0">Customer Rating</span>
+          <span *ngIf="filterMinRating > 0" class="badge bg-warning bg-opacity-25 text-dark fw-bold smaller py-0 px-2 rounded-2">
+            ★ {{ filterMinRating }}+
+          </span>
+        </div>
+        <i class="fa-solid smaller text-muted" [class.fa-chevron-up]="filterSectionsOpen['rating']" [class.fa-chevron-down]="!filterSectionsOpen['rating']"></i>
+      </div>
+      <div *ngIf="filterSectionsOpen['rating']" class="mt-2">
+        <label class="filter-checkbox-label" (click)="setRating(4.5)">
+          <span>
+            <input type="radio" name="ratingFilter" class="form-check-input me-2" [checked]="filterMinRating === 4.5">
+            ★ 4.5 and above
+          </span>
+          <span class="filter-count-badge">{{ countRating45 }}</span>
+        </label>
+        <label class="filter-checkbox-label" (click)="setRating(4.0)">
+          <span>
+            <input type="radio" name="ratingFilter" class="form-check-input me-2" [checked]="filterMinRating === 4.0">
+            ★ 4.0 and above
+          </span>
+          <span class="filter-count-badge">{{ countRating40 }}</span>
+        </label>
+        <label class="filter-checkbox-label" (click)="setRating(3.5)">
+          <span>
+            <input type="radio" name="ratingFilter" class="form-check-input me-2" [checked]="filterMinRating === 3.5">
+            ★ 3.5 and above
+          </span>
+          <span class="filter-count-badge">{{ countRating35 }}</span>
+        </label>
+        <label class="filter-checkbox-label" (click)="setRating(0)">
+          <span>
+            <input type="radio" name="ratingFilter" class="form-check-input me-2" [checked]="filterMinRating === 0">
+            All Ratings
+          </span>
+        </label>
+      </div>
+
     </div>
   `,
   styles: [`
@@ -285,13 +349,21 @@ export class BusFilterPanelComponent {
   @Input() filterBusTypeNonAC = false;
   @Input() filterSeatTypeSeater = false;
   @Input() filterSeatTypeSleeper = false;
+  @Input() filterSeatTypeSeaterCumSleeper = false;
   @Input() filterSingleSeatOnly = false;
+  @Input() selectedSeatLayouts: string[] = [];
+  @Input() layoutCounts: Record<string, number> = {};
+  @Input() filterMinRating = 0;
+  @Input() countRating45 = 0;
+  @Input() countRating40 = 0;
+  @Input() countRating35 = 0;
   @Input() depBands: any = { before6am: false, from6to12: false, from12to18: false, after6pm: false };
   @Input() arrBands: any = { before6am: false, from6to12: false, from12to18: false, after6pm: false };
   @Input() countBusTypeAC = 0;
   @Input() countBusTypeNonAC = 0;
   @Input() countSeatTypeSeater = 0;
   @Input() countSeatTypeSleeper = 0;
+  @Input() countSeatTypeSeaterCumSleeper = 0;
   @Input() countDepBefore6am = 0;
   @Input() countDep6to12 = 0;
   @Input() countDep12to18 = 0;
@@ -325,8 +397,20 @@ export class BusFilterPanelComponent {
   @Output() togglePickupPoint = new EventEmitter<string>();
   @Output() toggleDroppingPoint = new EventEmitter<string>();
   @Output() toggleAmenity = new EventEmitter<string>();
+  @Output() toggleSeatLayout = new EventEmitter<string>();
+  @Output() ratingChange = new EventEmitter<number>();
   @Output() toggleSection = new EventEmitter<string>();
   @Output() priceChange = new EventEmitter<number>();
+
+  layoutDefinitions = [
+    '2 + 2 Seater',
+    '2 + 1 Seater',
+    '1 + 1 Seater',
+    '2 + 1 Sleeper',
+    '2 + 1 Seater Cum Sleeper',
+    '2 + 1 Hybrid Sleeper-1',
+    '2 + 1 Hybrid Sleeper-2'
+  ];
 
   onFilterChange() {
     this.filterChange.emit({
@@ -334,6 +418,7 @@ export class BusFilterPanelComponent {
       filterBusTypeNonAC: this.filterBusTypeNonAC,
       filterSeatTypeSeater: this.filterSeatTypeSeater,
       filterSeatTypeSleeper: this.filterSeatTypeSleeper,
+      filterSeatTypeSeaterCumSleeper: this.filterSeatTypeSeaterCumSleeper,
       filterSingleSeatOnly: this.filterSingleSeatOnly,
       depBands: this.depBands,
       arrBands: this.arrBands,
@@ -346,11 +431,19 @@ export class BusFilterPanelComponent {
     this.priceChange.emit(this.filterMaxPrice);
   }
 
+  setRating(val: number) {
+    this.ratingChange.emit(this.filterMinRating === val ? 0 : val);
+  }
+
   onClearAll() {
     this.clearAll.emit();
   }
 
   getAmenityCount(name: string): number {
     return (this.amenityCounts && this.amenityCounts[name]) || 0;
+  }
+
+  getLayoutCount(layout: string): number {
+    return (this.layoutCounts && this.layoutCounts[layout]) || 0;
   }
 }

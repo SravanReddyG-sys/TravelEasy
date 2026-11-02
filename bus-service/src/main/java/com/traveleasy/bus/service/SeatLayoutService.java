@@ -567,6 +567,7 @@ public class SeatLayoutService {
                 .busConfiguration(bus != null && bus.getBusConfiguration() != null ? bus.getBusConfiguration() : template.getBusConfiguration())
                 .facilityType(bus != null && bus.getFacilityType() != null ? bus.getFacilityType() : "AC")
                 .amenities(bus != null ? bus.getAmenities() : "")
+                .exteriorImageUrl(bus != null ? bus.getExteriorImageUrl() : null)
                 .totalInventory(template.getTotalInventory())
                 .availableSeats(schedule.getAvailableSeats())
                 .baseFare(effectiveFare)

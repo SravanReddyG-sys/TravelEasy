@@ -3,6 +3,7 @@ export interface Bus {
   operatorId?: number;
   busNumber: string;
   operatorName: string;
+  businessName?: string;
   busType: string;
   capacity?: number;
   totalSeats?: number;
@@ -140,9 +141,18 @@ export interface Schedule {
   droppingPoints?: string;
   bus?: Bus;
   operatorName?: string;
+  businessName?: string;
+  rating?: number;
+  reviewCount?: number;
   busType?: string;
   busNumber?: string;
-  amenities?: string[];
+  manufacturer?: string;
+  model?: string;
+  facilityType?: string;
+  templateId?: string;
+  exteriorImageUrl?: string;
+  interiorImageUrl?: string;
+  amenities?: string[] | string;
   hasAc?: boolean;
   isSleeper?: boolean;
   arrivalDate?: string;
@@ -174,6 +184,9 @@ export interface BusFilterState {
   busTypeNonAc: boolean;
   seatTypeSeater: boolean;
   seatTypeSleeper: boolean;
+  seatTypeSeaterCumSleeper?: boolean;
+  selectedSeatLayouts?: string[];
+  minRating?: number;
   singleSeatOnly: boolean;
   departureMorning: boolean;
   departureAfternoon: boolean;
@@ -239,6 +252,8 @@ export interface TripSeatLayout {
   referenceImage: string;
   busNumber: string;
   operatorName: string;
+  businessName?: string;
+  exteriorImageUrl?: string;
   busType: string;
   busConfiguration: string;
   facilityType: string;

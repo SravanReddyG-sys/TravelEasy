@@ -8,7 +8,9 @@ com\traveleasy\bus\BusAssignPageContractAndModelTest.class
 com\traveleasy\bus\OperatorScheduleListingTest.class
 com\traveleasy\bus\BusOwnershipSecurityTest.class
 com\traveleasy\bus\BusRegistrationAndTripInventoryTest.class
+com\traveleasy\bus\BusBasicDetailsValidationAndStorageTest$1.class
 com\traveleasy\bus\service\SeatHoldReconciliationServiceTest.class
 com\traveleasy\bus\ScheduleValidationAndConflictTest.class
 com\traveleasy\bus\RouteStopsAndSegmentFaresTest.class
 com\traveleasy\bus\BusScheduleCancellationEndpointsTest.class
+com\traveleasy\bus\BusBasicDetailsValidationAndStorageTest.class

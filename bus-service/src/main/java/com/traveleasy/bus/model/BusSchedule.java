@@ -52,6 +52,12 @@ public class BusSchedule {
     private String status = "SCHEDULED";
 
     @Transient
+    private Bus bus;
+
+    @Transient
+    private String businessName;
+
+    @Transient
     private java.util.List<com.traveleasy.bus.dto.ScheduleStopDto> stops;
 
     @Transient

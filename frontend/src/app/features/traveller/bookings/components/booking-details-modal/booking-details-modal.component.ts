@@ -21,11 +21,19 @@ import { CommonModule } from '@angular/common';
           </div>
           <div class="modal-body p-4">
             <div class="d-flex justify-content-between align-items-start mb-4 pb-3 border-bottom flex-wrap gap-2">
-              <div>
-                <h4 class="fw-bold text-navy mb-1">{{ booking.displayTitle }}</h4>
-                <div class="text-secondary small mb-2">{{ booking.displaySubtitle }}</div>
-                <div class="badge-status-pill" [ngClass]="booking.statusBadgeClass">
-                  {{ booking.statusDisplay }}
+              <div class="d-flex align-items-start gap-3">
+                <img *ngIf="booking.thumbnail" 
+                     [src]="booking.thumbnail" 
+                     (error)="onImgError($event)" 
+                     class="modal-bus-thumb rounded-3 border" 
+                     alt="Booking photo" 
+                     style="width: 76px; height: 76px; object-fit: cover; flex-shrink: 0;">
+                <div>
+                  <h4 class="fw-bold text-navy mb-1">{{ booking.displayTitle }}</h4>
+                  <div class="text-secondary small mb-2">{{ booking.displaySubtitle }}</div>
+                  <div class="badge-status-pill" [ngClass]="booking.statusBadgeClass">
+                    {{ booking.statusDisplay }}
+                  </div>
                 </div>
               </div>
               <div class="text-end">
@@ -208,4 +216,8 @@ export class BookingDetailsModalComponent {
   @Output() closeCancel = new EventEmitter<void>();
   @Output() confirmCancel = new EventEmitter<any>();
   @Output() rateReview = new EventEmitter<any>();
+
+  onImgError(e: any) {
+    e.target.src = 'assets/images/travel-easy-bus.png';
+  }
 }

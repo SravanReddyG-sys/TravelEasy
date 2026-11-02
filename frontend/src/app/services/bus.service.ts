@@ -218,6 +218,10 @@ export class BusService {
 
   // ==================== ROUTE MANAGEMENT ====================
 
+  getNextRouteCode(): Observable<{ routeCode: string }> {
+    return this.http.get<{ routeCode: string }>(`${this.apiUrl}/routes/next-code`);
+  }
+
   createRoute(routeData: any): Observable<any> {
     return this.http.post(`${this.apiUrl}/routes`, routeData);
   }

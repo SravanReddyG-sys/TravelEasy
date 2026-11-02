@@ -23,6 +23,8 @@ import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -52,6 +54,37 @@ public class RouteService {
             }
         }
         return "RT-" + System.currentTimeMillis();
+    }
+
+    /**
+     * Generates a globally unique sequential route code across all operators e.g. "RTE-004".
+     * Scans all existing route codes across the entire database to ensure newly created operator
+     * accounts do not collide or restart from RTE-001.
+     */
+    public String generateNextRouteCode() {
+        List<String> existingCodes = routeRepository.findAllRouteCodes();
+        long maxNum = 0;
+        Pattern pattern = Pattern.compile("(?i)^RTE[-_]?(\\d+)$");
+        for (String code : existingCodes) {
+            if (code != null) {
+                Matcher matcher = pattern.matcher(code.trim());
+                if (matcher.find()) {
+                    try {
+                        long num = Long.parseLong(matcher.group(1));
+                        if (num > maxNum) {
+                            maxNum = num;
+                        }
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+        }
+        long nextNum = maxNum + 1;
+        String candidateCode;
+        do {
+            candidateCode = String.format("RTE-%03d", nextNum++);
+        } while (routeRepository.existsByRouteCode(candidateCode));
+
+        return candidateCode;
     }
 
     /**
@@ -172,9 +205,21 @@ public class RouteService {
     public RouteDto createRoute(Long operatorId, CreateRouteRequest req) {
         validateRouteDefinition(req);
 
-        String routeCode = (req.getRouteCode() != null && !req.getRouteCode().trim().isEmpty())
-                ? req.getRouteCode().trim().toUpperCase()
-                : generateUniqueRouteCode();
+        String requestedCode = req.getRouteCode();
+        String routeCode;
+        if (requestedCode == null || requestedCode.trim().isEmpty()) {
+            routeCode = generateUniqueRouteCode();
+        } else {
+            String trimmed = requestedCode.trim().toUpperCase();
+            if (trimmed.equals("RTE-PENDING") || trimmed.equals("LOADING...")) {
+                routeCode = generateNextRouteCode();
+            } else if (trimmed.matches("^RTE-\\d+$") && routeRepository.existsByRouteCode(trimmed)) {
+                // Auto-resolve collision if client passed auto-generated numeric route ID already taken by another operator
+                routeCode = generateNextRouteCode();
+            } else {
+                routeCode = trimmed;
+            }
+        }
 
         if (routeRepository.existsByRouteCode(routeCode)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Route code '" + routeCode + "' is already in use.");

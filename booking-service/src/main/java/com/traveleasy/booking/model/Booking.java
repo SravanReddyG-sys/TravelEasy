@@ -47,4 +47,16 @@ public class Booking {
     private String refundId;
     private Double refundAmount;
     private String refundAttemptKey;
+
+    @Transient
+    private String exteriorImageUrl;
+
+    @Transient
+    private String busType;
+
+    @Transient
+    private String facilityType;
+
+    @Transient
+    private String operatorBusinessName;
 }
