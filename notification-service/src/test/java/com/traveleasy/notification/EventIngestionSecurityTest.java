@@ -192,4 +192,77 @@ public class EventIngestionSecurityTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.status").value("FORBIDDEN"));
     }
+
+    @Test
+    void testBusService_CanSubmitBusScheduleCreated_Returns202() throws Exception {
+        NotificationEventRequest req = NotificationEventRequest.builder()
+                .eventId("BUS-SEC-TEST-" + UUID.randomUUID())
+                .eventType("BUS_SCHEDULE_CREATED")
+                .aggregateType("SCHEDULE")
+                .aggregateId("SCHED-100")
+                .recipients(List.of(
+                        RecipientDto.builder()
+                                .userId(202L)
+                                .email("operator@test.com")
+                                .role(RecipientRole.BUS_OPERATOR)
+                                .channels(List.of("IN_APP"))
+                                .build()
+                ))
+                .content(EventContentDto.builder()
+                        .title("Schedule Created")
+                        .summary("Schedule SCHED-100 created")
+                        .build())
+                .build();
+        String token = createInternalToken("bus-service", NotificationSecurityService.ROLE_INTERNAL_SERVICE, NotificationSecurityService.INTERNAL_ISSUER, 5);
+
+        mockMvc.perform(post("/api/notifications/events")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("INGESTED"));
+    }
+
+    @Test
+    void testBusService_CannotSubmitBookingEvent_Returns403() throws Exception {
+        NotificationEventRequest req = createSampleBookingRequest(); // BUS_BOOKING_CONFIRMED
+        String token = createInternalToken("bus-service", NotificationSecurityService.ROLE_INTERNAL_SERVICE, NotificationSecurityService.INTERNAL_ISSUER, 5);
+
+        mockMvc.perform(post("/api/notifications/events")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value("FORBIDDEN"));
+    }
+
+    @Test
+    void testBookingService_CannotSubmitBusDeactivatedEvent_Returns403() throws Exception {
+        NotificationEventRequest req = NotificationEventRequest.builder()
+                .eventId("BUS-SEC-TEST-" + UUID.randomUUID())
+                .eventType("BUS_DEACTIVATED")
+                .aggregateType("BUS")
+                .aggregateId("BUS-55")
+                .recipients(List.of(
+                        RecipientDto.builder()
+                                .userId(202L)
+                                .email("operator@test.com")
+                                .role(RecipientRole.BUS_OPERATOR)
+                                .channels(List.of("IN_APP"))
+                                .build()
+                ))
+                .content(EventContentDto.builder()
+                        .title("Bus Deactivated")
+                        .summary("Bus 55 deactivated")
+                        .build())
+                .build();
+        String token = createInternalToken("booking-service", NotificationSecurityService.ROLE_INTERNAL_SERVICE, NotificationSecurityService.INTERNAL_ISSUER, 5);
+
+        mockMvc.perform(post("/api/notifications/events")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value("FORBIDDEN"));
+    }
 }

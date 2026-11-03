@@ -74,7 +74,19 @@ public class BusSecurityService {
 
     public String extractEmail(String token) {
         try {
-            return extractClaims(token).getSubject();
+            Claims claims = extractClaims(token);
+            Object emailClaim = claims.get("email");
+            if (emailClaim != null) {
+                String emailStr = emailClaim.toString().trim();
+                if (emailStr.contains("@")) {
+                    return emailStr;
+                }
+            }
+            String sub = claims.getSubject();
+            if (sub != null && sub.contains("@")) {
+                return sub.trim();
+            }
+            return null;
         } catch (Exception ignored) {
             return null;
         }

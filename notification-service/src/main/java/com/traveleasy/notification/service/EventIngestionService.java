@@ -39,7 +39,11 @@ public class EventIngestionService {
             "BUS_BOOKING_CANCELLED",
             "PAYMENT_FAILED",
             "PAYMENT_REFUND_INITIATED",
-            "PAYMENT_REFUND_COMPLETED"
+            "PAYMENT_REFUND_COMPLETED",
+            "BUS_SCHEDULE_CREATED",
+            "BUS_SCHEDULE_CANCELLED",
+            "BUS_DEACTIVATED",
+            "BUS_ACTIVATED"
     );
 
     public static final Set<String> SUPPORTED_CHANNELS = Set.of(

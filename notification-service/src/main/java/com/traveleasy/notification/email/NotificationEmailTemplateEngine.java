@@ -15,6 +15,10 @@ public class NotificationEmailTemplateEngine {
             case "payment-failed" -> renderPaymentFailedHtml(subject, data);
             case "payment-refund-initiated" -> renderRefundInitiatedHtml(subject, data);
             case "payment-refund-completed" -> renderRefundCompletedHtml(subject, data);
+            case "bus-schedule-created" -> renderBusScheduleCreatedHtml(subject, data);
+            case "bus-schedule-cancelled" -> renderBusScheduleCancelledHtml(subject, data);
+            case "bus-deactivated" -> renderBusDeactivatedHtml(subject, data);
+            case "bus-activated" -> renderBusActivatedHtml(subject, data);
             default -> renderDefaultHtml(subject, data);
         };
     }
@@ -145,6 +149,98 @@ public class NotificationEmailTemplateEngine {
                 "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Settled Amount:</td><td style=\"padding:6px 0;font-size:15px;font-weight:700;color:#166534;text-align:right;\">&#8377;" + escape(amount) + "</td></tr>" +
                 "</table>" +
                 "<p style=\"font-size:13px;color:#64748B;line-height:1.5;\">Your refund has been settled successfully to your original payment method. Thank you for using Travel Easy.</p>" +
+                getFooterHtml();
+    }
+
+    private String renderBusScheduleCreatedHtml(String subject, Map<String, Object> data) {
+        String scheduleId = getVal(data, "scheduleId");
+        String busRegistrationNumber = getVal(data, "busRegistrationNumber");
+        String origin = getVal(data, "origin");
+        String destination = getVal(data, "destination");
+        String travelDate = getVal(data, "travelDate");
+        String departureTime = getVal(data, "departureTime");
+        String arrivalTime = getVal(data, "arrivalTime");
+        String baseFare = getVal(data, "baseFare");
+        String totalSeats = getVal(data, "totalSeats");
+        String operator = getVal(data, "operatorName");
+
+        return getHeaderHtml() +
+                "<div style=\"display:inline-block;padding:4px 12px;background-color:#DCFCE7;color:#166534;font-size:12px;font-weight:700;border-radius:20px;margin-bottom:12px;\">&#128197; Schedule Published</div>" +
+                "<h1 style=\"margin:0 0 8px 0;font-size:20px;font-weight:700;color:#0F172A;\">" + escape(subject) + "</h1>" +
+                (operator.isEmpty() ? "" : "<p style=\"margin:0 0 12px 0;font-size:14px;color:#64748B;\">Operator: <strong>" + escape(operator) + "</strong></p>") +
+                "<table role=\"presentation\" width=\"100%\" style=\"background-color:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:16px;margin-bottom:20px;\">" +
+                "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Schedule ID:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0F172A;text-align:right;\">#" + escape(scheduleId) + "</td></tr>" +
+                "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Route:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0F172A;text-align:right;\">" + escape(origin) + " &rarr; " + escape(destination) + "</td></tr>" +
+                "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Date & Time:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0F172A;text-align:right;\">" + escape(travelDate) + " " + escape(departureTime) + (arrivalTime.isEmpty() ? "" : " - " + escape(arrivalTime)) + "</td></tr>" +
+                "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Assigned Bus:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0B74DE;text-align:right;\">" + escape(busRegistrationNumber) + "</td></tr>" +
+                (baseFare.isEmpty() ? "" : "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Base Fare:</td><td style=\"padding:6px 0;font-size:14px;font-weight:700;color:#166534;text-align:right;\">&#8377;" + escape(baseFare) + "</td></tr>") +
+                (totalSeats.isEmpty() ? "" : "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Total Seats:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0F172A;text-align:right;\">" + escape(totalSeats) + "</td></tr>") +
+                "</table>" +
+                "<p style=\"font-size:13px;color:#64748B;line-height:1.5;\">Your schedule has been successfully created and published for traveller bookings.</p>" +
+                getFooterHtml();
+    }
+
+    private String renderBusScheduleCancelledHtml(String subject, Map<String, Object> data) {
+        String scheduleId = getVal(data, "scheduleId");
+        String busRegistrationNumber = getVal(data, "busRegistrationNumber");
+        String origin = getVal(data, "origin");
+        String destination = getVal(data, "destination");
+        String travelDate = getVal(data, "travelDate");
+        String departureTime = getVal(data, "departureTime");
+        String reason = getVal(data, "reason");
+        String operator = getVal(data, "operatorName");
+
+        return getHeaderHtml() +
+                "<div style=\"display:inline-block;padding:4px 12px;background-color:#FEE2E2;color:#991B1B;font-size:12px;font-weight:700;border-radius:20px;margin-bottom:12px;\">&#10007; Schedule Cancelled</div>" +
+                "<h1 style=\"margin:0 0 8px 0;font-size:20px;font-weight:700;color:#0F172A;\">" + escape(subject) + "</h1>" +
+                (operator.isEmpty() ? "" : "<p style=\"margin:0 0 12px 0;font-size:14px;color:#64748B;\">Operator: <strong>" + escape(operator) + "</strong></p>") +
+                "<table role=\"presentation\" width=\"100%\" style=\"background-color:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:16px;margin-bottom:20px;\">" +
+                "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Schedule ID:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0F172A;text-align:right;\">#" + escape(scheduleId) + "</td></tr>" +
+                "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Route:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0F172A;text-align:right;\">" + escape(origin) + " &rarr; " + escape(destination) + "</td></tr>" +
+                "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Date & Time:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0F172A;text-align:right;\">" + escape(travelDate) + " " + escape(departureTime) + "</td></tr>" +
+                "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Assigned Bus:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0F172A;text-align:right;\">" + escape(busRegistrationNumber) + "</td></tr>" +
+                "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Reason:</td><td style=\"padding:6px 0;font-size:13px;color:#DC2626;text-align:right;\">" + escape(reason.isEmpty() ? "Operational cancellation" : reason) + "</td></tr>" +
+                "</table>" +
+                "<p style=\"font-size:13px;color:#64748B;line-height:1.5;\">This schedule has been cancelled. Any reserved bookings will be cancelled and refunded according to policy.</p>" +
+                getFooterHtml();
+    }
+
+    private String renderBusDeactivatedHtml(String subject, Map<String, Object> data) {
+        String busId = getVal(data, "busId");
+        String busRegistrationNumber = getVal(data, "busRegistrationNumber");
+        String busType = getVal(data, "busType");
+        String reason = getVal(data, "reason");
+        String operator = getVal(data, "operatorName");
+
+        return getHeaderHtml() +
+                "<div style=\"display:inline-block;padding:4px 12px;background-color:#FEF3C7;color:#92400E;font-size:12px;font-weight:700;border-radius:20px;margin-bottom:12px;\">&#9888; Bus Deactivated</div>" +
+                "<h1 style=\"margin:0 0 8px 0;font-size:20px;font-weight:700;color:#0F172A;\">" + escape(subject) + "</h1>" +
+                (operator.isEmpty() ? "" : "<p style=\"margin:0 0 12px 0;font-size:14px;color:#64748B;\">Operator: <strong>" + escape(operator) + "</strong></p>") +
+                "<table role=\"presentation\" width=\"100%\" style=\"background-color:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:16px;margin-bottom:20px;\">" +
+                "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Bus Registration:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0F172A;text-align:right;\">" + escape(busRegistrationNumber) + " (ID: #" + escape(busId) + ")</td></tr>" +
+                (busType.isEmpty() ? "" : "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Bus Type:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0F172A;text-align:right;\">" + escape(busType) + "</td></tr>") +
+                "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Reason:</td><td style=\"padding:6px 0;font-size:13px;color:#B45309;text-align:right;\">" + escape(reason.isEmpty() ? "Deactivated by operator/admin" : reason) + "</td></tr>" +
+                "</table>" +
+                "<p style=\"font-size:13px;color:#64748B;line-height:1.5;\">This bus has been marked INACTIVE. It cannot be assigned to new schedules until reactivated.</p>" +
+                getFooterHtml();
+    }
+
+    private String renderBusActivatedHtml(String subject, Map<String, Object> data) {
+        String busId = getVal(data, "busId");
+        String busRegistrationNumber = getVal(data, "busRegistrationNumber");
+        String busType = getVal(data, "busType");
+        String operator = getVal(data, "operatorName");
+
+        return getHeaderHtml() +
+                "<div style=\"display:inline-block;padding:4px 12px;background-color:#DCFCE7;color:#166534;font-size:12px;font-weight:700;border-radius:20px;margin-bottom:12px;\">&#10003; Bus Activated</div>" +
+                "<h1 style=\"margin:0 0 8px 0;font-size:20px;font-weight:700;color:#0F172A;\">" + escape(subject) + "</h1>" +
+                (operator.isEmpty() ? "" : "<p style=\"margin:0 0 12px 0;font-size:14px;color:#64748B;\">Operator: <strong>" + escape(operator) + "</strong></p>") +
+                "<table role=\"presentation\" width=\"100%\" style=\"background-color:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:16px;margin-bottom:20px;\">" +
+                "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Bus Registration:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0F172A;text-align:right;\">" + escape(busRegistrationNumber) + " (ID: #" + escape(busId) + ")</td></tr>" +
+                (busType.isEmpty() ? "" : "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Bus Type:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0F172A;text-align:right;\">" + escape(busType) + "</td></tr>") +
+                "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Status:</td><td style=\"padding:6px 0;font-size:14px;font-weight:700;color:#166534;text-align:right;\">ACTIVE</td></tr>" +
+                "</table>" +
+                "<p style=\"font-size:13px;color:#64748B;line-height:1.5;\">This bus is now ACTIVE and available for route assignments and scheduling.</p>" +
                 getFooterHtml();
     }
 

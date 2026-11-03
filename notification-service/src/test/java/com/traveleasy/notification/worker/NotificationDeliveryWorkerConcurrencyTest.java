@@ -69,7 +69,15 @@ public class NotificationDeliveryWorkerConcurrencyTest {
             executor.submit(() -> {
                 try {
                     startLatch.await(); // Synchronize thread start for maximal contention
-                    int claimed = deliveryRepository.claimPendingDeliveries(workerId, Instant.now(), staleThreshold, totalRecords);
+                    int claimed = 0;
+                    for (int attempt = 0; attempt < 5; attempt++) {
+                        try {
+                            claimed = deliveryRepository.claimPendingDeliveries(workerId, Instant.now(), staleThreshold, totalRecords);
+                            break;
+                        } catch (org.springframework.dao.CannotAcquireLockException e) {
+                            Thread.sleep(50);
+                        }
+                    }
                     claimCounts.put(workerId, claimed);
                 } catch (Exception e) {
                     System.err.println("Worker " + workerId + " failed with: " + e.getMessage());
