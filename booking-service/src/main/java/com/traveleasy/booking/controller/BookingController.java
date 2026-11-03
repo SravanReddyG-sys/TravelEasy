@@ -11,6 +11,7 @@ import com.traveleasy.booking.service.BookingExpiryReconciliationService;
 import com.traveleasy.booking.service.BookingSecurityService;
 import com.traveleasy.booking.model.ScheduleCancellationBatch;
 import com.traveleasy.booking.service.ScheduleCancellationCoordinatorService;
+import com.traveleasy.booking.service.BookingStateTransitionService;
 
 
 import lombok.RequiredArgsConstructor;
@@ -59,6 +60,7 @@ public class BookingController {
 
     private final BookingExpiryReconciliationService expiryService;
     private final ScheduleCancellationCoordinatorService coordinatorService;
+    private final BookingStateTransitionService stateTransitionService;
 
     private RestTemplate restTemplate = new RestTemplate();
 
@@ -257,13 +259,8 @@ public class BookingController {
                 boolean paid = verifyPaymentStatusWithPaymentService(b.getBookingRef(), b.getTotalAmount());
 
                 if (paid) {
-
                     confirmSeatsInBusService(b);
-
-                    b.setStatus("CONFIRMED");
-
-                    bookingRepository.save(b);
-
+                    stateTransitionService.confirmBooking(b);
                 }
 
             }
@@ -515,9 +512,7 @@ public class BookingController {
 
 
 
-            bkg.setStatus("CONFIRMED");
-
-            Booking saved = bookingRepository.save(bkg);
+            Booking saved = stateTransitionService.confirmBooking(bkg);
 
             return ResponseEntity.ok(Map.of("message", "Booking confirmed", "booking", saved));
 
@@ -586,8 +581,7 @@ public class BookingController {
             String previousStatus = bkg.getStatus();
             boolean wasPaidBooking = "CONFIRMED".equalsIgnoreCase(previousStatus) || "COMPLETED".equalsIgnoreCase(previousStatus);
 
-            bkg.setStatus("CANCELLED");
-            Booking saved = bookingRepository.save(bkg);
+            Booking saved = stateTransitionService.cancelBooking(bkg, bkg.getTotalAmount(), "Cancelled by customer");
 
             // 1. Authoritatively release physical seats in bus-service
             List<String> releasedSeats = releaseSeatsInBusService(saved);

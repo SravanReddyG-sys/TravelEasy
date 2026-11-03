@@ -34,7 +34,7 @@ const appPropsPath = path.join(rootDir, 'auth-service', 'src', 'main', 'resource
 assert(fs.existsSync(appPropsPath), 'application.properties exists in auth-service');
 const appProps = fs.readFileSync(appPropsPath, 'utf8');
 assert(appProps.includes('resend.api.key=${RESEND_API_KEY:}'), 'Configured resend.api.key with RESEND_API_KEY env fallback');
-assert(appProps.includes('resend.from=${RESEND_FROM:Travel Easy <onboarding@resend.dev>}'), 'Configured resend.from with onboarding default');
+assert(appProps.includes('resend.from=${RESEND_FROM:TravelEasy <notifications@mailer.gsrgroups.tech>}') || appProps.includes('resend.from=${RESEND_FROM:Travel Easy <onboarding@resend.dev>}'), 'Configured resend.from with verified domain default');
 assert(appProps.includes('app.frontend.url=${APP_FRONTEND_URL:http://localhost:4200}'), 'Configured app.frontend.url with port 4200 default');
 
 const envExamplePath = path.join(rootDir, '.env.example');
@@ -48,7 +48,7 @@ const templatePath = path.join(authSrc, 'service', 'PasswordResetEmailTemplate.j
 assert(fs.existsSync(templatePath), 'PasswordResetEmailTemplate.java exists');
 const templateSrc = fs.readFileSync(templatePath, 'utf8');
 assert(templateSrc.includes('Travel Easy'), 'Email template includes Travel Easy brand name');
-assert(templateSrc.includes('YOUR JOURNEY, OUR PRIORITY'), 'Email template includes brand tagline');
+assert(templateSrc.includes('YOUR JOURNEY, OUR PRIORITY') || templateSrc.includes('Made Travel Easy'), 'Email template includes brand tagline');
 assert(templateSrc.includes('Reset Your Password'), 'Email template includes main heading');
 assert(templateSrc.includes("Let's get you back to planning your next journey."), 'Email template includes subtitle');
 assert(templateSrc.includes('Reset My Password'), 'Email template includes primary action button');

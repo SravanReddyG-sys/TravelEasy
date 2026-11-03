@@ -29,6 +29,7 @@ import java.util.regex.Pattern;
 public class BookingExpiryReconciliationService {
 
     private final BookingRepository bookingRepository;
+    private final BookingStateTransitionService stateTransitionService;
     private RestTemplate restTemplate = new RestTemplate();
 
     public void setRestTemplate(RestTemplate restTemplate) {
@@ -88,8 +89,7 @@ public class BookingExpiryReconciliationService {
             log.info("Booking {} has confirmed payment. Attempting authoritative seat confirmation.", booking.getBookingRef());
             boolean seatsConfirmed = confirmSeatsInBusService(booking);
             if (seatsConfirmed) {
-                booking.setStatus("CONFIRMED");
-                bookingRepository.save(booking);
+                stateTransitionService.confirmBooking(booking);
                 log.info("Booking {} successfully recovered and marked CONFIRMED.", booking.getBookingRef());
                 return false;
             } else {

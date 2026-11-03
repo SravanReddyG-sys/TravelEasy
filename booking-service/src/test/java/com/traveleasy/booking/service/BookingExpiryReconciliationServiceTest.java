@@ -32,6 +32,9 @@ public class BookingExpiryReconciliationServiceTest {
     private BookingRepository bookingRepository;
 
     @Mock
+    private BookingStateTransitionService stateTransitionService;
+
+    @Mock
     private RestTemplate restTemplate;
 
     @InjectMocks
@@ -43,6 +46,11 @@ public class BookingExpiryReconciliationServiceTest {
         ReflectionTestUtils.setField(reconciliationService, "hotelServiceUrl", "http://localhost:8083");
         ReflectionTestUtils.setField(reconciliationService, "paymentServiceUrl", "http://localhost:8085");
         reconciliationService.setRestTemplate(restTemplate);
+        lenient().when(stateTransitionService.confirmBooking(any(Booking.class))).thenAnswer(inv -> {
+            Booking b = inv.getArgument(0);
+            b.setStatus("CONFIRMED");
+            return bookingRepository.save(b);
+        });
     }
 
     @Test

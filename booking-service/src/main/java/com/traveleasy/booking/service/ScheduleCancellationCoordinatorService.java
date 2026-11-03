@@ -25,6 +25,7 @@ public class ScheduleCancellationCoordinatorService {
     private final BookingRepository bookingRepository;
     private final ScheduleCancellationBatchRepository batchRepository;
     private final BookingSecurityService securityService;
+    private final BookingStateTransitionService stateTransitionService;
 
     private RestTemplate restTemplate = new RestTemplate();
 
@@ -232,11 +233,10 @@ public class ScheduleCancellationCoordinatorService {
                             refAmount = Double.valueOf(body.get("refundAmount").toString());
                         }
 
-                        booking.setStatus("CANCELLED");
                         booking.setRefundStatus("PROCESSED");
                         booking.setRefundId(refundId);
                         booking.setRefundAmount(refAmount);
-                        bookingRepository.save(booking);
+                        stateTransitionService.cancelBooking(booking, refAmount, "Operator cancelled schedule " + scheduleId);
                         log.info("Booking {} successfully refunded with refundId {}", booking.getBookingRef(), refundId);
                     } else {
                         booking.setRefundStatus("FAILED_RETRYABLE");

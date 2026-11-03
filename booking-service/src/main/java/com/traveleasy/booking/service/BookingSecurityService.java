@@ -3,19 +3,30 @@ package com.traveleasy.booking.service;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
 
 @Service
 public class BookingSecurityService {
 
-    @Value("${jwt.secret:TravelEasySuperSecretKeyForJWTSigning12345678901234567890}")
+    @Value("${jwt.secret:}")
     private String secret;
 
+    @PostConstruct
+    public void validateSecurityConfiguration() {
+        if (secret == null || secret.trim().length() < 32) {
+            throw new IllegalStateException(
+                    "Security startup failure: jwt.secret is missing or insecure (must be at least 32 characters). Predictable defaults are strictly prohibited."
+            );
+        }
+    }
+
     private Key getSigningKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes());
+        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
     public boolean validateToken(String token) {

@@ -44,6 +44,16 @@ public class PaymentServiceTest {
     private PaymentRepository paymentRepository;
 
     @Mock
+    private com.traveleasy.payment.repository.PaymentOutboxEventRepository outboxRepository;
+
+    @Mock
+    private com.traveleasy.payment.repository.PaymentWebhookEventRepository webhookEventRepository;
+
+    @Mock
+    private PaymentRecipientResolutionService recipientResolutionService;
+
+
+    @Mock
     private RazorpayConfig razorpayConfig;
 
     @Mock
@@ -52,7 +62,8 @@ public class PaymentServiceTest {
     @Mock
     private RestTemplate restTemplate;
 
-    @InjectMocks
+    private PaymentStateTransitionService stateTransitionService;
+
     private PaymentServiceImpl paymentService;
 
     private static final String TEST_KEY_ID = "rzp_test_mockKeyId123";
@@ -65,6 +76,19 @@ public class PaymentServiceTest {
         lenient().when(razorpayConfig.getKeySecret()).thenReturn(TEST_KEY_SECRET);
         lenient().when(razorpayConfig.getWebhookSecret()).thenReturn(TEST_WEBHOOK_SECRET);
         lenient().when(razorpayConfig.isConfigured()).thenReturn(true);
+        lenient().when(recipientResolutionService.resolveTravellerRecipient(anyString(), any())).thenReturn(java.util.Collections.emptyList());
+        lenient().when(webhookEventRepository.claimWebhookEvent(anyString(), anyString(), any(), any())).thenReturn(1);
+        lenient().when(webhookEventRepository.findByWebhookEventId(anyString())).thenReturn(Optional.empty());
+        stateTransitionService = spy(new PaymentStateTransitionService(paymentRepository, outboxRepository, new com.fasterxml.jackson.databind.ObjectMapper()));
+        paymentService = new PaymentServiceImpl(
+                paymentRepository,
+                razorpayConfig,
+                razorpayClient,
+                restTemplate,
+                stateTransitionService,
+                recipientResolutionService,
+                webhookEventRepository
+        );
     }
 
     private String calculateHmac(String data, String secret) throws Exception {

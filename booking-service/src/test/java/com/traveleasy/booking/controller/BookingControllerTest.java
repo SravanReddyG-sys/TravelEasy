@@ -6,6 +6,7 @@ import com.traveleasy.booking.repository.BookingRepository;
 import com.traveleasy.booking.service.BookingExpiryReconciliationService;
 import com.traveleasy.booking.service.BookingSecurityService;
 import com.traveleasy.booking.service.ScheduleCancellationCoordinatorService;
+import com.traveleasy.booking.service.BookingStateTransitionService;
 import com.traveleasy.booking.model.ScheduleCancellationBatch;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -58,11 +59,24 @@ public class BookingControllerTest {
     private ScheduleCancellationCoordinatorService coordinatorService;
 
     @MockBean
+    private BookingStateTransitionService stateTransitionService;
+
+    @MockBean
     private RestTemplate restTemplate;
 
     @BeforeEach
     void setUp() {
         bookingController.setRestTemplate(restTemplate);
+        when(stateTransitionService.confirmBooking(any(Booking.class))).thenAnswer(inv -> {
+            Booking b = inv.getArgument(0);
+            b.setStatus("CONFIRMED");
+            return b;
+        });
+        when(stateTransitionService.cancelBooking(any(Booking.class), any(), any())).thenAnswer(inv -> {
+            Booking b = inv.getArgument(0);
+            b.setStatus("CANCELLED");
+            return b;
+        });
     }
 
     @Test
