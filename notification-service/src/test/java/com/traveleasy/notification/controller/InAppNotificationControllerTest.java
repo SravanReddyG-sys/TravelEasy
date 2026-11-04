@@ -21,6 +21,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -110,6 +111,71 @@ public class InAppNotificationControllerTest {
     }
 
     @Test
+    void testRoleMapping_RoleCustomerMapsToTraveller() throws Exception {
+        Long customerId = 555L;
+        inAppRepository.save(createNotification(customerId, "customer@traveleasy.com", RecipientRole.TRAVELLER, "Customer Booking", false));
+
+        // Token minted by Auth Service with ROLE_CUSTOMER
+        String customerToken = createUserToken(customerId, "customer@traveleasy.com", "ROLE_CUSTOMER");
+
+        mockMvc.perform(get("/api/notifications/in-app")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + customerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].recipientUserId").value(customerId))
+                .andExpect(jsonPath("$[0].recipientRole").value("TRAVELLER"));
+
+        mockMvc.perform(get("/api/notifications/in-app/unread-count")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + customerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.unreadCount").value(1));
+    }
+
+    @Test
+    void testRoleMapping_RoleBusOperatorAndHotelManagerAndAdmin() throws Exception {
+        Long opId = 666L;
+        Long hmId = 777L;
+        Long adminId = 888L;
+
+        inAppRepository.save(createNotification(opId, "op@gsr.com", RecipientRole.BUS_OPERATOR, "Bus Alert", false));
+        inAppRepository.save(createNotification(hmId, "hm@hotel.com", RecipientRole.HOTEL_PARTNER, "Hotel Alert", false));
+        inAppRepository.save(createNotification(adminId, "admin@traveleasy.com", RecipientRole.ADMIN, "Admin Alert", false));
+
+        // Tokens using Spring Security ROLE_ prefix
+        String opToken = createUserToken(opId, "op@gsr.com", "ROLE_BUS_OPERATOR");
+        String hmToken = createUserToken(hmId, "hm@hotel.com", "ROLE_HOTEL_MANAGER");
+        String adminToken = createUserToken(adminId, "admin@traveleasy.com", "ROLE_ADMIN");
+
+        mockMvc.perform(get("/api/notifications/in-app")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + opToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].recipientRole").value("BUS_OPERATOR"));
+
+        mockMvc.perform(get("/api/notifications/in-app")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + hmToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].recipientRole").value("HOTEL_PARTNER"));
+
+        mockMvc.perform(get("/api/notifications/in-app")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].recipientRole").value("ADMIN"));
+    }
+
+    @Test
+    void testRoleMapping_UnknownRoleRejectedWithForbidden() throws Exception {
+        String token = createUserToken(999L, "unknown@traveleasy.com", "ROLE_UNKNOWN");
+
+        mockMvc.perform(get("/api/notifications/in-app")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value("FORBIDDEN"));
+    }
+
+    @Test
     void testGetUnreadCount_CorrectCountReturned() throws Exception {
         Long userId = 701L;
         inAppRepository.save(createNotification(userId, "user701@traveleasy.com", RecipientRole.TRAVELLER, "Unread 1", false));
@@ -133,8 +199,8 @@ public class InAppNotificationControllerTest {
                 createNotification(ownerId, "owner801@traveleasy.com", RecipientRole.TRAVELLER, "Owner Note", false)
         );
 
-        String intruderToken = createUserToken(intruderId, "intruder802@traveleasy.com", "TRAVELLER");
-        String ownerToken = createUserToken(ownerId, "owner801@traveleasy.com", "TRAVELLER");
+        String intruderToken = createUserToken(intruderId, "intruder802@traveleasy.com", "ROLE_CUSTOMER");
+        String ownerToken = createUserToken(ownerId, "owner801@traveleasy.com", "ROLE_CUSTOMER");
 
         // Intruder tries to mark owner's notification as read -> 403 Forbidden
         mockMvc.perform(put("/api/notifications/in-app/" + notif.getId() + "/read")
@@ -160,7 +226,7 @@ public class InAppNotificationControllerTest {
         inAppRepository.save(createNotification(userId, "user901@traveleasy.com", RecipientRole.TRAVELLER, "Bulk 1", false));
         inAppRepository.save(createNotification(userId, "user901@traveleasy.com", RecipientRole.TRAVELLER, "Bulk 2", false));
 
-        String token = createUserToken(userId, "user901@traveleasy.com", "TRAVELLER");
+        String token = createUserToken(userId, "user901@traveleasy.com", "ROLE_CUSTOMER");
 
         mockMvc.perform(put("/api/notifications/in-app/read-all")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
@@ -169,6 +235,6 @@ public class InAppNotificationControllerTest {
                 .andExpect(jsonPath("$.markedRead").value(2));
 
         long unreadRemaining = inAppRepository.countByRecipientUserIdAndRecipientRoleAndIsReadFalse(userId, RecipientRole.TRAVELLER);
-        org.junit.jupiter.api.Assertions.assertEquals(0, unreadRemaining);
+        assertEquals(0, unreadRemaining);
     }
 }

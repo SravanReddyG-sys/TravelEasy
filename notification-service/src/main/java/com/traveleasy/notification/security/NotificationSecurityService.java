@@ -142,19 +142,31 @@ public class NotificationSecurityService {
         Object roleObj = claims.get("role");
         if (roleObj == null) return null;
         String roleStr = roleObj.toString().trim().toUpperCase();
+
+        // 1. Direct match against enum names (e.g. TRAVELLER, BUS_OPERATOR, HOTEL_PARTNER, ADMIN)
         try {
             return RecipientRole.valueOf(roleStr);
-        } catch (IllegalArgumentException ex) {
-            // Check common aliases e.g. "ROLE_TRAVELLER" -> "TRAVELLER"
-            if (roleStr.startsWith("ROLE_")) {
-                try {
-                    return RecipientRole.valueOf(roleStr.substring(5));
-                } catch (IllegalArgumentException ignored) {
-                }
-            }
-            log.warn("Unrecognized role claim in JWT: {}", roleStr);
-            return null;
+        } catch (IllegalArgumentException ignored) {
         }
+
+        // 2. Strip standard Spring Security "ROLE_" prefix if present
+        String normalizedRole = roleStr.startsWith("ROLE_") ? roleStr.substring(5) : roleStr;
+        try {
+            return RecipientRole.valueOf(normalizedRole);
+        } catch (IllegalArgumentException ignored) {
+        }
+
+        // 3. Map authoritative business aliases
+        return switch (normalizedRole) {
+            case "CUSTOMER", "TRAVELLER", "USER" -> RecipientRole.TRAVELLER;
+            case "BUS_OPERATOR", "OPERATOR" -> RecipientRole.BUS_OPERATOR;
+            case "HOTEL_MANAGER", "HOTEL_PARTNER" -> RecipientRole.HOTEL_PARTNER;
+            case "ADMIN", "ADMINISTRATOR" -> RecipientRole.ADMIN;
+            default -> {
+                log.warn("Unrecognized role claim in JWT: {}", roleStr);
+                yield null;
+            }
+        };
     }
 
     public String extractEmail(Claims claims) {

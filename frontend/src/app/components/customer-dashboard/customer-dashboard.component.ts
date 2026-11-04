@@ -1,4 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { NotificationService } from '../../services/notification.service';
+import { FormattedNotification } from '../../models/notification.model';
+import { Subscription } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
@@ -64,6 +67,7 @@ export { Destination, DestinationAttraction };
         (clearSearch)="clearSearch()"
         (toggleNotifications)="toggleNotifications()"
         (markNotificationsRead)="markNotificationsRead()"
+        (notificationClick)="handleNotificationClick($event)"
         (toggleUserMenu)="toggleUserMenu()"
         (logout)="logout()"
       ></app-traveller-header>
@@ -1009,7 +1013,7 @@ export { Destination, DestinationAttraction };
     }
   `]
 })
-export class CustomerDashboardComponent implements OnInit {
+export class CustomerDashboardComponent implements OnInit, OnDestroy {
   Math = Math;
   currentUser: User | null = null;
   activeTab = 'dashboard';
@@ -1023,7 +1027,8 @@ export class CustomerDashboardComponent implements OnInit {
   showNotifications = false;
   showUserMenu = false;
   unreadNotificationsCount = 0;
-  notificationList: any[] = [];
+  notificationList: FormattedNotification[] = [];
+  private notificationSubs: Subscription[] = [];
 
   // Bus Search & Results State
   busOrigin = 'Bengaluru';
@@ -1289,7 +1294,8 @@ export class CustomerDashboardComponent implements OnInit {
     private bookingService: BookingService,
     private travellerService: TravellerService,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    private notificationService: NotificationService
   ) {}
 
   ngOnInit() {
@@ -1375,6 +1381,21 @@ export class CustomerDashboardComponent implements OnInit {
 
     // Load initial tab data
     this.loadTabData(this.activeTab);
+
+    this.notificationSubs.push(
+      this.notificationService.notifications$.subscribe(notifs => {
+        this.notificationList = notifs;
+      })
+    );
+    this.notificationSubs.push(
+      this.notificationService.unreadCount$.subscribe(count => {
+        this.unreadNotificationsCount = count;
+      })
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.notificationSubs.forEach(s => s.unsubscribe());
   }
 
   getFirstName(): string {
@@ -1520,11 +1541,26 @@ export class CustomerDashboardComponent implements OnInit {
   toggleNotifications() {
     this.showNotifications = !this.showNotifications;
     this.showUserMenu = false;
+    if (this.showNotifications) {
+      this.notificationService.fetchNotifications().subscribe();
+    }
   }
 
   markNotificationsRead() {
-    this.unreadNotificationsCount = 0;
-    this.notificationList.forEach(n => n.read = true);
+    this.notificationService.markAllAsRead().subscribe();
+  }
+
+  handleNotificationClick(n: FormattedNotification) {
+    this.notificationService.markAsRead(n.id).subscribe();
+    this.showNotifications = false;
+    if (n.actionUrl) {
+      const url = n.actionUrl.trim();
+      if (url.includes('booking') || url === '/my-bookings' || url === '/customer?tab=my-bookings') {
+        this.switchTab('my-bookings');
+      } else if (this.notificationService.isSafeActionUrl(url)) {
+        this.router.navigateByUrl(url);
+      }
+    }
   }
 
   toggleUserMenu() {
