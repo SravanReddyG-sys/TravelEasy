@@ -8,7 +8,10 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "bookings")
+@Table(name = "bookings", indexes = {
+    @Index(name = "idx_bookings_confirmed_at", columnList = "confirmedAt"),
+    @Index(name = "idx_bookings_service_type", columnList = "serviceType")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -38,6 +41,8 @@ public class Booking {
 
     @Builder.Default
     private LocalDateTime bookingDate = LocalDateTime.now();
+
+    private LocalDateTime confirmedAt;
 
     @Builder.Default
     private LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(15);

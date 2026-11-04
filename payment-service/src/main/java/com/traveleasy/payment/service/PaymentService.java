@@ -3,6 +3,7 @@ package com.traveleasy.payment.service;
 import com.traveleasy.payment.dto.*;
 import com.traveleasy.payment.model.PaymentTransaction;
 
+import java.util.List;
 import java.util.Map;
 
 public interface PaymentService {
@@ -15,4 +16,7 @@ public interface PaymentService {
     PaymentTransaction getPaymentByTransactionRef(String transactionRef);
     Map<String, String> getPublicConfig();
     PaymentTransaction processLegacyPayment(PaymentTransaction transaction);
+
+    PaymentStatsResponse getAdminStats();
+    List<DailyRevenueTrendResponse> getAdminRevenueTrends(int days);
 }

@@ -48,4 +48,10 @@ public class PaymentSecurityService {
                 .parseClaimsJws(token)
                 .getBody();
     }
+
+    public String extractRole(String token) {
+        Claims claims = extractClaims(token);
+        Object role = claims.get("role");
+        return role != null ? role.toString() : null;
+    }
 }

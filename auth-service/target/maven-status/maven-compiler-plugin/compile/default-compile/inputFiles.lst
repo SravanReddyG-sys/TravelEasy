@@ -1,8 +1,11 @@
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\repository\UserRepository.java
+C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\ProviderDetailsResponse.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\RegisterRequest.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\security\JwtUtil.java
+C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\UserStatsResponse.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\AuthServiceApplication.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\controller\AuthController.java
+C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\PendingProviderSummaryResponse.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\BusOperatorRegisterRequest.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\dto\TravellerRegisterRequest.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\auth-service\src\main\java\com\traveleasy\auth\service\PasswordResetEmailTemplate.java

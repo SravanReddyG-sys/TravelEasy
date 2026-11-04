@@ -3,15 +3,20 @@ package com.traveleasy.booking.controller;
 
 
 import com.traveleasy.booking.model.Booking;
-
+import com.traveleasy.booking.dto.BookingStatsResponse;
+import com.traveleasy.booking.dto.BookingTrendResponse;
+import com.traveleasy.booking.dto.RecentBookingResponse;
 import com.traveleasy.booking.repository.BookingRepository;
-
 import com.traveleasy.booking.service.BookingExpiryReconciliationService;
-
 import com.traveleasy.booking.service.BookingSecurityService;
 import com.traveleasy.booking.model.ScheduleCancellationBatch;
 import com.traveleasy.booking.service.ScheduleCancellationCoordinatorService;
 import com.traveleasy.booking.service.BookingStateTransitionService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import java.time.LocalDate;
+import java.util.LinkedHashMap;
 
 
 import lombok.RequiredArgsConstructor;
@@ -357,8 +362,187 @@ public class BookingController {
         return ResponseEntity.ok(bookingRepository.findByProviderIdOrderByBookingDateDesc(providerId));
     }
 
+    /**
+     * Validates administrator credentials from the Authorization header.
+     * Returns null if authorized as ROLE_ADMIN, or an appropriate 401/403 ResponseEntity.
+     */
+    private ResponseEntity<?> validateAdminAuth(String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Authorization Bearer token is required"));
+        }
+        String token = authHeader.substring(7).trim();
+        if (!securityService.validateToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Invalid or expired authorization token"));
+        }
+        String role = securityService.extractRole(token);
+        if (!"ROLE_ADMIN".equalsIgnoreCase(role) && !"ADMIN".equalsIgnoreCase(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Administrator role required"));
+        }
+        return null;
+    }
+
+    /**
+     * Administrative aggregate statistics for Platform Bookings and Service Breakdown.
+     * Applies authoritative confirmed historical booking definition.
+     * Requires ROLE_ADMIN.
+     */
+    @GetMapping("/admin/stats")
+    public ResponseEntity<?> getBookingStats(@RequestHeader(value = "Authorization", required = false) String authHeader) {
+        ResponseEntity<?> authError = validateAdminAuth(authHeader);
+        if (authError != null) {
+            return authError;
+        }
+
+        List<Object[]> results = bookingRepository.countConfirmedBookingsByServiceType();
+        long busCount = 0;
+        long hotelCount = 0;
+
+        for (Object[] row : results) {
+            if (row != null && row.length >= 2 && row[0] != null) {
+                String type = row[0].toString().toUpperCase();
+                long count = row[1] instanceof Number ? ((Number) row[1]).longValue() : 0L;
+                if ("BUS".equals(type)) {
+                    busCount = count;
+                } else if ("HOTEL".equals(type)) {
+                    hotelCount = count;
+                }
+            }
+        }
+
+        long totalBookings = busCount + hotelCount;
+        double busPct = 0.0;
+        double hotelPct = 0.0;
+        if (totalBookings > 0) {
+            busPct = Math.round((busCount * 1000.0) / totalBookings) / 10.0;
+            hotelPct = Math.round((hotelCount * 1000.0) / totalBookings) / 10.0;
+        }
+
+        BookingStatsResponse response = BookingStatsResponse.builder()
+                .totalBookings(totalBookings)
+                .serviceBreakdown(BookingStatsResponse.ServiceBreakdown.builder()
+                        .bus(BookingStatsResponse.ServiceMetric.builder()
+                                .count(busCount)
+                                .percentage(busPct)
+                                .build())
+                        .hotel(BookingStatsResponse.ServiceMetric.builder()
+                                .count(hotelCount)
+                                .percentage(hotelPct)
+                                .build())
+                        .build())
+                .build();
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Administrative endpoint for date-wise booking trends line chart.
+     * Returns a continuous timeline of confirmed bookings over the requested days.
+     * Requires ROLE_ADMIN.
+     */
+    @GetMapping("/admin/trends")
+    public ResponseEntity<?> getBookingTrends(
+            @RequestParam(defaultValue = "7") int days,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        ResponseEntity<?> authError = validateAdminAuth(authHeader);
+        if (authError != null) {
+            return authError;
+        }
+
+        int boundedDays = Math.max(1, Math.min(90, days));
+        LocalDate today = LocalDate.now();
+        LocalDate startDate = today.minusDays(boundedDays - 1);
+
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime = today.atTime(23, 59, 59, 999999999);
+
+        // Pre-populate continuous timeline map with 0 counts
+        Map<LocalDate, Long> dateMap = new LinkedHashMap<>();
+        for (int i = 0; i < boundedDays; i++) {
+            dateMap.put(startDate.plusDays(i), 0L);
+        }
+
+        List<Object[]> queryResults = bookingRepository.countConfirmedBookingsByDateNative(startDateTime, endDateTime);
+        for (Object[] row : queryResults) {
+            if (row != null && row.length >= 2 && row[0] != null) {
+                LocalDate dt = null;
+                if (row[0] instanceof java.sql.Date) {
+                    dt = ((java.sql.Date) row[0]).toLocalDate();
+                } else if (row[0] instanceof LocalDate) {
+                    dt = (LocalDate) row[0];
+                } else {
+                    try {
+                        dt = LocalDate.parse(row[0].toString().substring(0, 10));
+                    } catch (Exception ignored) {}
+                }
+
+                if (dt != null && dateMap.containsKey(dt)) {
+                    long count = row[1] instanceof Number ? ((Number) row[1]).longValue() : 0L;
+                    dateMap.put(dt, count);
+                }
+            }
+        }
+
+        List<BookingTrendResponse> response = dateMap.entrySet().stream()
+                .map(e -> BookingTrendResponse.builder()
+                        .date(e.getKey())
+                        .bookingCount(e.getValue())
+                        .build())
+                .toList();
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Administrative endpoint for latest genuine confirmed bookings.
+     * Sorted newest first without expensive remote detail enrichment.
+     * Requires ROLE_ADMIN.
+     */
+    @GetMapping("/admin/recent")
+    public ResponseEntity<?> getRecentBookings(
+            @RequestParam(defaultValue = "5") int limit,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        ResponseEntity<?> authError = validateAdminAuth(authHeader);
+        if (authError != null) {
+            return authError;
+        }
+
+        int boundedLimit = Math.max(1, Math.min(50, limit));
+        Pageable pageable = PageRequest.of(0, boundedLimit);
+
+        Page<Booking> bookingsPage = bookingRepository.findRecentConfirmedBookings(pageable);
+
+        List<RecentBookingResponse> response = bookingsPage.getContent().stream()
+                .map(b -> {
+                    String customerName = b.getCustomerName();
+                    if (customerName == null || customerName.trim().isEmpty()) {
+                        customerName = b.getCustomerEmail() != null && !b.getCustomerEmail().trim().isEmpty()
+                                ? b.getCustomerEmail()
+                                : "Guest Traveller";
+                    }
+                    return RecentBookingResponse.builder()
+                            .bookingRef(b.getBookingRef())
+                            .serviceType(b.getServiceType() != null ? b.getServiceType().toUpperCase() : "BUS")
+                            .customerName(customerName)
+                            .totalAmount(b.getTotalAmount())
+                            .status(b.getStatus())
+                            .bookingDate(b.getBookingDate())
+                            .build();
+                })
+                .toList();
+
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/admin/all")
-    public ResponseEntity<List<Booking>> getAllBookings() {
+    public ResponseEntity<?> getAllBookings(@RequestHeader(value = "Authorization", required = false) String authHeader) {
+        ResponseEntity<?> authError = validateAdminAuth(authHeader);
+        if (authError != null) {
+            return authError;
+        }
+
         List<Booking> all = bookingRepository.findAll();
         for (Booking b : all) {
             enrichBookingWithBusDetails(b);

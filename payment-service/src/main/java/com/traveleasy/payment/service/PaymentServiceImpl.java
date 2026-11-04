@@ -20,6 +20,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Instant;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -679,6 +682,126 @@ public class PaymentServiceImpl implements PaymentService {
             }
         } catch (Exception e) {
             log.error("Failed to cancel booking {} in booking-service: {}", bookingRef, e.getMessage());
+        }
+    }
+
+    @Override
+    public PaymentStatsResponse getAdminStats() {
+        String currency = "INR";
+        BigDecimal capturedBd = paymentRepository.sumSuccessfulCapturedCollections(currency);
+        BigDecimal refundedBd = paymentRepository.sumProcessedRefunds(currency);
+
+        if (capturedBd == null) {
+            capturedBd = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        } else {
+            capturedBd = capturedBd.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        if (refundedBd == null) {
+            refundedBd = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        } else {
+            refundedBd = refundedBd.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal netBd = capturedBd.subtract(refundedBd).setScale(2, RoundingMode.HALF_UP);
+
+        log.info("WP-04 Admin Stats: Captured={}, Refunded={}, Net={} ({})",
+                capturedBd, refundedBd, netBd, currency);
+
+        return PaymentStatsResponse.builder()
+                .currency(currency)
+                .successfulCapturedCollections(capturedBd)
+                .processedRefunds(refundedBd)
+                .netCollections(netBd)
+                .build();
+    }
+
+    @Override
+    public List<DailyRevenueTrendResponse> getAdminRevenueTrends(int days) {
+        String currency = "INR";
+        int boundedDays = Math.max(1, Math.min(90, days));
+        LocalDate today = LocalDate.now();
+        LocalDate startDate = today.minusDays(boundedDays - 1);
+
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime = today.atTime(23, 59, 59, 999999999);
+
+        // Pre-populate continuous timeline maps with zero values
+        Map<LocalDate, BigDecimal> capturedMap = new LinkedHashMap<>();
+        Map<LocalDate, BigDecimal> refundedMap = new LinkedHashMap<>();
+        for (int i = 0; i < boundedDays; i++) {
+            LocalDate d = startDate.plusDays(i);
+            capturedMap.put(d, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+            refundedMap.put(d, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+        }
+
+        List<Object[]> capturedResults = paymentRepository.countDailyCapturedNative(startDateTime, endDateTime, currency);
+        for (Object[] row : capturedResults) {
+            if (row != null && row.length >= 2 && row[0] != null) {
+                LocalDate dt = parseLocalDate(row[0]);
+                if (dt != null && capturedMap.containsKey(dt)) {
+                    capturedMap.put(dt, parseBigDecimal(row[1]));
+                }
+            }
+        }
+
+        List<Object[]> refundedResults = paymentRepository.countDailyRefundedNative(startDateTime, endDateTime, currency);
+        for (Object[] row : refundedResults) {
+            if (row != null && row.length >= 2 && row[0] != null) {
+                LocalDate dt = parseLocalDate(row[0]);
+                if (dt != null && refundedMap.containsKey(dt)) {
+                    refundedMap.put(dt, parseBigDecimal(row[1]));
+                }
+            }
+        }
+
+        List<DailyRevenueTrendResponse> response = new ArrayList<>();
+        for (LocalDate date : capturedMap.keySet()) {
+            BigDecimal capturedAmt = capturedMap.get(date);
+            BigDecimal refundedAmt = refundedMap.get(date);
+            BigDecimal netAmt = capturedAmt.subtract(refundedAmt).setScale(2, RoundingMode.HALF_UP);
+
+            response.add(DailyRevenueTrendResponse.builder()
+                    .date(date)
+                    .capturedCollections(capturedAmt)
+                    .processedRefunds(refundedAmt)
+                    .netCollections(netAmt)
+                    .currency(currency)
+                    .build());
+        }
+
+        return response;
+    }
+
+    private BigDecimal parseBigDecimal(Object obj) {
+        if (obj == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        if (obj instanceof BigDecimal) {
+            return ((BigDecimal) obj).setScale(2, RoundingMode.HALF_UP);
+        }
+        if (obj instanceof Number) {
+            return BigDecimal.valueOf(((Number) obj).doubleValue()).setScale(2, RoundingMode.HALF_UP);
+        }
+        try {
+            return new BigDecimal(obj.toString()).setScale(2, RoundingMode.HALF_UP);
+        } catch (Exception e) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+    }
+
+    private LocalDate parseLocalDate(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof java.sql.Date) {
+            return ((java.sql.Date) obj).toLocalDate();
+        } else if (obj instanceof LocalDate) {
+            return (LocalDate) obj;
+        } else {
+            try {
+                return LocalDate.parse(obj.toString().substring(0, 10));
+            } catch (Exception e) {
+                return null;
+            }
         }
     }
 }

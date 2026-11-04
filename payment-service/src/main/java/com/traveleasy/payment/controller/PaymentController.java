@@ -2,7 +2,9 @@ package com.traveleasy.payment.controller;
 
 import com.traveleasy.payment.dto.*;
 import com.traveleasy.payment.model.PaymentTransaction;
+import com.traveleasy.payment.service.PaymentSecurityService;
 import com.traveleasy.payment.service.PaymentService;
+import java.util.List;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +21,7 @@ import java.util.Map;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final PaymentSecurityService securityService;
 
     /**
      * Public gateway configuration endpoint returning only the Razorpay Key ID.
@@ -122,5 +125,54 @@ public class PaymentController {
         log.info("Received legacy payment process request for booking {}", transaction.getBookingRef());
         PaymentTransaction saved = paymentService.processLegacyPayment(transaction);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+    }
+
+    /**
+     * Platform Net Collections statistics for Admin Dashboard Overview KPI.
+     * Net Collections = Successful Captured Collections - Processed Refunds.
+     */
+    @GetMapping("/admin/stats")
+    public ResponseEntity<?> getAdminStats(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        ResponseEntity<?> authError = validateAdminAuth(authHeader);
+        if (authError != null) {
+            return authError;
+        }
+        PaymentStatsResponse stats = paymentService.getAdminStats();
+        return ResponseEntity.ok(stats);
+    }
+
+    /**
+     * Daily Revenue Trends (Net Collections = Daily Captured - Daily Processed Refunds)
+     * for Admin Dashboard Booking Trends line chart (Revenue toggle).
+     */
+    @GetMapping("/admin/revenue-trends")
+    public ResponseEntity<?> getAdminRevenueTrends(
+            @RequestParam(defaultValue = "7") int days,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        ResponseEntity<?> authError = validateAdminAuth(authHeader);
+        if (authError != null) {
+            return authError;
+        }
+        List<DailyRevenueTrendResponse> trends = paymentService.getAdminRevenueTrends(days);
+        return ResponseEntity.ok(trends);
+    }
+
+    private ResponseEntity<?> validateAdminAuth(String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Authorization token required"));
+        }
+        String token = authHeader.substring(7).trim();
+        if (!securityService.validateToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Invalid or expired authorization token"));
+        }
+        String role = securityService.extractRole(token);
+        if (!"ROLE_ADMIN".equalsIgnoreCase(role)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Administrator authorization required"));
+        }
+        return null;
     }
 }

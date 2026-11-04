@@ -56,8 +56,9 @@ export class AppComponent {
     const path = url.split('?')[0].split('#')[0].replace(/\/+$/, '');
     const isCustomerPage = path === '/customer' || path.startsWith('/customer/');
     const isBusOperatorPage = path === '/bus-operator' || path.startsWith('/bus-operator');
-    this.isDashboardPage = !isCustomerPage && !isBusOperatorPage && (path === '/hotel-manager' || path === '/admin');
-    this.isPublicPage = !isCustomerPage && !isBusOperatorPage && !this.isDashboardPage;
+    const isAdminPage = path === '/admin' || path.startsWith('/admin');
+    this.isDashboardPage = !isCustomerPage && !isBusOperatorPage && !isAdminPage && path === '/hotel-manager';
+    this.isPublicPage = !isCustomerPage && !isBusOperatorPage && !isAdminPage && !this.isDashboardPage;
     this.isHomePage = path === '' || path === '/home';
 
     const excludedHeaderFooterPages = [

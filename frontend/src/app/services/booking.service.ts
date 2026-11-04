@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { AdminBookingStats, AdminBookingTrend, AdminRecentBooking } from '../models/admin-dashboard.model';
 
 @Injectable({
   providedIn: 'root'
@@ -85,4 +86,84 @@ export class BookingService {
   getOperatorScheduleCancellationStatus(scheduleId: number): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/bookings/operator/schedules/${scheduleId}/cancellation-status`);
   }
+
+  getAdminBookingStats(): Observable<AdminBookingStats> {
+    return this.http.get<AdminBookingStats>(this.apiUrl + '/bookings/admin/stats');
+  }
+
+  getAdminBookingTrends(days = 7): Observable<AdminBookingTrend[]> {
+    return this.http.get<AdminBookingTrend[]>(this.apiUrl + '/bookings/admin/trends?days=' + days);
+  }
+
+  getAdminRecentBookings(limit = 5): Observable<AdminRecentBooking[]> {
+    return this.http.get<AdminRecentBooking[]>(this.apiUrl + '/bookings/admin/recent?limit=' + limit);
+  }
+
+  getAdminPaymentStats(): Observable<AdminPaymentStats> {
+    return this.http.get<AdminPaymentStats>(this.apiUrl + '/payments/admin/stats');
+  }
+
+  getAdminRevenueTrends(days = 7): Observable<AdminDailyRevenueTrend[]> {
+    return this.http.get<AdminDailyRevenueTrend[]>(this.apiUrl + '/payments/admin/revenue-trends?days=' + days);
+  }
+
+  getAdminReviewStats(): Observable<AdminReviewStats> {
+    return this.http.get<AdminReviewStats>(this.apiUrl + '/reviews/admin/stats');
+  }
+
+  getAdminPendingReviews(page = 0, size = 10): Observable<AdminPendingReviewsPage> {
+    return this.http.get<AdminPendingReviewsPage>(this.apiUrl + '/reviews/admin/pending?page=' + page + '&size=' + size);
+  }
+}
+
+
+export interface AdminPaymentStats {
+  currency: string;
+  successfulCapturedCollections: number;
+  processedRefunds: number;
+  netCollections: number;
+}
+
+export interface AdminDailyRevenueTrend {
+  date: string;
+  capturedCollections: number;
+  processedRefunds: number;
+  netCollections: number;
+  currency: string;
+}
+
+
+export interface AdminReviewStats {
+  totalReviews: number;
+  pendingReviews: number;
+  approvedReviews: number;
+  rejectedReviews: number;
+}
+
+export interface AdminPendingReview {
+  id: number;
+  customerName: string;
+  customerId: number;
+  serviceType: string;
+  serviceId: number;
+  bookingRef: string;
+  rating: number;
+  title: string | null;
+  comment: string;
+  createdAt: string;
+  status: string | null;
+}
+
+export interface AdminPendingReviewsPage {
+  content: AdminPendingReview[];
+  pageable?: any;
+  totalPages: number;
+  totalElements: number;
+  last: boolean;
+  size: number;
+  number: number;
+  sort?: any;
+  numberOfElements: number;
+  first: boolean;
+  empty: boolean;
 }

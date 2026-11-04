@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -44,6 +45,9 @@ public class BookingStateTransitionService {
      */
     @Transactional
     public Booking confirmBooking(Booking booking) {
+        if (booking.getConfirmedAt() == null) {
+            booking.setConfirmedAt(LocalDateTime.now());
+        }
         if ("CONFIRMED".equalsIgnoreCase(booking.getStatus())) {
             log.info("Booking {} is already CONFIRMED. Skipping transition.", booking.getBookingRef());
             return booking;

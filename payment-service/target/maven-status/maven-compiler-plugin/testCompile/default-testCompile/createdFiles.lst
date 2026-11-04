@@ -1,10 +1,10 @@
 com\traveleasy\payment\worker\PaymentWebhookRecoveryTest.class
 com\traveleasy\payment\integration\PaymentLifecycleOutboxIntegrationTest.class
 com\traveleasy\payment\service\PaymentFailureClassificationTest.class
-com\traveleasy\payment\service\PaymentInternalTokenServiceTest.class
 com\traveleasy\payment\publisher\PaymentOutboxPublisherConcurrencyTest.class
 com\traveleasy\payment\service\PaymentServiceTest.class
 com\traveleasy\payment\publisher\PaymentOutboxPublisherTest.class
 com\traveleasy\payment\controller\PaymentControllerTest.class
 com\traveleasy\payment\service\PaymentStateTransitionServiceTest.class
+com\traveleasy\payment\service\PaymentInternalTokenServiceTest.class
 com\traveleasy\payment\service\PaymentWebhookInboxTest.class

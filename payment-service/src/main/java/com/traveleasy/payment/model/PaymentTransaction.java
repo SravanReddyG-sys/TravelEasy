@@ -8,7 +8,12 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "payment_transactions")
+@Table(name = "payment_transactions", indexes = {
+    @Index(name = "idx_payment_status", columnList = "status"),
+    @Index(name = "idx_payment_refund_status", columnList = "refundStatus"),
+    @Index(name = "idx_payment_timestamp", columnList = "timestamp"),
+    @Index(name = "idx_payment_refunded_at", columnList = "refundedAt")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
