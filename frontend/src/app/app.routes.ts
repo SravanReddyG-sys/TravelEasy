@@ -53,7 +53,12 @@ export const routes: Routes = [
     canActivate: [roleGuard],
     data: { roles: ['ROLE_BUS_OPERATOR', 'ROLE_ADMIN'] }
   },
-  { path: 'hotel-manager', component: HotelManagerDashboardComponent },
+  {
+    path: 'hotel-manager',
+    component: HotelManagerDashboardComponent,
+    canActivate: [roleGuard],
+    data: { roles: ['ROLE_HOTEL_MANAGER', 'ROLE_ADMIN'] }
+  },
   {
     path: 'admin',
     component: AdminDashboardComponent,

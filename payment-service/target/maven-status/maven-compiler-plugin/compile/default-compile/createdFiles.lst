@@ -1,5 +1,8 @@
+com\traveleasy\payment\dto\PaymentStatsResponse.class
 com\traveleasy\payment\dto\PaymentVerificationResponse$PaymentVerificationResponseBuilder.class
 com\traveleasy\payment\exception\PaymentException.class
+com\traveleasy\payment\dto\PaymentStatsResponse$PaymentStatsResponseBuilder.class
+com\traveleasy\payment\dto\DailyRevenueTrendResponse$DailyRevenueTrendResponseBuilder.class
 com\traveleasy\payment\exception\GlobalExceptionHandler.class
 com\traveleasy\payment\repository\PaymentWebhookEventRepository.class
 com\traveleasy\payment\service\PaymentInternalTokenService.class
@@ -20,6 +23,7 @@ com\traveleasy\payment\publisher\PaymentOutboxPublisher.class
 com\traveleasy\payment\dto\CreateOrderResponse.class
 com\traveleasy\payment\dto\RefundResponse$RefundResponseBuilder.class
 com\traveleasy\payment\repository\PaymentOutboxEventRepository.class
+com\traveleasy\payment\dto\DailyRevenueTrendResponse.class
 com\traveleasy\payment\dto\RecipientDto.class
 com\traveleasy\payment\dto\CreateOrderRequest$CreateOrderRequestBuilder.class
 com\traveleasy\payment\model\PaymentTransaction$PaymentTransactionBuilder.class

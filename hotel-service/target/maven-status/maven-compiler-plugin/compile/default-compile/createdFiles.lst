@@ -1,8 +1,10 @@
 com\traveleasy\hotel\model\RoomType.class
 com\traveleasy\hotel\repository\RoomTypeRepository.class
 com\traveleasy\hotel\model\RoomType$RoomTypeBuilder.class
+com\traveleasy\hotel\security\HotelSecurityService$CallerPrincipal.class
 com\traveleasy\hotel\controller\HotelController.class
 com\traveleasy\hotel\model\HotelProperty$HotelPropertyBuilder.class
 com\traveleasy\hotel\model\HotelProperty.class
 com\traveleasy\hotel\repository\HotelPropertyRepository.class
 com\traveleasy\hotel\HotelServiceApplication.class
+com\traveleasy\hotel\security\HotelSecurityService.class

@@ -4,6 +4,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -15,11 +16,18 @@ import java.util.Map;
 @Component
 public class JwtUtil {
 
-    @Value("${jwt.secret:TravelEasySuperSecretKeyForJWTSigning12345678901234567890}")
+    @Value("${jwt.secret:}")
     private String secret;
 
     @Value("${jwt.expiration:86400000}")
     private long expiration;
+
+    @PostConstruct
+    public void validateConfiguration() {
+        if (secret == null || secret.trim().length() < 32) {
+            throw new IllegalStateException("Security startup failure: jwt.secret is missing or insecure (must be at least 32 characters / 256 bits for HMAC-SHA256).");
+        }
+    }
 
     private Key getSigningKey() {
         return Keys.hmacShaKeyFor(secret.getBytes());

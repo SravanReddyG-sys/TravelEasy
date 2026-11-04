@@ -1,5 +1,10 @@
+com\traveleasy\review\service\ReviewSecurityService.class
 com\traveleasy\review\controller\ReviewController.class
+com\traveleasy\review\dto\PendingReviewResponse$PendingReviewResponseBuilder.class
+com\traveleasy\review\dto\ReviewStatsResponse$ReviewStatsResponseBuilder.class
 com\traveleasy\review\repository\ReviewRepository.class
+com\traveleasy\review\dto\PendingReviewResponse.class
+com\traveleasy\review\dto\ReviewStatsResponse.class
 com\traveleasy\review\model\Review$ReviewBuilder.class
 com\traveleasy\review\model\Review.class
 com\traveleasy\review\ReviewServiceApplication.class

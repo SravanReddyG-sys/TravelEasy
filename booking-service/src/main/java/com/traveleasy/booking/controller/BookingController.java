@@ -89,6 +89,10 @@ public class BookingController {
 
     private String paymentServiceUrl;
 
+    @org.springframework.beans.factory.annotation.Value("${hotel.service.url:http://localhost:8083}")
+
+    private String hotelServiceUrl;
+
 
 
     @PostMapping
@@ -767,8 +771,9 @@ public class BookingController {
 
             Booking saved = stateTransitionService.cancelBooking(bkg, bkg.getTotalAmount(), "Cancelled by customer");
 
-            // 1. Authoritatively release physical seats in bus-service
+            // 1. Authoritatively release physical seats in bus-service or rooms in hotel-service
             List<String> releasedSeats = releaseSeatsInBusService(saved);
+            releaseRoomsInHotelService(saved);
 
             // 2. Trigger automated gateway refund via payment-service
             Map<String, Object> refund = processRefundInPaymentService(saved.getBookingRef(), saved.getTotalAmount());
@@ -1009,6 +1014,38 @@ public class BookingController {
 
         }
 
+    }
+
+    private boolean releaseRoomsInHotelService(Booking booking) {
+        if (!"HOTEL".equalsIgnoreCase(booking.getServiceType()) || booking.getServiceId() == null) {
+            return false;
+        }
+        int count = 1;
+        try {
+            if (booking.getDetailsJson() != null) {
+                Pattern pattern = Pattern.compile("Rooms?:\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
+                Matcher matcher = pattern.matcher(booking.getDetailsJson());
+                if (matcher.find()) {
+                    count = Integer.parseInt(matcher.group(1));
+                }
+            }
+            String url = hotelServiceUrl + "/api/hotels/rooms/" + booking.getServiceId() + "/release?count=" + count;
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.set("X-Internal-Service", "booking-service");
+            org.springframework.http.HttpEntity<Void> entity = new org.springframework.http.HttpEntity<>(headers);
+            ResponseEntity<Map> resp = restTemplate.exchange(url, org.springframework.http.HttpMethod.PUT, entity, Map.class);
+            boolean success = resp.getStatusCode().is2xxSuccessful();
+            if (success) {
+                org.slf4j.LoggerFactory.getLogger(BookingController.class)
+                        .info("Released {} room(s) for roomId {} via hotel-service", count, booking.getServiceId());
+            }
+            return success;
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(BookingController.class)
+                    .warn("Failed to release rooms in hotel-service: {}", e.getMessage());
+            return false;
+        }
     }
 
 

@@ -103,7 +103,7 @@ public class GatewayController {
                 Enumeration<String> headerNames = request.getHeaderNames();
                 while (headerNames.hasMoreElements()) {
                     String name = headerNames.nextElement();
-                    if (!name.equalsIgnoreCase("host") && !name.equalsIgnoreCase("content-length") && !name.equalsIgnoreCase("content-type")) {
+                    if (!name.equalsIgnoreCase("host") && !name.equalsIgnoreCase("content-length") && !name.equalsIgnoreCase("content-type") && !name.equalsIgnoreCase("x-internal-service") && !name.toLowerCase().startsWith("x-internal-")) {
                         headers.add(name, request.getHeader(name));
                     }
                 }
@@ -119,7 +119,7 @@ public class GatewayController {
             Enumeration<String> headerNames = request.getHeaderNames();
             while (headerNames.hasMoreElements()) {
                 String name = headerNames.nextElement();
-                if (!name.equalsIgnoreCase("host") && !name.equalsIgnoreCase("content-length")) {
+                if (!name.equalsIgnoreCase("host") && !name.equalsIgnoreCase("content-length") && !name.equalsIgnoreCase("x-internal-service") && !name.toLowerCase().startsWith("x-internal-")) {
                     headers.add(name, request.getHeader(name));
                 }
             }

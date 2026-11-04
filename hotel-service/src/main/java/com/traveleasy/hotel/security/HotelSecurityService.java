@@ -1,0 +1,151 @@
+package com.traveleasy.hotel.security;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.security.Key;
+
+@Service
+public class HotelSecurityService {
+
+    @Value("${jwt.secret:}")
+    private String secret;
+
+    @PostConstruct
+    public void validateConfiguration() {
+        if (secret == null || secret.trim().length() < 32) {
+            throw new IllegalStateException("JWT signing key secret is not configured or too short (minimum 256 bits / 32 bytes required for HMAC-SHA256)");
+        }
+    }
+
+    private Key getSigningKey() {
+        return Keys.hmacShaKeyFor(secret.getBytes());
+    }
+
+    public boolean validateToken(String token) {
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+        try {
+            Jwts.parserBuilder().setSigningKey(getSigningKey()).build().parseClaimsJws(token);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public Claims extractClaims(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
+
+    public Long extractUserId(String token) {
+        try {
+            Claims claims = extractClaims(token);
+            Object userIdObj = claims.get("userId");
+            if (userIdObj instanceof Number) {
+                long val = ((Number) userIdObj).longValue();
+                return val > 0 ? val : null;
+            } else if (userIdObj != null) {
+                long val = Long.parseLong(userIdObj.toString().trim());
+                return val > 0 ? val : null;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    public String extractRole(String token) {
+        try {
+            Claims claims = extractClaims(token);
+            Object role = claims.get("role");
+            return role != null ? role.toString() : null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    public String extractEmail(String token) {
+        try {
+            Claims claims = extractClaims(token);
+            Object emailClaim = claims.get("email");
+            if (emailClaim != null) {
+                String emailStr = emailClaim.toString().trim();
+                if (emailStr.contains("@")) {
+                    return emailStr;
+                }
+            }
+            String sub = claims.getSubject();
+            if (sub != null && sub.contains("@")) {
+                return sub.trim();
+            }
+            return null;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    public String extractFullName(String token) {
+        try {
+            Claims claims = extractClaims(token);
+            Object nameClaim = claims.get("fullName");
+            if (nameClaim != null && !nameClaim.toString().isBlank()) {
+                return nameClaim.toString().trim();
+            }
+            Object sub = claims.getSubject();
+            return sub != null ? sub.toString().trim() : "Hotel Manager";
+        } catch (Exception ignored) {
+            return "Hotel Manager";
+        }
+    }
+
+    public boolean isInternalService(String internalServiceHeader) {
+        if (internalServiceHeader == null || internalServiceHeader.isBlank()) {
+            return false;
+        }
+        return "booking-service".equalsIgnoreCase(internalServiceHeader.trim())
+                || "payment-service".equalsIgnoreCase(internalServiceHeader.trim())
+                || "traveller-service".equalsIgnoreCase(internalServiceHeader.trim());
+    }
+
+    public record CallerPrincipal(
+            Long userId,
+            String role,
+            String email,
+            String fullName,
+            boolean isAdmin,
+            boolean isHotelManager,
+            boolean isCustomer
+    ) {
+        public boolean hasManagerOrAdminAccess() {
+            return isAdmin || isHotelManager;
+        }
+    }
+
+    public CallerPrincipal resolvePrincipal(String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return null;
+        }
+        String token = authHeader.substring(7).trim();
+        if (!validateToken(token)) {
+            return null;
+        }
+        Long userId = extractUserId(token);
+        String role = extractRole(token);
+        String email = extractEmail(token);
+        String fullName = extractFullName(token);
+
+        boolean isAdmin = "ROLE_ADMIN".equalsIgnoreCase(role);
+        boolean isHotelManager = "ROLE_HOTEL_MANAGER".equalsIgnoreCase(role);
+        boolean isCustomer = "ROLE_CUSTOMER".equalsIgnoreCase(role);
+
+        return new CallerPrincipal(userId, role, email, fullName, isAdmin, isHotelManager, isCustomer);
+    }
+}

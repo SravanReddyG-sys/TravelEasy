@@ -27,4 +27,7 @@ public class HotelProperty {
     private String description;
     private String amenities; // Swimming Pool, Free Wi-Fi, Restaurant, Gym, Spa
     private String imageUrl;
+
+    @Builder.Default
+    private String status = "ACTIVE";
 }

@@ -108,8 +108,9 @@ public class BookingExpiryReconciliationService {
         booking.setStatus("EXPIRED");
         bookingRepository.save(booking);
 
-        // 3. Release any remaining held seats in bus-service
+        // 3. Release any remaining held seats or rooms in provider services
         releaseSeatsInBusService(booking);
+        releaseRoomsInHotelService(booking);
         return true;
     }
 
@@ -170,6 +171,31 @@ public class BookingExpiryReconciliationService {
             log.info("Released expired seats {} for schedule {} via bus-service", seats, booking.getServiceId());
         } catch (Exception e) {
             log.error("Failed to release seats in bus-service for booking {}: {}", booking.getBookingRef(), e.getMessage());
+        }
+    }
+
+    private void releaseRoomsInHotelService(Booking booking) {
+        if (!"HOTEL".equalsIgnoreCase(booking.getServiceType()) || booking.getServiceId() == null) {
+            return;
+        }
+        int count = 1;
+        try {
+            if (booking.getDetailsJson() != null) {
+                Pattern pattern = Pattern.compile("Rooms?:\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
+                Matcher matcher = pattern.matcher(booking.getDetailsJson());
+                if (matcher.find()) {
+                    count = Integer.parseInt(matcher.group(1));
+                }
+            }
+            String url = hotelServiceUrl + "/api/hotels/rooms/" + booking.getServiceId() + "/release?count=" + count;
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-Internal-Service", "booking-service");
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            restTemplate.exchange(url, HttpMethod.PUT, entity, Map.class);
+            log.info("Released expired rooms (count {}) for roomId {} via hotel-service", count, booking.getServiceId());
+        } catch (Exception e) {
+            log.warn("Failed to release rooms in hotel-service for booking {}: {}", booking.getBookingRef(), e.getMessage());
         }
     }
 

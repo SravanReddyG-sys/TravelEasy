@@ -1,7 +1,11 @@
+import os
 import mysql.connector
 
 def check(db_name, sql):
-    conn = mysql.connector.connect(host='localhost', user='root', password='Gsravanreddy@7989', database=db_name)
+    password = os.getenv('MYSQL_ROOT_PASSWORD', '')
+    user = os.getenv('MYSQL_USER', 'root')
+    host = os.getenv('MYSQL_HOST', 'localhost')
+    conn = mysql.connector.connect(host=host, user=user, password=password, database=db_name)
     cur = conn.cursor()
     cur.execute(sql)
     res = cur.fetchall()

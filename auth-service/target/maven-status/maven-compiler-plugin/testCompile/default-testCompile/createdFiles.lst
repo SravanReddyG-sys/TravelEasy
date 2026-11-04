@@ -1,3 +1,4 @@
 com\traveleasy\auth\controller\AuthControllerTest.class
 com\traveleasy\auth\service\PasswordRecoveryAndEmailTest.class
 com\traveleasy\auth\service\ResendLiveDeliveryTest.class
+com\traveleasy\auth\controller\UserControllerSecurityTest.class

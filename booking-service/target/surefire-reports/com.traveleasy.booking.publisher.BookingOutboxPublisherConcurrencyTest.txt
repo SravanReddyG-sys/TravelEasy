@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: com.traveleasy.booking.publisher.BookingOutboxPublisherConcurrencyTest
--------------------------------------------------------------------------------
-Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.775 s -- in com.traveleasy.booking.publisher.BookingOutboxPublisherConcurrencyTest

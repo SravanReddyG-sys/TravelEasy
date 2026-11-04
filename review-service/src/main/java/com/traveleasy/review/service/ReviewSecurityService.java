@@ -15,7 +15,7 @@ import java.security.Key;
 @Service
 public class ReviewSecurityService {
 
-    @Value("${jwt.secret:TravelEasySuperSecretKeyForJWTSigning12345678901234567890}")
+    @Value("${jwt.secret:}")
     private String secret;
 
     @PostConstruct

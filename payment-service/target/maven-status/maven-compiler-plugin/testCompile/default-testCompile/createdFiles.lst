@@ -1,6 +1,8 @@
 com\traveleasy\payment\worker\PaymentWebhookRecoveryTest.class
 com\traveleasy\payment\integration\PaymentLifecycleOutboxIntegrationTest.class
+com\traveleasy\payment\service\PaymentAdminServiceTest.class
 com\traveleasy\payment\service\PaymentFailureClassificationTest.class
+com\traveleasy\payment\integration\PaymentAdminRepositoryIntegrationTest.class
 com\traveleasy\payment\publisher\PaymentOutboxPublisherConcurrencyTest.class
 com\traveleasy\payment\service\PaymentServiceTest.class
 com\traveleasy\payment\publisher\PaymentOutboxPublisherTest.class
