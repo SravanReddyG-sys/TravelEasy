@@ -1,8 +1,0 @@
-com\traveleasy\booking\publisher\BookingOutboxPublisherTest.class
-com\traveleasy\booking\service\BookingStateTransitionServiceTest.class
-com\traveleasy\booking\service\BookingInternalTokenServiceTest.class
-com\traveleasy\booking\service\ScheduleCancellationCoordinatorServiceTest.class
-com\traveleasy\booking\repository\BookingAdminQueriesIntegrationTest.class
-com\traveleasy\booking\publisher\BookingOutboxPublisherConcurrencyTest.class
-com\traveleasy\booking\service\BookingExpiryReconciliationServiceTest.class
-com\traveleasy\booking\controller\BookingControllerTest.class

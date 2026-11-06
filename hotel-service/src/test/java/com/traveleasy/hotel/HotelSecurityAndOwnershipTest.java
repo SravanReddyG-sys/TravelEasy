@@ -66,6 +66,18 @@ public class HotelSecurityAndOwnershipTest {
         return createTestToken(userId, role, "user" + userId + "@example.com", "User " + userId, 3600000);
     }
 
+    private String createInternalToken(String serviceName) {
+        Key key = Keys.hmacShaKeyFor(SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return Jwts.builder()
+                .setSubject(serviceName)
+                .setIssuer("traveleasy-internal")
+                .claim("role", "INTERNAL_SERVICE")
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + 300000))
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
     private HttpHeaders authHeaders(String token) {
         HttpHeaders headers = new HttpHeaders();
         if (token != null) {
@@ -410,6 +422,39 @@ public class HotelSecurityAndOwnershipTest {
     }
 
     @Test
+    @DisplayName("Inventory 5.2b: Reservation rejected for inactive hotel property (returns 400)")
+    public void testReserveRooms_InactiveProperty_Returns400() {
+        HotelProperty inactiveHotel = hotelRepository.save(HotelProperty.builder()
+                .name("Inactive Hill Resort")
+                .city("Munnar")
+                .managerId(602L)
+                .status("INACTIVE")
+                .build());
+
+        RoomType room = roomTypeRepository.save(RoomType.builder()
+                .hotelId(inactiveHotel.getId())
+                .roomTypeName("Cottage")
+                .pricePerNight(4000.0)
+                .totalRooms(5)
+                .availableRooms(5)
+                .build());
+
+        String customerToken = createValidToken(889L, "ROLE_CUSTOMER");
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders(customerToken));
+
+        ResponseEntity<Map> response = restTemplate.exchange(
+                getBaseUrl() + "/rooms/" + room.getId() + "/reserve?count=1",
+                HttpMethod.PUT,
+                entity,
+                Map.class
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertTrue(response.getBody().get("message").toString().contains("inactive"));
+    }
+
+    @Test
     @DisplayName("Inventory 5.3: Unauthenticated room release is rejected with 401")
     public void testReleaseRooms_Unauthenticated_Returns401() {
         ResponseEntity<Map> response = restTemplate.exchange(
@@ -457,7 +502,10 @@ public class HotelSecurityAndOwnershipTest {
                 .availableRooms(7)
                 .build());
 
+        String internalToken = createInternalToken("booking-service");
         HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + internalToken);
+        headers.set("X-Internal-Token", internalToken);
         headers.set("X-Internal-Service", "booking-service");
 
         HttpEntity<Void> entity = new HttpEntity<>(headers);
@@ -470,6 +518,69 @@ public class HotelSecurityAndOwnershipTest {
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(9, ((Number) response.getBody().get("availableRooms")).intValue());
+    }
+
+    @Test
+    @DisplayName("Inventory 5.5b: Direct HTTP call with raw X-Internal-Service header but NO cryptographically signed token is rejected with 401")
+    public void testReleaseRooms_DirectHeaderSpoofingWithoutToken_Returns401() {
+        RoomType room = roomTypeRepository.save(RoomType.builder()
+                .hotelId(1L)
+                .roomTypeName("Standard")
+                .totalRooms(10)
+                .availableRooms(5)
+                .build());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Internal-Service", "booking-service");
+
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        ResponseEntity<Map> response = restTemplate.exchange(
+                getBaseUrl() + "/rooms/" + room.getId() + "/release?count=1",
+                HttpMethod.PUT,
+                entity,
+                Map.class
+        );
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Inventory 5.5c: Repeated releases cannot inflate inventory beyond totalRooms")
+    public void testReleaseRooms_RepeatedRelease_DoesNotExceedTotalRooms() {
+        HotelProperty hotel = hotelRepository.save(HotelProperty.builder()
+                .name("Capped Hotel")
+                .city("Chennai")
+                .managerId(705L)
+                .status("ACTIVE")
+                .build());
+
+        RoomType room = roomTypeRepository.save(RoomType.builder()
+                .hotelId(hotel.getId())
+                .roomTypeName("Executive")
+                .totalRooms(10)
+                .availableRooms(9)
+                .build());
+
+        String internalToken = createInternalToken("booking-service");
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + internalToken);
+        headers.set("X-Internal-Service", "booking-service");
+
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        // Release 5 rooms when only 1 is reserved (totalRooms=10, available=9)
+        ResponseEntity<Map> response = restTemplate.exchange(
+                getBaseUrl() + "/rooms/" + room.getId() + "/release?count=5",
+                HttpMethod.PUT,
+                entity,
+                Map.class
+        );
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        // Inventory must be capped at totalRooms (10), never 14
+        assertEquals(10, ((Number) response.getBody().get("availableRooms")).intValue());
+
+        RoomType updated = roomTypeRepository.findById(room.getId()).orElseThrow();
+        assertEquals(10, updated.getAvailableRooms());
     }
 
     @Test
@@ -641,5 +752,139 @@ public class HotelSecurityAndOwnershipTest {
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody().get("hotel"));
+    }
+
+    @Test
+    @DisplayName("Public 7.3: Search omits sensitive internal fields (managerId, managerName, status) and excludes inactive properties")
+    public void testSearchHotels_OmitsInternalFieldsAndInactiveHotels() {
+        Long managerId = 910L;
+        hotelRepository.save(HotelProperty.builder()
+                .name("Active Seaside Retreat")
+                .city("Pondicherry")
+                .managerId(managerId)
+                .managerName("Secret Manager A")
+                .status("ACTIVE")
+                .starRating(4)
+                .build());
+
+        hotelRepository.save(HotelProperty.builder()
+                .name("Inactive Ghost Resort")
+                .city("Pondicherry")
+                .managerId(managerId)
+                .managerName("Secret Manager B")
+                .status("INACTIVE")
+                .starRating(3)
+                .build());
+
+        ResponseEntity<List> response = restTemplate.getForEntity(
+                getBaseUrl() + "/search?city=Pondicherry",
+                List.class
+        );
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        List<Map<String, Object>> hotels = response.getBody();
+        assertNotNull(hotels);
+
+        // Inactive hotel must be excluded
+        boolean hasInactive = hotels.stream().anyMatch(h -> "Inactive Ghost Resort".equals(h.get("name")));
+        assertFalse(hasInactive, "Inactive hotel should not be returned in public search");
+
+        // Active hotel must be present
+        Map<String, Object> found = hotels.stream()
+                .filter(h -> "Active Seaside Retreat".equals(h.get("name")))
+                .findFirst()
+                .orElse(null);
+        assertNotNull(found, "Active hotel should be present in public search");
+
+        // Internal fields must be stripped (null or not present)
+        assertNull(found.get("managerId"), "managerId must NOT be exposed in public search");
+        assertNull(found.get("managerName"), "managerName must NOT be exposed in public search");
+        assertNull(found.get("status"), "status must NOT be exposed in public search");
+    }
+
+    @Test
+    @DisplayName("Public 7.4: Public hotel details endpoint omits sensitive internal fields")
+    public void testGetHotelDetails_OmitsInternalFields() {
+        HotelProperty hotel = hotelRepository.save(HotelProperty.builder()
+                .name("Public Confidential Hotel")
+                .city("Jaipur")
+                .managerId(920L)
+                .managerName("Confidential Manager")
+                .status("ACTIVE")
+                .build());
+
+        ResponseEntity<Map> response = restTemplate.getForEntity(
+                getBaseUrl() + "/" + hotel.getId(),
+                Map.class
+        );
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        Map<String, Object> hotelDto = (Map<String, Object>) response.getBody().get("hotel");
+        assertNotNull(hotelDto);
+        assertNull(hotelDto.get("managerId"), "managerId must NOT be exposed in public details");
+        assertNull(hotelDto.get("managerName"), "managerName must NOT be exposed in public details");
+        assertNull(hotelDto.get("status"), "status must NOT be exposed in public details");
+    }
+
+    // =========================================================================
+    // 8. INTERNAL SERVICE LOOKUP & PROTECTION TESTS
+    // =========================================================================
+
+    @Test
+    @DisplayName("Internal 8.1: Authenticated internal service can retrieve full hotel entity with managerId and status")
+    public void testGetHotelInternalDetails_InternalService_ReturnsFullEntity() {
+        Long managerId = 930L;
+        HotelProperty hotel = hotelRepository.save(HotelProperty.builder()
+                .name("Internal Lookup Hotel")
+                .city("Shimla")
+                .managerId(managerId)
+                .managerName("Known Manager")
+                .status("ACTIVE")
+                .build());
+
+        String internalToken = createInternalToken("booking-service");
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + internalToken);
+        headers.set("X-Internal-Service", "booking-service");
+
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        ResponseEntity<HotelProperty> response = restTemplate.exchange(
+                getBaseUrl() + "/internal/" + hotel.getId(),
+                HttpMethod.GET,
+                entity,
+                HotelProperty.class
+        );
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals(managerId, response.getBody().getManagerId());
+        assertEquals("ACTIVE", response.getBody().getStatus());
+    }
+
+    @Test
+    @DisplayName("Internal 8.2: Unauthenticated caller cannot access internal hotel details (returns 401)")
+    public void testGetHotelInternalDetails_Unauthenticated_Returns401() {
+        ResponseEntity<Map> response = restTemplate.getForEntity(
+                getBaseUrl() + "/internal/1",
+                Map.class
+        );
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Internal 8.3: Customer or manager cannot access internal hotel details (returns 403)")
+    public void testGetHotelInternalDetails_CustomerOrManager_Returns403() {
+        String customerToken = createValidToken(940L, "ROLE_CUSTOMER");
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders(customerToken));
+
+        ResponseEntity<Map> response = restTemplate.exchange(
+                getBaseUrl() + "/internal/1",
+                HttpMethod.GET,
+                entity,
+                Map.class
+        );
+
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
     }
 }

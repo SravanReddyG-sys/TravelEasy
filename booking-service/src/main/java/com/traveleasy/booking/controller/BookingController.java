@@ -8,10 +8,15 @@ import com.traveleasy.booking.dto.BookingTrendResponse;
 import com.traveleasy.booking.dto.RecentBookingResponse;
 import com.traveleasy.booking.repository.BookingRepository;
 import com.traveleasy.booking.service.BookingExpiryReconciliationService;
+import com.traveleasy.booking.service.BookingInternalTokenService;
 import com.traveleasy.booking.service.BookingSecurityService;
 import com.traveleasy.booking.model.ScheduleCancellationBatch;
 import com.traveleasy.booking.service.ScheduleCancellationCoordinatorService;
 import com.traveleasy.booking.service.BookingStateTransitionService;
+import com.traveleasy.booking.service.HotelCancellationPolicyService;
+import com.traveleasy.booking.service.HotelGuestLifecycleService;
+import com.traveleasy.booking.dto.CancellationPolicyResult;
+import com.traveleasy.booking.dto.BookingLifecycleOperationResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -66,7 +71,11 @@ public class BookingController {
     private final BookingExpiryReconciliationService expiryService;
     private final ScheduleCancellationCoordinatorService coordinatorService;
     private final BookingStateTransitionService stateTransitionService;
+    private final BookingInternalTokenService internalTokenService;
+    private final HotelCancellationPolicyService cancellationPolicyService;
+    private final HotelGuestLifecycleService guestLifecycleService;
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
     private RestTemplate restTemplate = new RestTemplate();
 
 
@@ -163,6 +172,16 @@ public class BookingController {
 
         }
 
+        if ("HOTEL".equalsIgnoreCase(booking.getServiceType()) && booking.getServiceId() != null) {
+            resolveHotelProviderId(booking);
+            if (booking.getCheckInDate() == null) {
+                booking.setCheckInDate(booking.resolveCheckInDate());
+            }
+            if (booking.getCheckOutDate() == null) {
+                booking.setCheckOutDate(booking.resolveCheckOutDate());
+            }
+        }
+
         Booking saved = bookingRepository.save(booking);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
@@ -171,7 +190,9 @@ public class BookingController {
 
 
 
-    private static final List<String> CONFIRMED_BOOKING_STATUSES = List.of("CONFIRMED", "CANCELLED", "COMPLETED");
+    private static final List<String> CONFIRMED_BOOKING_STATUSES = List.of(
+            "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "NO_SHOW", "CANCELLED", "COMPLETED"
+    );
 
     private final Map<Long, Map<String, Object>> busScheduleCache = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -618,10 +639,11 @@ public class BookingController {
 
             }
 
-            if ("CANCELLED".equalsIgnoreCase(bkg.getStatus())) {
-
+            if ("CANCELLED".equalsIgnoreCase(bkg.getStatus()) || "EXPIRED".equalsIgnoreCase(bkg.getStatus())) {
+                if ("EXPIRED".equalsIgnoreCase(bkg.getStatus())) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Cannot confirm an expired booking"));
+                }
                 return ResponseEntity.badRequest().body(Map.of("message", "Cannot confirm a cancelled booking"));
-
             }
 
 
@@ -698,7 +720,19 @@ public class BookingController {
 
             }
 
-
+            // Attempt to confirm rooms in hotel-service (WP-03 date-wise inventory)
+            boolean roomsConfirmed = confirmRoomsInHotelService(bkg);
+            if (!roomsConfirmed) {
+                org.slf4j.LoggerFactory.getLogger(BookingController.class)
+                        .warn("Rooms for booking {} are no longer available or hold expired. Initiating automatic refund.", bkg.getBookingRef());
+                processRefundInPaymentService(bkg.getBookingRef(), bkg.getTotalAmount());
+                bkg.setStatus("EXPIRED");
+                Booking saved = bookingRepository.save(bkg);
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                        "message", "Cannot confirm booking: Room hold has expired and room inventory is no longer available. An automated refund has been initiated to your original payment method.",
+                        "booking", saved
+                ));
+            }
 
             Booking saved = stateTransitionService.confirmBooking(bkg);
 
@@ -734,7 +768,10 @@ public class BookingController {
                 }
             }
 
-            if ("CANCELLED".equals(bkg.getStatus())) {
+            if ("CANCELLED".equalsIgnoreCase(bkg.getStatus()) || "EXPIRED".equalsIgnoreCase(bkg.getStatus())) {
+                if ("EXPIRED".equalsIgnoreCase(bkg.getStatus())) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Booking has already expired and inventory has been released"));
+                }
                 if ("PROCESSED".equalsIgnoreCase(bkg.getRefundStatus())) {
                     return ResponseEntity.badRequest().body(Map.of("message", "Booking is already cancelled and refund has already been processed (Refund ID: " + bkg.getRefundId() + ")"));
                 }
@@ -769,14 +806,31 @@ public class BookingController {
             String previousStatus = bkg.getStatus();
             boolean wasPaidBooking = "CONFIRMED".equalsIgnoreCase(previousStatus) || "COMPLETED".equalsIgnoreCase(previousStatus);
 
-            Booking saved = stateTransitionService.cancelBooking(bkg, bkg.getTotalAmount(), "Cancelled by customer");
+            boolean isHotel = "HOTEL".equalsIgnoreCase(bkg.getServiceType());
+            Double targetRefundAmount = bkg.getTotalAmount();
+            CancellationPolicyResult policyResult = null;
+
+            if (isHotel) {
+                policyResult = cancellationPolicyService.evaluateCancellationPolicy(bkg, LocalDateTime.now());
+                targetRefundAmount = policyResult.getRefundAmount();
+                bkg.setCancellationPolicyTier(policyResult.getPolicyTier());
+                bkg.setCancellationFee(policyResult.getCancellationFee());
+                bkg.setCancellationPolicySnapshot(cancellationPolicyService.buildPolicySnapshotJson(policyResult));
+                bkg.setCancelledAt(LocalDateTime.now());
+                bkg.setCancellationReason("Cancelled by customer");
+            }
+
+            Booking saved = stateTransitionService.cancelBooking(bkg, targetRefundAmount, "Cancelled by customer");
 
             // 1. Authoritatively release physical seats in bus-service or rooms in hotel-service
             List<String> releasedSeats = releaseSeatsInBusService(saved);
             releaseRoomsInHotelService(saved);
 
-            // 2. Trigger automated gateway refund via payment-service
-            Map<String, Object> refund = processRefundInPaymentService(saved.getBookingRef(), saved.getTotalAmount());
+            // 2. Trigger automated gateway refund via payment-service if eligible for refund > 0
+            Map<String, Object> refund = null;
+            if (targetRefundAmount != null && targetRefundAmount > 0.0) {
+                refund = processRefundInPaymentService(saved.getBookingRef(), targetRefundAmount);
+            }
 
             if (refund != null) {
                 String rfdStatus = refund.get("refundStatus") != null ? refund.get("refundStatus").toString()
@@ -792,10 +846,14 @@ public class BookingController {
                 }
                 saved.setRefundStatus(rfdStatus);
                 saved.setRefundId(rfdId);
-                saved.setRefundAmount(rfdAmt != null ? rfdAmt : saved.getTotalAmount());
+                saved.setRefundAmount(rfdAmt != null ? rfdAmt : targetRefundAmount);
                 saved = bookingRepository.save(saved);
-            } else if (wasPaidBooking) {
+            } else if (targetRefundAmount != null && targetRefundAmount > 0.0 && wasPaidBooking) {
                 saved.setRefundStatus("FAILED_RETRYABLE");
+                saved = bookingRepository.save(saved);
+            } else if (isHotel && (targetRefundAmount == null || targetRefundAmount == 0.0)) {
+                saved.setRefundStatus("NON_REFUNDABLE");
+                saved.setRefundAmount(0.0);
                 saved = bookingRepository.save(saved);
             } else {
                 saved.setRefundStatus("NOT_APPLICABLE");
@@ -809,6 +867,10 @@ public class BookingController {
             response.put("booking", saved);
 
             response.put("releasedSeats", releasedSeats);
+
+            if (policyResult != null) {
+                response.put("cancellationPolicy", policyResult);
+            }
 
             if (refund != null) {
 
@@ -1016,12 +1078,82 @@ public class BookingController {
 
     }
 
-    private boolean releaseRoomsInHotelService(Booking booking) {
+    private boolean confirmRoomsInHotelService(Booking booking) {
         if (!"HOTEL".equalsIgnoreCase(booking.getServiceType()) || booking.getServiceId() == null) {
+            return true;
+        }
+        if (booking.getBookingRef() == null || booking.getBookingRef().isBlank()) {
+            return true;
+        }
+        // Only date-wise bookings with an allocation in hotel-service require confirm-stay
+        if (!booking.isDateWiseBooking()) {
+            return true;
+        }
+        try {
+            String url = hotelServiceUrl + "/api/hotels/rooms/confirm-stay?bookingRef=" + booking.getBookingRef();
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            String internalToken = internalTokenService.generateInternalToken();
+            headers.set("Authorization", "Bearer " + internalToken);
+            headers.set("X-Internal-Token", internalToken);
+            headers.set("X-Internal-Service", "booking-service");
+            org.springframework.http.HttpEntity<Void> entity = new org.springframework.http.HttpEntity<>(headers);
+            ResponseEntity<Map> resp = restTemplate.exchange(url, org.springframework.http.HttpMethod.PUT, entity, Map.class);
+            boolean success = resp.getStatusCode().is2xxSuccessful();
+            if (success) {
+                org.slf4j.LoggerFactory.getLogger(BookingController.class)
+                        .info("Confirmed stay inventory for bookingRef {} via hotel-service", booking.getBookingRef());
+            }
+            return success;
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            org.slf4j.LoggerFactory.getLogger(BookingController.class)
+                    .warn("Stay allocation in hotel-service rejected confirmation for bookingRef {}: {}", booking.getBookingRef(), e.getMessage());
+            return false;
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(BookingController.class)
+                    .warn("Failed to confirm rooms in hotel-service for bookingRef {}: {}", booking.getBookingRef(), e.getMessage());
             return false;
         }
-        int count = 1;
+    }
+
+    private boolean releaseRoomsInHotelService(Booking booking) {
+        if (!"HOTEL".equalsIgnoreCase(booking.getServiceType())) {
+            return false;
+        }
         try {
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            String internalToken = internalTokenService.generateInternalToken();
+            headers.set("Authorization", "Bearer " + internalToken);
+            headers.set("X-Internal-Token", internalToken);
+            headers.set("X-Internal-Service", "booking-service");
+
+            // 1. Authoritative date-wise release for all date-wise bookings (WP-03)
+            if (booking.isDateWiseBooking()) {
+                if (booking.getBookingRef() != null && !booking.getBookingRef().isBlank()) {
+                    try {
+                        String stayUrl = hotelServiceUrl + "/api/hotels/rooms/release-stay?bookingRef=" + booking.getBookingRef();
+                        org.springframework.http.HttpEntity<Void> stayEntity = new org.springframework.http.HttpEntity<>(headers);
+                        ResponseEntity<Map> stayResp = restTemplate.exchange(stayUrl, org.springframework.http.HttpMethod.POST, stayEntity, Map.class);
+                        if (stayResp.getStatusCode().is2xxSuccessful()) {
+                            org.slf4j.LoggerFactory.getLogger(BookingController.class)
+                                    .info("Authoritatively released stay inventory for bookingRef {} via hotel-service", booking.getBookingRef());
+                            return true;
+                        }
+                    } catch (Exception e) {
+                        org.slf4j.LoggerFactory.getLogger(BookingController.class)
+                                .warn("Failed to release date-wise stay inventory for bookingRef {}: {}", booking.getBookingRef(), e.getMessage());
+                    }
+                }
+                // Date-wise bookings must NEVER fall back to legacy count-based release
+                return false;
+            }
+
+            // 2. Genuine legacy bookings fallback to count-based release
+            if (booking.getServiceId() == null) {
+                return false;
+            }
+            int count = 1;
             if (booking.getDetailsJson() != null) {
                 Pattern pattern = Pattern.compile("Rooms?:\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
                 Matcher matcher = pattern.matcher(booking.getDetailsJson());
@@ -1030,21 +1162,40 @@ public class BookingController {
                 }
             }
             String url = hotelServiceUrl + "/api/hotels/rooms/" + booking.getServiceId() + "/release?count=" + count;
-            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
-            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
-            headers.set("X-Internal-Service", "booking-service");
             org.springframework.http.HttpEntity<Void> entity = new org.springframework.http.HttpEntity<>(headers);
             ResponseEntity<Map> resp = restTemplate.exchange(url, org.springframework.http.HttpMethod.PUT, entity, Map.class);
             boolean success = resp.getStatusCode().is2xxSuccessful();
             if (success) {
                 org.slf4j.LoggerFactory.getLogger(BookingController.class)
-                        .info("Released {} room(s) for roomId {} via hotel-service", count, booking.getServiceId());
+                        .info("Released {} room(s) for legacy booking {} via hotel-service", count, booking.getBookingRef());
             }
             return success;
         } catch (Exception e) {
             org.slf4j.LoggerFactory.getLogger(BookingController.class)
                     .warn("Failed to release rooms in hotel-service: {}", e.getMessage());
             return false;
+        }
+    }
+
+    private void resolveHotelProviderId(Booking booking) {
+        try {
+            String url = hotelServiceUrl + "/api/hotels/internal/" + booking.getServiceId();
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            String token = internalTokenService.generateInternalToken();
+            headers.set("Authorization", "Bearer " + token);
+            headers.set("X-Internal-Token", token);
+            headers.set("X-Internal-Service", "booking-service");
+            org.springframework.http.HttpEntity<Void> entity = new org.springframework.http.HttpEntity<>(headers);
+            ResponseEntity<Map> resp = restTemplate.exchange(url, org.springframework.http.HttpMethod.GET, entity, Map.class);
+            if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
+                Object mgrIdObj = resp.getBody().get("managerId");
+                if (mgrIdObj instanceof Number) {
+                    booking.setProviderId(((Number) mgrIdObj).longValue());
+                }
+            }
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(BookingController.class)
+                    .debug("Could not authoritatively resolve managerId for hotel {}: {}", booking.getServiceId(), e.getMessage());
         }
     }
 
@@ -1126,5 +1277,151 @@ public class BookingController {
         } catch (org.springframework.web.server.ResponseStatusException e) {
             return ResponseEntity.status(e.getStatusCode()).body(Map.of("message", e.getReason() != null ? e.getReason() : e.getMessage()));
         }
+    }
+
+    // =========================================================================
+    // WP-04: Central Cancellation Policy Quotes & Operational Lifecycle (BD-04, BD-09)
+    // =========================================================================
+
+    @GetMapping("/{id}/cancellation-quote")
+    public ResponseEntity<?> getCancellationQuoteById(@PathVariable Long id,
+                                                      @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        return bookingRepository.findById(id).map(bkg -> evaluateQuoteForBooking(bkg, authHeader))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/ref/{bookingRef}/cancellation-quote")
+    public ResponseEntity<?> getCancellationQuoteByRef(@PathVariable String bookingRef,
+                                                       @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        return bookingRepository.findByBookingRef(bookingRef).map(bkg -> evaluateQuoteForBooking(bkg, authHeader))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    private ResponseEntity<?> evaluateQuoteForBooking(Booking bkg, String authHeader) {
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7).trim();
+            if (securityService.validateToken(token)) {
+                Long callerUserId = securityService.extractUserId(token);
+                String callerRole = securityService.extractRole(token);
+                boolean isAdmin = "ROLE_ADMIN".equalsIgnoreCase(callerRole);
+                boolean isProvider = "ROLE_HOTEL_MANAGER".equalsIgnoreCase(callerRole) && callerUserId != null && callerUserId.equals(bkg.getProviderId());
+                boolean isCustomer = callerUserId != null && callerUserId.equals(bkg.getCustomerId());
+                if (!isAdmin && !isProvider && !isCustomer) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Access denied"));
+                }
+            }
+        }
+        if (!"HOTEL".equalsIgnoreCase(bkg.getServiceType())) {
+            return ResponseEntity.ok(Map.of(
+                    "bookingRef", bkg.getBookingRef(),
+                    "serviceType", bkg.getServiceType(),
+                    "totalAmount", bkg.getTotalAmount() != null ? bkg.getTotalAmount() : 0.0,
+                    "refundPercentage", 100.0,
+                    "refundAmount", bkg.getTotalAmount() != null ? bkg.getTotalAmount() : 0.0,
+                    "cancellationFee", 0.0,
+                    "description", "Standard full refund policy for bus bookings."
+            ));
+        }
+        CancellationPolicyResult quote = cancellationPolicyService.evaluateCancellationPolicy(bkg, LocalDateTime.now());
+        return ResponseEntity.ok(quote);
+    }
+
+    @PutMapping("/ref/{bookingRef}/check-in")
+    public ResponseEntity<?> checkInGuestByRef(@PathVariable String bookingRef,
+                                               @RequestHeader(value = "Authorization", required = false) String authHeader,
+                                               @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+                                               @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+        boolean isInternal = securityService.authenticateInternalService(authHeader, internalToken, internalService);
+        Long callerUserId = null;
+        String callerRole = null;
+        if (!isInternal && authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7).trim();
+            if (securityService.validateToken(token)) {
+                callerUserId = securityService.extractUserId(token);
+                callerRole = securityService.extractRole(token);
+            }
+        }
+        try {
+            BookingLifecycleOperationResponse resp = guestLifecycleService.checkInGuest(bookingRef, callerUserId, callerRole, isInternal);
+            return ResponseEntity.ok(resp);
+        } catch (org.springframework.web.server.ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(Map.of("message", e.getReason() != null ? e.getReason() : e.getMessage()));
+        }
+    }
+
+    @PutMapping("/ref/{bookingRef}/check-out")
+    public ResponseEntity<?> checkOutGuestByRef(@PathVariable String bookingRef,
+                                                @RequestHeader(value = "Authorization", required = false) String authHeader,
+                                                @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+                                                @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+        boolean isInternal = securityService.authenticateInternalService(authHeader, internalToken, internalService);
+        Long callerUserId = null;
+        String callerRole = null;
+        if (!isInternal && authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7).trim();
+            if (securityService.validateToken(token)) {
+                callerUserId = securityService.extractUserId(token);
+                callerRole = securityService.extractRole(token);
+            }
+        }
+        try {
+            BookingLifecycleOperationResponse resp = guestLifecycleService.checkOutGuest(bookingRef, callerUserId, callerRole, isInternal);
+            return ResponseEntity.ok(resp);
+        } catch (org.springframework.web.server.ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(Map.of("message", e.getReason() != null ? e.getReason() : e.getMessage()));
+        }
+    }
+
+    @PutMapping("/ref/{bookingRef}/no-show")
+    public ResponseEntity<?> markNoShowByRef(@PathVariable String bookingRef,
+                                             @RequestHeader(value = "Authorization", required = false) String authHeader,
+                                             @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+                                             @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+        boolean isInternal = securityService.authenticateInternalService(authHeader, internalToken, internalService);
+        Long callerUserId = null;
+        String callerRole = null;
+        if (!isInternal && authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7).trim();
+            if (securityService.validateToken(token)) {
+                callerUserId = securityService.extractUserId(token);
+                callerRole = securityService.extractRole(token);
+            }
+        }
+        try {
+            BookingLifecycleOperationResponse resp = guestLifecycleService.markNoShow(bookingRef, callerUserId, callerRole, isInternal);
+            return ResponseEntity.ok(resp);
+        } catch (org.springframework.web.server.ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode()).body(Map.of("message", e.getReason() != null ? e.getReason() : e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{id}/check-in")
+    public ResponseEntity<?> checkInGuestById(@PathVariable Long id,
+                                              @RequestHeader(value = "Authorization", required = false) String authHeader,
+                                              @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+                                              @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+        return bookingRepository.findById(id)
+                .map(bkg -> checkInGuestByRef(bkg.getBookingRef(), authHeader, internalToken, internalService))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/{id}/check-out")
+    public ResponseEntity<?> checkOutGuestById(@PathVariable Long id,
+                                               @RequestHeader(value = "Authorization", required = false) String authHeader,
+                                               @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+                                               @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+        return bookingRepository.findById(id)
+                .map(bkg -> checkOutGuestByRef(bkg.getBookingRef(), authHeader, internalToken, internalService))
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/{id}/no-show")
+    public ResponseEntity<?> markNoShowById(@PathVariable Long id,
+                                            @RequestHeader(value = "Authorization", required = false) String authHeader,
+                                            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+                                            @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+        return bookingRepository.findById(id)
+                .map(bkg -> markNoShowByRef(bkg.getBookingRef(), authHeader, internalToken, internalService))
+                .orElse(ResponseEntity.notFound().build());
     }
 }

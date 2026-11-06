@@ -57,8 +57,9 @@ export class AppComponent {
     const isCustomerPage = path === '/customer' || path.startsWith('/customer/');
     const isBusOperatorPage = path === '/bus-operator' || path.startsWith('/bus-operator');
     const isAdminPage = path === '/admin' || path.startsWith('/admin');
-    this.isDashboardPage = !isCustomerPage && !isBusOperatorPage && !isAdminPage && path === '/hotel-manager';
-    this.isPublicPage = !isCustomerPage && !isBusOperatorPage && !isAdminPage && !this.isDashboardPage;
+    const isHotelManagerPage = path === '/hotel-manager' || path.startsWith('/hotel-manager');
+    this.isDashboardPage = !isCustomerPage && !isBusOperatorPage && !isAdminPage && !isHotelManagerPage && path === '/hotel-manager';
+    this.isPublicPage = !isCustomerPage && !isBusOperatorPage && !isAdminPage && !isHotelManagerPage && !this.isDashboardPage;
     this.isHomePage = path === '' || path === '/home';
 
     const excludedHeaderFooterPages = [

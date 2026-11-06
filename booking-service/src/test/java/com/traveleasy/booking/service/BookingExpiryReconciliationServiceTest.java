@@ -37,6 +37,9 @@ public class BookingExpiryReconciliationServiceTest {
     @Mock
     private RestTemplate restTemplate;
 
+    @Mock
+    private BookingInternalTokenService internalTokenService;
+
     @InjectMocks
     private BookingExpiryReconciliationService reconciliationService;
 
@@ -46,6 +49,7 @@ public class BookingExpiryReconciliationServiceTest {
         ReflectionTestUtils.setField(reconciliationService, "hotelServiceUrl", "http://localhost:8083");
         ReflectionTestUtils.setField(reconciliationService, "paymentServiceUrl", "http://localhost:8085");
         reconciliationService.setRestTemplate(restTemplate);
+        lenient().when(internalTokenService.generateInternalToken()).thenReturn("mock-internal-token");
         lenient().when(stateTransitionService.confirmBooking(any(Booking.class))).thenAnswer(inv -> {
             Booking b = inv.getArgument(0);
             b.setStatus("CONFIRMED");
@@ -169,5 +173,117 @@ public class BookingExpiryReconciliationServiceTest {
         assertFalse(result);
         assertEquals("CONFIRMED", confirmed.getStatus());
         verify(bookingRepository, never()).save(any(Booking.class));
+    }
+
+    @Test
+    @DisplayName("Unpaid date-wise hotel booking expires and calls release-stay without legacy fallback")
+    void testReconciliation_DateWiseHotel_ExpiresAndReleasesStay_NoLegacyFallback() {
+        Booking staleHotel = Booking.builder()
+                .id(5L)
+                .bookingRef("BKG-HOTEL-EXPIRE-1")
+                .customerId(10L)
+                .serviceType("HOTEL")
+                .serviceId(1L)
+                .checkInDate(java.time.LocalDate.now().plusDays(2))
+                .checkOutDate(java.time.LocalDate.now().plusDays(4))
+                .status("PENDING_PAYMENT")
+                .bookingDate(LocalDateTime.now().minusMinutes(25))
+                .build();
+
+        when(bookingRepository.findByStatusInAndBookingDateBefore(anyList(), any(LocalDateTime.class)))
+                .thenReturn(List.of(staleHotel));
+
+        // Payment check returns not found / unpaid
+        when(restTemplate.getForEntity(contains("/api/payments/booking/BKG-HOTEL-EXPIRE-1"), eq(Map.class)))
+                .thenReturn(new ResponseEntity<>(Map.of("status", "FAILED"), HttpStatus.OK));
+
+        // Date-wise stay release mock
+        when(restTemplate.exchange(contains("/api/hotels/rooms/release-stay?bookingRef=BKG-HOTEL-EXPIRE-1"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(Map.class)))
+                .thenReturn(new ResponseEntity<>(Map.of("status", "RELEASED", "idempotent", true), HttpStatus.OK));
+
+        reconciliationService.reconcileExpiredBookings();
+
+        assertEquals("EXPIRED", staleHotel.getStatus());
+        verify(bookingRepository).save(staleHotel);
+        verify(restTemplate).exchange(contains("/api/hotels/rooms/release-stay?bookingRef=BKG-HOTEL-EXPIRE-1"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(Map.class));
+        verify(restTemplate, never()).exchange(contains("/release?count="), eq(HttpMethod.PUT), any(HttpEntity.class), eq(Map.class));
+    }
+
+    @Test
+    @DisplayName("Paid date-wise hotel booking whose hold expired in hotel-service triggers refund and expires")
+    void testReconciliation_PaidDateWiseHotel_HoldExpired_TriggersRefundAndExpires() {
+        Booking paidHotel = Booking.builder()
+                .id(6L)
+                .bookingRef("BKG-HOTEL-PAID-EXPIRED")
+                .customerId(10L)
+                .serviceType("HOTEL")
+                .serviceId(1L)
+                .totalAmount(2000.0)
+                .checkInDate(java.time.LocalDate.now().plusDays(3))
+                .checkOutDate(java.time.LocalDate.now().plusDays(5))
+                .status("PENDING_PAYMENT")
+                .bookingDate(LocalDateTime.now().minusMinutes(20))
+                .build();
+
+        when(bookingRepository.findByStatusInAndBookingDateBefore(anyList(), any(LocalDateTime.class)))
+                .thenReturn(List.of(paidHotel));
+
+        // Payment captured
+        lenient().when(restTemplate.getForEntity(contains("/api/payments/booking/BKG-HOTEL-PAID-EXPIRED"), eq(Map.class)))
+                .thenReturn(new ResponseEntity<>(Map.of("status", "SUCCESS", "amount", 2000.0), HttpStatus.OK));
+
+        // Hotel service confirm-stay fails because hold was released due to expiry
+        lenient().when(restTemplate.exchange(contains("/api/hotels/rooms/confirm-stay?bookingRef=BKG-HOTEL-PAID-EXPIRED"),
+                eq(HttpMethod.PUT), any(HttpEntity.class), eq(Map.class)))
+                .thenThrow(new org.springframework.web.client.HttpClientErrorException(HttpStatus.BAD_REQUEST, "Cannot confirm allocation with status: RELEASED"));
+
+        // Refund mock
+        lenient().when(restTemplate.exchange(contains("/api/payments/refund/booking/BKG-HOTEL-PAID-EXPIRED"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(Map.class)))
+                .thenReturn(new ResponseEntity<>(Map.of("refundId", "rfnd_HOTEL_RECON_1", "status", "SUCCESS"), HttpStatus.OK));
+
+        reconciliationService.reconcileExpiredBookings();
+
+        assertEquals("EXPIRED", paidHotel.getStatus());
+        verify(bookingRepository).save(paidHotel);
+        verify(restTemplate).exchange(contains("/api/payments/refund/booking/BKG-HOTEL-PAID-EXPIRED"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(Map.class));
+        verify(stateTransitionService, never()).confirmBooking(any());
+    }
+
+    @Test
+    @DisplayName("Date-wise hotel booking release-stay exception must NEVER fall back to legacy count release")
+    void testReconciliation_DateWiseHotel_ReleaseStayFails_DoesNotInvokeLegacyFallback() {
+        Booking staleHotel = Booking.builder()
+                .id(7L)
+                .bookingRef("BKG-HOTEL-ERR-1")
+                .customerId(10L)
+                .serviceType("HOTEL")
+                .serviceId(1L)
+                .checkInDate(java.time.LocalDate.now().plusDays(2))
+                .checkOutDate(java.time.LocalDate.now().plusDays(4))
+                .status("PENDING_PAYMENT")
+                .bookingDate(LocalDateTime.now().minusMinutes(25))
+                .build();
+
+        when(bookingRepository.findByStatusInAndBookingDateBefore(anyList(), any(LocalDateTime.class)))
+                .thenReturn(List.of(staleHotel));
+
+        lenient().when(restTemplate.getForEntity(contains("/api/payments/booking/BKG-HOTEL-ERR-1"), eq(Map.class)))
+                .thenReturn(new ResponseEntity<>(Map.of("status", "FAILED"), HttpStatus.OK));
+
+        // Simulate release-stay throwing exception
+        lenient().when(restTemplate.exchange(contains("/api/hotels/rooms/release-stay?bookingRef=BKG-HOTEL-ERR-1"),
+                eq(HttpMethod.POST), any(HttpEntity.class), eq(Map.class)))
+                .thenThrow(new RuntimeException("Hotel service timeout"));
+
+        reconciliationService.reconcileExpiredBookings();
+
+        assertEquals("EXPIRED", staleHotel.getStatus());
+        verify(bookingRepository).save(staleHotel);
+        // CRITICAL: verify legacy count release was NEVER invoked
+        verify(restTemplate, never()).exchange(contains("/release?count="), eq(HttpMethod.PUT), any(HttpEntity.class), eq(Map.class));
     }
 }

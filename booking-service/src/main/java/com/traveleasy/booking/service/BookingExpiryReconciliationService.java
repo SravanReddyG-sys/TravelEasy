@@ -30,6 +30,7 @@ public class BookingExpiryReconciliationService {
 
     private final BookingRepository bookingRepository;
     private final BookingStateTransitionService stateTransitionService;
+    private final BookingInternalTokenService internalTokenService;
     private RestTemplate restTemplate = new RestTemplate();
 
     public void setRestTemplate(RestTemplate restTemplate) {
@@ -78,7 +79,9 @@ public class BookingExpiryReconciliationService {
     }
 
     private boolean expireSingleBooking(Booking booking) {
-        if ("CONFIRMED".equalsIgnoreCase(booking.getStatus()) || "CANCELLED".equalsIgnoreCase(booking.getStatus())) {
+        if ("CONFIRMED".equalsIgnoreCase(booking.getStatus()) 
+                || "CANCELLED".equalsIgnoreCase(booking.getStatus()) 
+                || "EXPIRED".equalsIgnoreCase(booking.getStatus())) {
             return false;
         }
 
@@ -86,17 +89,18 @@ public class BookingExpiryReconciliationService {
         boolean paymentCaptured = isPaymentSuccessful(booking.getBookingRef());
 
         if (paymentCaptured) {
-            log.info("Booking {} has confirmed payment. Attempting authoritative seat confirmation.", booking.getBookingRef());
+            log.info("Booking {} has confirmed payment. Attempting authoritative seat/room confirmation.", booking.getBookingRef());
             boolean seatsConfirmed = confirmSeatsInBusService(booking);
-            if (seatsConfirmed) {
+            boolean roomsConfirmed = confirmRoomsInHotelService(booking);
+            if (seatsConfirmed && roomsConfirmed) {
                 stateTransitionService.confirmBooking(booking);
                 log.info("Booking {} successfully recovered and marked CONFIRMED.", booking.getBookingRef());
                 return false;
             } else {
-                // Race condition: payment arrived late, but seats are already taken!
-                log.warn("Late payment detected for booking {}, but seats are already allocated to another traveller. Initiating automatic refund.",
+                // Race condition: payment arrived late, but inventory is already taken!
+                log.warn("Late payment detected for booking {}, but inventory is already allocated to another traveller. Initiating automatic refund.",
                         booking.getBookingRef());
-                processRefund(booking.getBookingRef(), booking.getTotalAmount(), "Seat hold expired and seats allocated to another traveller");
+                processRefund(booking.getBookingRef(), booking.getTotalAmount(), "Inventory hold expired and allocated to another traveller");
                 booking.setStatus("EXPIRED");
                 bookingRepository.save(booking);
                 return true;
@@ -174,12 +178,76 @@ public class BookingExpiryReconciliationService {
         }
     }
 
-    private void releaseRoomsInHotelService(Booking booking) {
+    private boolean confirmRoomsInHotelService(Booking booking) {
         if (!"HOTEL".equalsIgnoreCase(booking.getServiceType()) || booking.getServiceId() == null) {
+            return true;
+        }
+        if (booking.getBookingRef() == null || booking.getBookingRef().isBlank()) {
+            return true;
+        }
+        if (!booking.isDateWiseBooking()) {
+            return true;
+        }
+        try {
+            String url = hotelServiceUrl + "/api/hotels/rooms/confirm-stay?bookingRef=" + booking.getBookingRef();
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            String internalToken = internalTokenService.generateInternalToken();
+            headers.set("Authorization", "Bearer " + internalToken);
+            headers.set("X-Internal-Token", internalToken);
+            headers.set("X-Internal-Service", "booking-service");
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<Map> resp = restTemplate.exchange(url, HttpMethod.PUT, entity, Map.class);
+            boolean success = resp.getStatusCode().is2xxSuccessful();
+            if (success) {
+                log.info("Confirmed stay inventory for bookingRef {} via hotel-service", booking.getBookingRef());
+            }
+            return success;
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            log.warn("Stay allocation in hotel-service rejected confirmation for bookingRef {}: {}", booking.getBookingRef(), e.getMessage());
+            return false;
+        } catch (Exception e) {
+            log.warn("Failed to confirm rooms in hotel-service for bookingRef {}: {}", booking.getBookingRef(), e.getMessage());
+            return false;
+        }
+    }
+
+    private void releaseRoomsInHotelService(Booking booking) {
+        if (!"HOTEL".equalsIgnoreCase(booking.getServiceType())) {
             return;
         }
-        int count = 1;
         try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            String internalToken = internalTokenService.generateInternalToken();
+            headers.set("Authorization", "Bearer " + internalToken);
+            headers.set("X-Internal-Token", internalToken);
+            headers.set("X-Internal-Service", "booking-service");
+
+            // 1. Authoritative date-wise release for all date-wise bookings (WP-03)
+            if (booking.isDateWiseBooking()) {
+                if (booking.getBookingRef() != null && !booking.getBookingRef().isBlank()) {
+                    try {
+                        String stayUrl = hotelServiceUrl + "/api/hotels/rooms/release-stay?bookingRef=" + booking.getBookingRef();
+                        HttpEntity<Void> stayEntity = new HttpEntity<>(headers);
+                        ResponseEntity<Map> stayResp = restTemplate.exchange(stayUrl, HttpMethod.POST, stayEntity, Map.class);
+                        if (stayResp.getStatusCode().is2xxSuccessful()) {
+                            log.info("Authoritatively released expired stay inventory for bookingRef {} via hotel-service", booking.getBookingRef());
+                            return;
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to release date-wise stay inventory for booking {}: {}", booking.getBookingRef(), e.getMessage());
+                    }
+                }
+                // Date-wise bookings must NEVER fall back to legacy count-based release
+                return;
+            }
+
+            // 2. Genuine legacy bookings fallback to count-based release
+            if (booking.getServiceId() == null) {
+                return;
+            }
+            int count = 1;
             if (booking.getDetailsJson() != null) {
                 Pattern pattern = Pattern.compile("Rooms?:\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
                 Matcher matcher = pattern.matcher(booking.getDetailsJson());
@@ -188,12 +256,9 @@ public class BookingExpiryReconciliationService {
                 }
             }
             String url = hotelServiceUrl + "/api/hotels/rooms/" + booking.getServiceId() + "/release?count=" + count;
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("X-Internal-Service", "booking-service");
             HttpEntity<Void> entity = new HttpEntity<>(headers);
             restTemplate.exchange(url, HttpMethod.PUT, entity, Map.class);
-            log.info("Released expired rooms (count {}) for roomId {} via hotel-service", count, booking.getServiceId());
+            log.info("Released expired rooms (count {}) for legacy booking {} via hotel-service", count, booking.getBookingRef());
         } catch (Exception e) {
             log.warn("Failed to release rooms in hotel-service for booking {}: {}", booking.getBookingRef(), e.getMessage());
         }

@@ -152,19 +152,140 @@ Illustrative inventory model:
 
 The final implementation must account for the actual lifecycle and expiry state of each allocation.
 
-### BD-07: Room Type Modification Restrictions
+## BD-07: Room Type Modification, Structural Restrictions & Archival
 
-**Decision:** Non-structural edits are allowed. Changes affecting existing booking commitments must be restricted.
+**Status:** Approved — Finalized  
+**Applies to:** Hotel Domain (WP-02), Inventory (WP-03), Booking Lifecycle (WP-04)
 
-Requirements:
+### 1. General Principle
 
-- Descriptive information and amenities can be modified subject to validation.
-- Structural changes must be evaluated against existing reservations.
-- Changes to occupancy, bed configuration or other booking-impacting attributes must not invalidate existing reservations.
-- Inventory reduction must be rejected if it violates existing allocations.
-- Increasing inventory can be allowed after validation.
-- Room types with historical bookings must not be permanently deleted.
-- Backend validation must enforce these restrictions.
+Hotel managers can modify room-type information while preserving the integrity of existing reservations and historical booking records.
+
+Room-type fields are classified into:
+
+- Non-structural fields: Changes do not invalidate existing reservations and are generally permitted.
+- Structural fields: Changes can affect room capacity, guest eligibility or inventory commitments and are subject to restrictions.
+- System-managed fields: Values are maintained by the application and cannot be directly modified by hotel managers.
+- Immutable fields: Identifiers and ownership relationships that cannot be changed through ordinary updates.
+
+### 2. Room-Type Field Classification
+
+| Field | Classification | Modification Rule |
+|---|---|---|
+| Room Type Name | Non-structural | Editable even when active bookings exist. Duplicate active room-type names within the same property are prohibited. |
+| Description | Non-structural, if supported | Editable even when active bookings exist. |
+| Amenities | Non-structural | Editable even when active bookings exist. |
+| Price per Night | Non-structural | Editable at any time, including when confirmed bookings exist. New prices apply only to new bookings. Existing bookings retain their originally agreed prices. |
+| Maximum Occupancy | Structural | Both increases and decreases are restricted while active bookings exist for the affected room type. |
+| Total Rooms | Structural | Increases are permitted. Reductions are permitted only when existing reservations and other committed allocations are not violated. |
+| Available Rooms | System-managed | Cannot be directly edited by hotel managers. Maintained by the inventory system. |
+| Room Type Status | Lifecycle-managed | System controls `ACTIVE` and `ARCHIVED` status transitions through authorized operations. |
+| Room Type ID | Immutable | Cannot be modified or regenerated during updates. |
+| Hotel ID | Immutable ownership relationship | A room type cannot be reassigned to another property through an update operation. |
+
+The classification applies only to fields that exist in the actual room-type domain model. Additional fields must be classified according to their business impact before being made editable.
+
+### 3. Non-Structural Modification Rules
+
+The following changes are permitted even when active bookings exist:
+
+- Room type name changes.
+- Description changes, where supported.
+- Amenity changes.
+- Price-per-night changes.
+
+These modifications must not alter the terms of already confirmed bookings.
+
+**Price preservation rule:**
+
+When a manager changes the room-type price:
+
+1. The new price applies to bookings created after the price update.
+2. Existing confirmed bookings retain the price agreed at booking time.
+3. Historical booking records must not dynamically retrieve and substitute the latest room-type price.
+4. Booking records must preserve the relevant agreed pricing information.
+
+Room type identifiers must remain unchanged so that historical references remain valid.
+
+### 4. Structural Modification Rules
+
+#### 4.1 Maximum Occupancy
+
+Both increases and decreases to maximum occupancy are restricted while active bookings exist for the affected room type.
+
+Once no affected active bookings remain, the manager may modify maximum occupancy, subject to normal validation.
+
+The exact booking statuses considered active must be aligned with the booking lifecycle implemented in `booking-service`.
+
+#### 4.2 Total Room Capacity
+
+Managers may increase the total number of rooms.
+
+A reduction is permitted only if the resulting capacity does not violate existing reservations or other committed allocations.
+
+The inventory implementation must perform this validation against the applicable allocations, including date-wise allocations introduced in WP-03.
+
+A reduction that would invalidate existing commitments must be rejected with a meaningful validation error.
+
+### 5. System-Managed Fields
+
+`availableRooms` must never be directly editable by hotel managers.
+
+It is maintained by the inventory management functionality.
+
+WP-03 will introduce date-wise inventory management and the corresponding availability calculations. The current global inventory counter must not be treated as the final inventory architecture.
+
+Room type identifiers and property ownership relationships must also remain immutable through normal update operations.
+
+### 6. Room-Type Archival
+
+Permanent deletion of room types is prohibited.
+
+- A room type with active allocations or reservations cannot be archived.
+- A room type with no active allocations may be archived.
+- Archival changes the room type status to `ARCHIVED`.
+- Archived records must remain in the database to preserve historical references.
+- Archived room types must not appear in public hotel discovery or accept new reservations.
+- Authorized managers may view archived room types in their management interface.
+- Historical bookings associated with archived room types must remain accessible.
+
+### 7. Historical Booking Integrity
+
+Changes to room-type information must not rewrite historical booking details.
+
+At minimum, existing bookings must preserve:
+
+- Hotel/property reference.
+- Room-type reference.
+- Room-type name as agreed at booking time.
+- Agreed price per night.
+- Applicable guest capacity at booking time.
+
+The booking domain must own the historical booking snapshot and preserve its integrity independently of subsequent room-type modifications.
+
+If any required snapshot fields are missing from the existing booking model, address their implementation in WP-04.
+
+### 8. Work Package Responsibilities
+
+| Work Package | Responsibility |
+|---|---|
+| WP-02 | Room-type field validation, modification classification, structural restrictions, ownership and archival rules. |
+| WP-03 | Date-wise inventory, capacity allocation, availability calculations and validation of inventory reductions against committed allocations. |
+| WP-04 | Booking lifecycle status definitions, historical booking snapshots and preservation of agreed booking prices. |
+
+### 9. Acceptance Criteria
+
+- Non-structural fields can be updated without invalidating existing bookings.
+- Price changes affect only new bookings.
+- Existing confirmed bookings retain their agreed prices.
+- Both increases and decreases in maximum occupancy are rejected while affected active bookings exist.
+- Total room capacity cannot be reduced below committed allocations.
+- Available room counts cannot be directly edited by managers.
+- Room-type identifiers and property ownership cannot be changed through ordinary updates.
+- Duplicate active room-type names within the same property are rejected.
+- Room types with active allocations cannot be archived.
+- Archived room types remain available for historical references but are excluded from public discovery and new reservations.
+- All changes preserve existing booking references and ownership boundaries.
 
 ### BD-08: Soft Property Deactivation
 

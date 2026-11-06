@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -53,6 +54,19 @@ public class Booking {
     private Double refundAmount;
     private String refundAttemptKey;
 
+    // WP-04: Hotel Stay & Operational Lifecycle Fields (BD-04, BD-09)
+    private LocalDate checkInDate;
+    private LocalDate checkOutDate;
+    private LocalDateTime checkedInAt;
+    private LocalDateTime checkedOutAt;
+    private LocalDateTime noShowAt;
+    private LocalDateTime cancelledAt;
+    private String cancellationPolicyTier;
+    private Double cancellationFee;
+    private String cancellationReason;
+    @Column(length = 2000)
+    private String cancellationPolicySnapshot;
+
     @Transient
     private String exteriorImageUrl;
 
@@ -64,4 +78,43 @@ public class Booking {
 
     @Transient
     private String operatorBusinessName;
+
+    public boolean isDateWiseBooking() {
+        if (!"HOTEL".equalsIgnoreCase(this.serviceType)) {
+            return false;
+        }
+        return this.checkInDate != null || this.checkOutDate != null ||
+                this.resolveCheckInDate() != null || this.resolveCheckOutDate() != null;
+    }
+
+    public LocalDate resolveCheckInDate() {
+        if (checkInDate != null) {
+            return checkInDate;
+        }
+        return extractDateFromDetails(detailsJson, "check-?in");
+    }
+
+    public LocalDate resolveCheckOutDate() {
+        if (checkOutDate != null) {
+            return checkOutDate;
+        }
+        return extractDateFromDetails(detailsJson, "check-?out");
+    }
+
+    private LocalDate extractDateFromDetails(String details, String keywordRegex) {
+        if (details == null || details.isBlank()) {
+            return null;
+        }
+        try {
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                    "(?:" + keywordRegex + ")[:\\s]*([0-9]{4}-[0-9]{2}-[0-9]{2})",
+                    java.util.regex.Pattern.CASE_INSENSITIVE
+            );
+            java.util.regex.Matcher m = p.matcher(details);
+            if (m.find()) {
+                return LocalDate.parse(m.group(1));
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
 }

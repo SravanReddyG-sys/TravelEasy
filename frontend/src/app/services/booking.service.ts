@@ -43,6 +43,25 @@ export class BookingService {
     return this.http.put(`${this.apiUrl}/bookings/${bookingId}/cancel`, {});
   }
 
+  getCancellationQuote(bookingRefOrId: string | number): Observable<any> {
+    const endpoint = typeof bookingRefOrId === 'number'
+      ? `${this.apiUrl}/bookings/${bookingRefOrId}/cancellation-quote`
+      : `${this.apiUrl}/bookings/ref/${bookingRefOrId}/cancellation-quote`;
+    return this.http.get<any>(endpoint);
+  }
+
+  checkInGuest(bookingRef: string): Observable<any> {
+    return this.http.put(`${this.apiUrl}/bookings/ref/${bookingRef}/check-in`, {});
+  }
+
+  checkOutGuest(bookingRef: string): Observable<any> {
+    return this.http.put(`${this.apiUrl}/bookings/ref/${bookingRef}/check-out`, {});
+  }
+
+  markNoShow(bookingRef: string): Observable<any> {
+    return this.http.put(`${this.apiUrl}/bookings/ref/${bookingRef}/no-show`, {});
+  }
+
   getPaymentConfig(): Observable<{ keyId: string; currency: string }> {
     return this.http.get<{ keyId: string; currency: string }>(`${this.apiUrl}/payments/config`);
   }
@@ -114,6 +133,10 @@ export class BookingService {
   getAdminPendingReviews(page = 0, size = 10): Observable<AdminPendingReviewsPage> {
     return this.http.get<AdminPendingReviewsPage>(this.apiUrl + '/reviews/admin/pending?page=' + page + '&size=' + size);
   }
+
+  getHotelRevenueSummary(request: { hotelId?: number; bookingRefs?: string[]; startDate: string; endDate: string }): Observable<HotelRevenueReportResponse> {
+    return this.http.post<HotelRevenueReportResponse>(`${this.apiUrl}/payments/hotel/revenue-summary`, request);
+  }
 }
 
 
@@ -166,4 +189,24 @@ export interface AdminPendingReviewsPage {
   numberOfElements: number;
   first: boolean;
   empty: boolean;
+}
+
+
+export interface HotelRevenueDailyBreakdown {
+  date: string;
+  paymentAmount: number;
+  refundAmount: number;
+  netRevenue: number;
+}
+
+export interface HotelRevenueReportResponse {
+  hotelId?: number;
+  startDate: string;
+  endDate: string;
+  successfulPaymentsAmount: number;
+  successfulPaymentsCount: number;
+  processedRefundsAmount: number;
+  processedRefundsCount: number;
+  netRevenue: number;
+  dailyBreakdown: HotelRevenueDailyBreakdown[];
 }

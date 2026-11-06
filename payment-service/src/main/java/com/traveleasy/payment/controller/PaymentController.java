@@ -158,6 +158,43 @@ public class PaymentController {
         return ResponseEntity.ok(trends);
     }
 
+    /**
+     * Authoritative Net Revenue reporting for Hotel Manager Dashboard.
+     * Net Revenue = Eligible Successful Payment Amounts - Successfully Processed Refund Amounts
+     * Attributed strictly to actual financial transaction timestamps (timestamp for payments, refundedAt for refunds).
+     */
+    @PostMapping("/hotel/revenue-summary")
+    public ResponseEntity<?> getHotelRevenueSummary(
+            @RequestBody HotelRevenueReportRequest request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Authorization token required"));
+        }
+        String token = authHeader.substring(7).trim();
+        if (!securityService.validateToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Invalid or expired authorization token"));
+        }
+        String role = securityService.extractRole(token);
+        boolean isAuthorized = "ROLE_HOTEL_MANAGER".equalsIgnoreCase(role) || "ROLE_ADMIN".equalsIgnoreCase(role);
+        if (!isAuthorized) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Hotel Manager or Admin authorization required"));
+        }
+
+        Long userId = null;
+        try {
+            Object uid = securityService.extractClaims(token).get("userId");
+            if (uid instanceof Number) {
+                userId = ((Number) uid).longValue();
+            }
+        } catch (Exception ignored) {}
+
+        HotelRevenueReportResponse response = paymentService.getHotelRevenueSummary(request, role, userId);
+        return ResponseEntity.ok(response);
+    }
+
     private ResponseEntity<?> validateAdminAuth(String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)

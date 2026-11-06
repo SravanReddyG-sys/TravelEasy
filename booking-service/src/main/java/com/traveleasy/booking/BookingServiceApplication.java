@@ -34,6 +34,11 @@ public class BookingServiceApplication {
                         if (eqIdx > 0) {
                             String key = line.substring(0, eqIdx).trim();
                             String value = line.substring(eqIdx + 1).trim();
+                            if (value.startsWith("\"") && value.endsWith("\"") && value.length() >= 2) {
+                                value = value.substring(1, value.length() - 1);
+                            } else if (value.startsWith("'") && value.endsWith("'") && value.length() >= 2) {
+                                value = value.substring(1, value.length() - 1);
+                            }
                             if (System.getProperty(key) == null && System.getenv(key) == null) {
                                 System.setProperty(key, value);
                             }

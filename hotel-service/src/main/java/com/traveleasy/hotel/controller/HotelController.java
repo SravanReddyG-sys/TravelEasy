@@ -1,20 +1,33 @@
 package com.traveleasy.hotel.controller;
 
+import com.traveleasy.hotel.dto.*;
 import com.traveleasy.hotel.model.HotelProperty;
+import com.traveleasy.hotel.model.HotelImage;
 import com.traveleasy.hotel.model.RoomType;
 import com.traveleasy.hotel.repository.HotelPropertyRepository;
+import com.traveleasy.hotel.repository.HotelImageRepository;
 import com.traveleasy.hotel.repository.RoomTypeRepository;
 import com.traveleasy.hotel.security.HotelSecurityService;
 import com.traveleasy.hotel.security.HotelSecurityService.CallerPrincipal;
+import com.traveleasy.hotel.service.HotelInventoryService;
+import com.traveleasy.hotel.service.HotelPricingService;
+import com.traveleasy.hotel.service.HotelPropertyService;
+import com.traveleasy.hotel.service.RoomBlockService;
+import com.traveleasy.hotel.service.RoomTypeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import jakarta.validation.Valid;
+import com.traveleasy.hotel.service.HotelImageStorageService;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.time.LocalDate;
+import java.util.*;
 
 @Slf4j
 @RestController
@@ -25,196 +38,608 @@ public class HotelController {
     private final HotelPropertyRepository hotelRepository;
     private final RoomTypeRepository roomTypeRepository;
     private final HotelSecurityService securityService;
+    private final HotelPropertyService hotelPropertyService;
+    private final RoomTypeService roomTypeService;
+    private final HotelInventoryService inventoryService;
+    private final HotelPricingService pricingService;
+    private final RoomBlockService roomBlockService;
+    private final HotelImageStorageService imageStorageService;
+    private final HotelImageRepository hotelImageRepository;
 
-    /**
-     * Register a new hotel property.
-     * Restricted to ROLE_HOTEL_MANAGER and ROLE_ADMIN.
-     * The manager ID and manager Name are derived authoritatively from the JWT token.
-     * Per BD-03, newly registered properties immediately receive ACTIVE status.
-     */
-    @PostMapping
-    public ResponseEntity<?> addHotel(
-            @RequestBody HotelProperty hotel,
+    // =========================================================================
+    // 1A. PROPERTY REGISTRATION WIZARD DRAFTS (WP-05 STEP 1)
+    // =========================================================================
+
+    @PostMapping("/draft/step-1")
+    public ResponseEntity<?> saveStep1Draft(
+            @Valid @RequestBody HotelStep1RequestDto request,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("message", "Authentication required to register hotel property"));
-        }
-
-        String token = authHeader.substring(7).trim();
-        if (!securityService.validateToken(token)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("message", "Invalid or expired authorization token"));
-        }
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "save property registration draft");
+        if (authError != null) return authError;
 
         CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
-        if (principal == null || !principal.hasManagerOrAdminAccess()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "Access denied: Hotel Manager or Admin role required"));
+        HotelStep1ResponseDto response = hotelPropertyService.saveStep1Draft(request, principal);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping("/draft/{draftId}")
+    public ResponseEntity<?> getDraft(
+            @PathVariable Long draftId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "retrieve property registration draft");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelStep1ResponseDto response = hotelPropertyService.getDraft(draftId, principal);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/drafts")
+    public ResponseEntity<?> getMyDrafts(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "view property registration drafts");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        List<HotelStep1ResponseDto> drafts = hotelPropertyService.getDraftsByManager(principal);
+        return ResponseEntity.ok(drafts);
+    }
+
+    @DeleteMapping("/draft/{draftId}")
+    public ResponseEntity<?> deleteDraft(
+            @PathVariable Long draftId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "delete property draft");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        hotelPropertyService.deleteDraft(draftId, principal);
+        return ResponseEntity.ok(Map.of("message", "Property draft and associated images deleted successfully", "draftId", draftId));
+    }
+
+    // =========================================================================
+    // 1B. PROPERTY IMAGE MANAGEMENT & SERVING
+    // =========================================================================
+
+    @PostMapping("/images/upload")
+    public ResponseEntity<?> uploadImage(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "category", required = false) String category,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "upload property image");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+
+        try {
+            // Namespace category with manager id for ownership validation on unassigned files
+            String managerCategory = "m" + principal.userId() + "_" + (category != null && !category.isBlank() ? category : "gallery");
+            String filename = imageStorageService.storeImage(file, managerCategory);
+            String imageUrl = "/api/hotels/images/" + filename;
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                    "imageUrl", imageUrl,
+                    "filename", filename,
+                    "originalName", file.getOriginalFilename() != null ? file.getOriginalFilename() : filename,
+                    "size", file.getSize()
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            log.error("Failed to upload hotel image", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Image upload failed: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/images/{filename:.+}")
+    public ResponseEntity<Resource> getImage(@PathVariable String filename) {
+        try {
+            Resource resource = imageStorageService.loadAsResource(filename);
+            String contentType = "image/jpeg";
+            String lower = filename.toLowerCase();
+            if (lower.endsWith(".png")) {
+                contentType = "image/png";
+            } else if (lower.endsWith(".webp")) {
+                contentType = "image/webp";
+            }
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_TYPE, contentType)
+                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                    .body(resource);
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            log.error("Failed to load hotel image: {}", filename, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @DeleteMapping("/images/{filename:.+}")
+    public ResponseEntity<?> deleteImage(
+            @PathVariable String filename,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "delete property image");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+
+        // Security check: Verify image ownership
+        List<HotelImage> matchedImages = hotelImageRepository.findByImageUrlContaining(filename);
+        if (!matchedImages.isEmpty()) {
+            for (HotelImage img : matchedImages) {
+                HotelProperty prop = hotelRepository.findById(img.getHotelId()).orElse(null);
+                if (prop != null && !principal.isAdmin() && !prop.getManagerId().equals(principal.userId())) {
+                    log.warn("Security violation: Manager ID {} attempted to delete image {} belonging to property ID {} (owned by Manager ID {})",
+                            principal.userId(), filename, prop.getId(), prop.getManagerId());
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(Map.of("message", "Forbidden: You do not have ownership of the property associated with this image"));
+                }
+            }
+            hotelImageRepository.deleteAll(matchedImages);
+        } else {
+            // Unassigned file: verify ownership via manager filename prefix if present
+            if (!principal.isAdmin() && filename.startsWith("hotel_m")) {
+                String expectedPrefix = "hotel_m" + principal.userId() + "_";
+                if (!filename.startsWith(expectedPrefix)) {
+                    log.warn("Security violation: Manager ID {} attempted to delete unassigned image {} uploaded by another manager",
+                            principal.userId(), filename);
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(Map.of("message", "Forbidden: You did not upload this image"));
+                }
+            }
         }
 
-        if (principal.userId() == null || principal.userId() <= 0) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "Access denied: Missing or invalid user identity in token"));
+        boolean deleted = imageStorageService.deleteImage(filename);
+        if (deleted) {
+            return ResponseEntity.ok(Map.of("message", "Image deleted successfully", "filename", filename));
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Image file not found or could not be deleted"));
         }
+    }
 
-        // Authoritative assignment: Managers can only register properties for themselves
-        if (principal.isHotelManager()) {
-            hotel.setManagerId(principal.userId());
-            hotel.setManagerName(principal.fullName());
-        } else if (principal.isAdmin() && (hotel.getManagerId() == null || hotel.getManagerId() <= 0)) {
-            hotel.setManagerId(principal.userId());
-            hotel.setManagerName(principal.fullName());
-        }
+    // =========================================================================
+    // 1. HOTEL PROPERTY MANAGEMENT
+    // =========================================================================
 
-        // BD-03: Newly registered properties receive ACTIVE status
-        hotel.setStatus("ACTIVE");
+    @PostMapping
+    public ResponseEntity<?> registerHotel(
+            @RequestBody HotelRequestDto request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
 
-        HotelProperty saved = hotelRepository.save(hotel);
-        log.info("Hotel property '{}' (ID: {}) registered by user ID: {}", saved.getName(), saved.getId(), principal.userId());
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "register hotel property");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelProperty saved = hotelPropertyService.registerProperty(request, principal);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 
-    /**
-     * Retrieve all hotels (public traveller search / discovery).
-     */
-    @GetMapping
-    public ResponseEntity<List<HotelProperty>> getAllHotels() {
-        return ResponseEntity.ok(hotelRepository.findAll());
+    @PutMapping("/{hotelId}")
+    public ResponseEntity<?> updateHotel(
+            @PathVariable Long hotelId,
+            @RequestBody HotelRequestDto request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "update hotel property");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelProperty updated = hotelPropertyService.updateProperty(hotelId, request, principal);
+        return ResponseEntity.ok(updated);
     }
 
-    /**
-     * Retrieve hotels managed by a specific manager.
-     * Restricted to ROLE_HOTEL_MANAGER (own properties only) and ROLE_ADMIN (all properties).
-     */
+    @GetMapping("/manage/{hotelId}")
+    public ResponseEntity<?> getHotelForManagement(
+            @PathVariable Long hotelId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "view property management details");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelManageDto dto = hotelPropertyService.getPropertyForManagement(hotelId, principal);
+        return ResponseEntity.ok(dto);
+    }
+
+    @GetMapping("/my-hotels")
+    public ResponseEntity<?> getMyHotels(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "view manager properties");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        List<HotelProperty> properties = hotelPropertyService.getPropertiesByManager(principal.userId(), principal);
+        return ResponseEntity.ok(properties);
+    }
+
     @GetMapping("/manager/{managerId}")
     public ResponseEntity<?> getHotelsByManager(
             @PathVariable Long managerId,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("message", "Authentication required to view manager properties"));
-        }
-
-        String token = authHeader.substring(7).trim();
-        if (!securityService.validateToken(token)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("message", "Invalid or expired authorization token"));
-        }
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "view manager properties");
+        if (authError != null) return authError;
 
         CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
-        if (principal == null || !principal.hasManagerOrAdminAccess()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "Access denied: Hotel Manager or Admin role required"));
-        }
+        List<HotelProperty> properties = hotelPropertyService.getPropertiesByManager(managerId, principal);
+        return ResponseEntity.ok(properties);
+    }
 
-        // Ownership enforcement: Manager cannot view another manager's properties
-        if (principal.isHotelManager() && !principal.userId().equals(managerId)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "Access denied: Cannot access properties belonging to another hotel manager"));
-        }
+    @PutMapping("/{hotelId}/status")
+    public ResponseEntity<?> updateHotelStatus(
+            @PathVariable Long hotelId,
+            @RequestParam String status,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
 
-        List<HotelProperty> hotels = hotelRepository.findByManagerId(managerId);
-        return ResponseEntity.ok(hotels);
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "update property status");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelProperty updated = hotelPropertyService.updatePropertyStatus(hotelId, status, principal);
+        return ResponseEntity.ok(updated);
+    }
+
+    // =========================================================================
+    // 2. ROOM CATEGORY MANAGEMENT (WP-02)
+    // =========================================================================
+
+    @PostMapping("/{hotelId}/rooms")
+    public ResponseEntity<?> addRoomType(
+            @PathVariable Long hotelId,
+            @RequestBody RoomTypeRequestDto request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "add room category");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        RoomType saved = roomTypeService.createRoomType(hotelId, request, principal);
+        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+    }
+
+    @PutMapping("/rooms/{roomId}")
+    public ResponseEntity<?> updateRoomType(
+            @PathVariable Long roomId,
+            @RequestBody RoomTypeRequestDto request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "update room category");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        RoomType updated = roomTypeService.updateRoomType(roomId, request, principal);
+        return ResponseEntity.ok(updated);
+    }
+
+    @DeleteMapping("/rooms/{roomId}")
+    public ResponseEntity<?> archiveRoomType(
+            @PathVariable Long roomId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "archive room category");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        RoomType archived = roomTypeService.archiveRoomType(roomId, principal);
+        return ResponseEntity.ok(Map.of(
+                "message", "Room category archived successfully",
+                "roomId", roomId,
+                "status", archived.getStatus()
+        ));
+    }
+
+    @GetMapping("/{hotelId}/rooms")
+    public ResponseEntity<List<RoomType>> getRoomTypes(
+            @PathVariable Long hotelId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        CallerPrincipal principal = authHeader != null ? securityService.resolvePrincipal(authHeader) : null;
+        List<RoomType> rooms = roomTypeService.getRoomTypesByHotel(hotelId, principal);
+        return ResponseEntity.ok(rooms);
+    }
+
+    @GetMapping("/rooms/{roomId}")
+    public ResponseEntity<RoomType> getRoomType(@PathVariable Long roomId) {
+        RoomType roomType = roomTypeService.getRoomTypeById(roomId);
+        return ResponseEntity.ok(roomType);
+    }
+
+    // =========================================================================
+    // 3. PUBLIC TRAVELLER DISCOVERY & AVAILABILITY ENDPOINTS
+    // =========================================================================
+
+    @GetMapping
+    public ResponseEntity<List<HotelPublicDto>> getAllHotels() {
+        List<HotelProperty> hotels = hotelRepository.findByStatus("ACTIVE");
+        List<HotelPublicDto> dtoList = hotels.stream()
+                .map(HotelPublicDto::fromEntity)
+                .toList();
+        return ResponseEntity.ok(dtoList);
     }
 
     /**
-     * Public hotel search by destination city.
-     * Open to all users without authentication.
+     * Public hotel search by destination city with optional date-wise availability filtering (BD-01).
      */
     @GetMapping("/search")
-    public ResponseEntity<List<HotelProperty>> searchHotels(
+    public ResponseEntity<List<HotelPublicDto>> searchHotels(
             @RequestParam String city,
-            @RequestParam(required = false) String checkIn,
-            @RequestParam(required = false) String checkOut,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkIn,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkOut,
+            @RequestParam(required = false, defaultValue = "1") Integer rooms,
             @RequestParam(required = false, defaultValue = "1") Integer guests) {
-        return ResponseEntity.ok(hotelRepository.findByCityIgnoreCase(city));
+
+        List<HotelProperty> hotels = hotelRepository.findByCityIgnoreCaseAndStatus(city, "ACTIVE");
+
+        // If stay dates are supplied, filter hotels having at least one room available for all nights
+        if (checkIn != null && checkOut != null && checkOut.isAfter(checkIn)) {
+            int neededRooms = (rooms != null && rooms > 0) ? rooms : 1;
+            List<HotelPublicDto> availableHotels = new ArrayList<>();
+
+            for (HotelProperty h : hotels) {
+                List<RoomType> activeRooms = roomTypeRepository.findByHotelIdAndStatus(h.getId(), "ACTIVE");
+                double minStartingPrice = Double.MAX_VALUE;
+                boolean hasAvailableRoom = false;
+
+                for (RoomType rt : activeRooms) {
+                    StayAvailabilityResponseDto stay = inventoryService.checkStayAvailability(
+                            rt.getId(), checkIn, checkOut, neededRooms);
+                    if (stay.isAvailable()) {
+                        hasAvailableRoom = true;
+                        if (stay.getMinNightlyPrice() != null && stay.getMinNightlyPrice() < minStartingPrice) {
+                            minStartingPrice = stay.getMinNightlyPrice();
+                        }
+                    }
+                }
+
+                if (hasAvailableRoom) {
+                    HotelPublicDto dto = HotelPublicDto.fromEntity(h);
+                    if (minStartingPrice != Double.MAX_VALUE) {
+                        dto.setMinPrice(minStartingPrice);
+                    }
+                    availableHotels.add(dto);
+                }
+            }
+            return ResponseEntity.ok(availableHotels);
+        }
+
+        List<HotelPublicDto> dtoList = hotels.stream()
+                .map(HotelPublicDto::fromEntity)
+                .toList();
+        return ResponseEntity.ok(dtoList);
     }
 
     /**
-     * Public hotel details lookup including available room types.
-     * Open to all users without authentication.
+     * Public hotel details lookup including active room categories and optional stay availability.
      */
     @GetMapping("/{id}")
-    public ResponseEntity<?> getHotelDetails(@PathVariable Long id) {
+    public ResponseEntity<?> getHotelDetails(
+            @PathVariable Long id,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkIn,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkOut,
+            @RequestParam(required = false, defaultValue = "1") Integer rooms) {
+
         HotelProperty hotel = hotelRepository.findById(id).orElse(null);
         if (hotel == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Hotel property not found"));
         }
-        List<RoomType> rooms = roomTypeRepository.findByHotelId(id);
-        return ResponseEntity.ok(Map.of("hotel", hotel, "rooms", rooms));
+
+        List<RoomType> activeRooms = roomTypeRepository.findByHotelIdAndStatus(id, "ACTIVE");
+
+        if (checkIn != null && checkOut != null && checkOut.isAfter(checkIn)) {
+            int neededRooms = (rooms != null && rooms > 0) ? rooms : 1;
+            List<Map<String, Object>> roomsWithAvailability = new ArrayList<>();
+
+            for (RoomType rt : activeRooms) {
+                StayAvailabilityResponseDto stay = inventoryService.checkStayAvailability(
+                        rt.getId(), checkIn, checkOut, neededRooms);
+                Map<String, Object> roomMap = new LinkedHashMap<>();
+                roomMap.put("id", rt.getId());
+                roomMap.put("hotelId", rt.getHotelId());
+                roomMap.put("roomTypeName", rt.getRoomTypeName());
+                roomMap.put("maxOccupancy", rt.getMaxOccupancy());
+                roomMap.put("basePricePerNight", rt.getPricePerNight());
+                roomMap.put("amenities", rt.getAmenities());
+                roomMap.put("status", rt.getStatus());
+                roomMap.put("availableAcrossStay", stay.isAvailable());
+                roomMap.put("availableRoomsAcrossStay", stay.getAvailableRoomsAcrossStay());
+                roomMap.put("minNightlyPrice", stay.getMinNightlyPrice());
+                roomMap.put("totalPriceForStay", stay.getTotalPrice());
+                roomMap.put("nightlyBreakdown", stay.getNightlyBreakdown());
+                roomsWithAvailability.add(roomMap);
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "hotel", HotelPublicDto.fromEntity(hotel),
+                    "rooms", roomsWithAvailability
+            ));
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "hotel", HotelPublicDto.fromEntity(hotel),
+                "rooms", activeRooms
+        ));
     }
 
     /**
-     * Add a room type to an existing hotel property.
-     * Restricted to ROLE_HOTEL_MANAGER (own properties only) and ROLE_ADMIN.
-     * Room ownership is enforced through the parent hotel property.
+     * Multi-night availability calculation for all active room types in a hotel.
      */
-    @PostMapping("/{hotelId}/rooms")
-    public ResponseEntity<?> addRoomType(
-            @PathVariable Long hotelId,
-            @RequestBody RoomType roomType,
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+    @GetMapping("/{id}/availability")
+    public ResponseEntity<?> getHotelAvailability(
+            @PathVariable Long id,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkIn,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkOut,
+            @RequestParam(required = false, defaultValue = "1") Integer rooms) {
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("message", "Authentication required to add room category"));
+        HotelProperty hotel = hotelRepository.findById(id).orElse(null);
+        if (hotel == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Hotel property not found"));
         }
 
-        String token = authHeader.substring(7).trim();
-        if (!securityService.validateToken(token)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("message", "Invalid or expired authorization token"));
+        List<RoomType> activeRooms = roomTypeRepository.findByHotelIdAndStatus(id, "ACTIVE");
+        List<StayAvailabilityResponseDto> availabilityList = new ArrayList<>();
+        for (RoomType rt : activeRooms) {
+            availabilityList.add(inventoryService.checkStayAvailability(rt.getId(), checkIn, checkOut, rooms));
         }
-
-        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
-        if (principal == null || !principal.hasManagerOrAdminAccess()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "Access denied: Hotel Manager or Admin role required"));
-        }
-
-        Optional<HotelProperty> hotelOpt = hotelRepository.findById(hotelId);
-        if (hotelOpt.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("message", "Hotel property not found"));
-        }
-
-        HotelProperty hotel = hotelOpt.get();
-
-        // Property & Room ownership enforcement
-        if (principal.isHotelManager() && !principal.userId().equals(hotel.getManagerId())) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "Access denied: Cannot add room categories to a property you do not own"));
-        }
-
-        roomType.setHotelId(hotelId);
-        if (roomType.getAvailableRooms() == null) {
-            roomType.setAvailableRooms(roomType.getTotalRooms());
-        }
-
-        RoomType saved = roomTypeRepository.save(roomType);
-        log.info("Room category '{}' (ID: {}) added to hotel ID: {} by user ID: {}",
-                saved.getRoomTypeName(), saved.getId(), hotelId, principal.userId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        return ResponseEntity.ok(availabilityList);
     }
 
     /**
-     * Reserve rooms for a booking.
-     * Sensitive inventory operation:
-     * - Accessible by authenticated travellers / customers, admins, OR
-     * - Trusted internal services (e.g. booking-service).
-     * Unauthenticated callers are rejected.
+     * Multi-night availability calculation for a specific room type.
+     */
+    @GetMapping("/rooms/{roomId}/availability")
+    public ResponseEntity<?> getRoomAvailability(
+            @PathVariable Long roomId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkIn,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate checkOut,
+            @RequestParam(required = false, defaultValue = "1") Integer rooms) {
+
+        StayAvailabilityResponseDto availability = inventoryService.checkStayAvailability(
+                roomId, checkIn, checkOut, rooms);
+        return ResponseEntity.ok(availability);
+    }
+
+    /**
+     * Internal hotel details lookup for trusted microservices.
+     */
+    @GetMapping("/internal/{id}")
+    public ResponseEntity<?> getHotelInternalDetails(
+            @PathVariable Long id,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+            @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+
+        if ((authHeader == null || authHeader.isBlank()) && (internalToken == null || internalToken.isBlank())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Authentication required for internal endpoints"));
+        }
+
+        boolean isInternal = securityService.authenticateInternalService(authHeader, internalToken, internalService);
+        if (!isInternal) {
+            CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+            if (principal == null || !principal.hasManagerOrAdminAccess()) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("message", "Access denied: Internal service authentication required"));
+            }
+        }
+
+        HotelProperty hotel = hotelRepository.findById(id).orElse(null);
+        if (hotel == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Hotel property not found"));
+        }
+        return ResponseEntity.ok(hotel);
+    }
+
+    // =========================================================================
+    // 4. DATE-WISE INVENTORY RESERVATION & RELEASE (WP-03)
+    // =========================================================================
+
+    /**
+     * Date-wise multi-night stay reservation endpoint (BD-01, BD-06).
+     * Atomically reserves inventory across all nights of the requested stay.
+     */
+    @PostMapping("/rooms/{roomId}/reserve-stay")
+    public ResponseEntity<?> reserveStay(
+            @PathVariable Long roomId,
+            @RequestBody DateWiseReserveRequestDto dto,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+            @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+
+        boolean isInternal = securityService.authenticateInternalService(authHeader, internalToken, internalService);
+        CallerPrincipal principal = null;
+
+        if (!isInternal) {
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Authentication required to reserve room inventory"));
+            }
+            String token = authHeader.substring(7).trim();
+            if (!securityService.validateToken(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Invalid or expired authorization token"));
+            }
+            principal = securityService.resolvePrincipal(authHeader);
+        }
+
+        Map<String, Object> result = inventoryService.reserveStayInventory(roomId, dto, principal, isInternal);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Authoritative and idempotent date-wise release endpoint (WP-03).
+     * Reverts held or booked inventory by bookingRef across all stay dates.
+     */
+    @PostMapping("/rooms/release-stay")
+    public ResponseEntity<?> releaseStay(
+            @RequestBody(required = false) DateWiseReleaseRequestDto dto,
+            @RequestParam(required = false) String bookingRef,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+            @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+
+        boolean isInternal = securityService.authenticateInternalService(authHeader, internalToken, internalService);
+        CallerPrincipal principal = null;
+
+        if (!isInternal) {
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Authentication required to release room inventory"));
+            }
+            String token = authHeader.substring(7).trim();
+            if (!securityService.validateToken(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Invalid or expired authorization token"));
+            }
+            principal = securityService.resolvePrincipal(authHeader);
+        }
+
+        String ref = (dto != null && dto.getBookingRef() != null && !dto.getBookingRef().isBlank())
+                ? dto.getBookingRef() : bookingRef;
+
+        if (ref == null || ref.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Booking reference is mandatory for release"));
+        }
+
+        Map<String, Object> result = inventoryService.releaseStayInventory(ref, principal, isInternal);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Confirms stay inventory upon successful payment (HELD -> CONFIRMED).
+     */
+    @PutMapping("/rooms/confirm-stay")
+    public ResponseEntity<?> confirmStay(
+            @RequestParam String bookingRef,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+            @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+
+        boolean isInternal = securityService.authenticateInternalService(authHeader, internalToken, internalService);
+        CallerPrincipal principal = authHeader != null ? securityService.resolvePrincipal(authHeader) : null;
+
+        Map<String, Object> result = inventoryService.confirmStayInventory(bookingRef, principal, isInternal);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Legacy reserve rooms endpoint (maintained for backward compatibility).
      */
     @PutMapping("/rooms/{roomId}/reserve")
     public ResponseEntity<?> reserveRooms(
             @PathVariable Long roomId,
             @RequestParam Integer count,
             @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
             @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
 
-        boolean isInternal = securityService.isInternalService(internalService);
+        boolean isInternal = securityService.authenticateInternalService(authHeader, internalToken, internalService);
 
         if (!isInternal) {
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -237,48 +662,50 @@ public class HotelController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Room category not found"));
         }
 
-        // BD-03 / BD-08: Check if parent hotel is active
-        if (roomType.getHotelId() != null) {
-            Optional<HotelProperty> hotelOpt = hotelRepository.findById(roomType.getHotelId());
-            if (hotelOpt.isPresent() && "INACTIVE".equalsIgnoreCase(hotelOpt.get().getStatus())) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(Map.of("message", "Hotel property is inactive and cannot accept reservations"));
-            }
+        if (!"ACTIVE".equalsIgnoreCase(roomType.getStatus())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Cannot reserve rooms for an archived or inactive room category"));
         }
 
-        if (roomType.getAvailableRooms() == null || roomType.getAvailableRooms() < count) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(Map.of("message", "Insufficient room inventory available"));
+        Optional<HotelProperty> hotelOpt = hotelRepository.findById(roomType.getHotelId());
+        if (hotelOpt.isPresent() && !"ACTIVE".equalsIgnoreCase(hotelOpt.get().getStatus())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Cannot reserve rooms for an inactive hotel property"));
         }
 
-        roomType.setAvailableRooms(roomType.getAvailableRooms() - count);
+        int current = roomType.getAvailableRooms() != null ? roomType.getAvailableRooms() : 0;
+        if (current < count) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "Insufficient room inventory available",
+                    "roomId", roomId,
+                    "availableRooms", current,
+                    "requestedCount", count
+            ));
+        }
+
+        int updated = current - count;
+        roomType.setAvailableRooms(updated);
         roomTypeRepository.save(roomType);
 
-        log.info("Reserved {} room(s) for roomId {}. Remaining available: {}", count, roomId, roomType.getAvailableRooms());
+        log.info("Reserved {} room(s) for roomId {}. Remaining available: {}", count, roomId, updated);
         return ResponseEntity.ok(Map.of(
                 "message", "Rooms reserved successfully",
-                "roomType", roomType,
-                "remainingAvailable", roomType.getAvailableRooms()
+                "roomId", roomId,
+                "availableRooms", updated,
+                "remainingAvailable", updated
         ));
     }
 
     /**
-     * Release rooms back into inventory (following cancellation or booking expiration).
-     * High-privilege inventory operation:
-     * - Must NOT be callable by arbitrary unauthenticated/unauthorized users.
-     * - Permitted ONLY for:
-     *   1) Trusted internal service (booking-service)
-     *   2) ROLE_ADMIN
-     *   3) The owning ROLE_HOTEL_MANAGER of the property.
+     * Legacy release rooms endpoint (maintained for backward compatibility).
      */
     @PutMapping("/rooms/{roomId}/release")
     public ResponseEntity<?> releaseRooms(
             @PathVariable Long roomId,
             @RequestParam Integer count,
             @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
             @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
 
-        boolean isInternal = securityService.isInternalService(internalService);
+        boolean isInternal = securityService.authenticateInternalService(authHeader, internalToken, internalService);
 
         if (!isInternal) {
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -292,12 +719,11 @@ public class HotelController {
             }
 
             CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
-            if (principal == null || !principal.hasManagerOrAdminAccess()) {
+            if (principal == null || (!principal.isHotelManager() && !principal.isAdmin())) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body(Map.of("message", "Access denied: Only trusted internal services, admins, or the owning hotel manager can release inventory"));
             }
 
-            // If hotel manager, enforce room and property ownership
             if (principal.isHotelManager()) {
                 RoomType roomType = roomTypeRepository.findById(roomId).orElse(null);
                 if (roomType == null) {
@@ -322,8 +748,16 @@ public class HotelController {
 
         int current = roomType.getAvailableRooms() != null ? roomType.getAvailableRooms() : 0;
         int maxTotal = roomType.getTotalRooms() != null ? roomType.getTotalRooms() : Integer.MAX_VALUE;
-        int restored = Math.min(current + count, maxTotal);
 
+        if (current >= maxTotal) {
+            return ResponseEntity.ok(Map.of(
+                    "message", "Room inventory is already at maximum capacity",
+                    "roomId", roomId,
+                    "availableRooms", current
+            ));
+        }
+
+        int restored = Math.min(maxTotal, current + count);
         roomType.setAvailableRooms(restored);
         roomTypeRepository.save(roomType);
 
@@ -335,19 +769,169 @@ public class HotelController {
         ));
     }
 
-    /**
-     * Soft property deactivation / activation (BD-08).
-     * Restricted to the owning ROLE_HOTEL_MANAGER or ROLE_ADMIN.
-     */
-    @PutMapping("/{hotelId}/status")
-    public ResponseEntity<?> updateHotelStatus(
-            @PathVariable Long hotelId,
-            @RequestParam String status,
+    // =========================================================================
+    // 5. DATE-SPECIFIC PRICING ENDPOINTS (WP-03)
+    // =========================================================================
+
+    @PostMapping("/rooms/{roomId}/pricing/override")
+    public ResponseEntity<?> setPriceOverride(
+            @PathVariable Long roomId,
+            @RequestBody PriceOverrideRequestDto dto,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
 
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "set price override");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        PriceCalendarEntryDto result = pricingService.setPriceOverride(roomId, dto, principal);
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/rooms/{roomId}/pricing/override-range")
+    public ResponseEntity<?> setPriceOverrideRange(
+            @PathVariable Long roomId,
+            @RequestBody PriceRangeOverrideRequestDto dto,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "set range price overrides");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        List<PriceCalendarEntryDto> results = pricingService.setRangePriceOverrides(roomId, dto, principal);
+        return ResponseEntity.ok(results);
+    }
+
+    @DeleteMapping("/rooms/{roomId}/pricing/override")
+    public ResponseEntity<?> deletePriceOverride(
+            @PathVariable Long roomId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "remove price override");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        Map<String, Object> result = pricingService.deletePriceOverride(roomId, date, principal);
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/rooms/{roomId}/pricing/calendar")
+    public ResponseEntity<?> getPriceCalendar(
+            @PathVariable Long roomId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "view price calendar");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        List<PriceCalendarEntryDto> calendar = pricingService.getPriceCalendar(roomId, startDate, endDate, principal);
+        return ResponseEntity.ok(calendar);
+    }
+
+    // =========================================================================
+    // 6. OPERATIONAL ROOM BLOCKING ENDPOINTS (BD-10 / WP-03)
+    // =========================================================================
+
+    @PostMapping("/{hotelId}/rooms/{roomId}/blocks")
+    public ResponseEntity<?> createRoomBlock(
+            @PathVariable Long hotelId,
+            @PathVariable Long roomId,
+            @RequestBody RoomBlockRequestDto dto,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "create operational room block");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        RoomBlockResponseDto block = roomBlockService.createBlock(hotelId, roomId, dto, principal);
+        return ResponseEntity.status(HttpStatus.CREATED).body(block);
+    }
+
+    @PutMapping("/blocks/{blockId}/release")
+    public ResponseEntity<?> releaseRoomBlock(
+            @PathVariable Long blockId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "release operational room block");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        RoomBlockResponseDto block = roomBlockService.releaseBlock(blockId, principal);
+        return ResponseEntity.ok(block);
+    }
+
+    @GetMapping("/{hotelId}/blocks")
+    public ResponseEntity<?> getBlocksByHotel(
+            @PathVariable Long hotelId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "view operational room blocks");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        List<RoomBlockResponseDto> blocks = roomBlockService.getBlocksByHotel(hotelId, principal);
+        return ResponseEntity.ok(blocks);
+    }
+
+    @GetMapping("/rooms/{roomId}/blocks")
+    public ResponseEntity<?> getBlocksByRoom(
+            @PathVariable Long roomId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "view room category blocks");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        List<RoomBlockResponseDto> blocks = roomBlockService.getBlocksByRoom(roomId, principal);
+        return ResponseEntity.ok(blocks);
+    }
+
+    // =========================================================================
+    // 7. DATE-WISE INVENTORY CALENDAR (WP-03)
+    // =========================================================================
+
+    @GetMapping("/rooms/{roomId}/inventory/calendar")
+    public ResponseEntity<?> getDailyInventoryCalendar(
+            @PathVariable Long roomId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "view inventory calendar");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        List<DailyInventoryDto> calendar = inventoryService.getDailyInventoryCalendar(
+                roomId, startDate, endDate, principal);
+        return ResponseEntity.ok(calendar);
+    }
+
+    @GetMapping("/{hotelId}/inventory/summary")
+    public ResponseEntity<?> getHotelInventorySummary(
+            @PathVariable Long hotelId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "view hotel inventory summary");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelInventorySummaryDto summary = inventoryService.getHotelInventorySummary(
+                hotelId, startDate, endDate, principal);
+        return ResponseEntity.ok(summary);
+    }
+
+    // =========================================================================
+    // 8. AUTHENTICATION & AUTHORIZATION HELPERS
+    // =========================================================================
+
+    private ResponseEntity<?> validateManagerOrAdminAuth(String authHeader, String action) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("message", "Authentication required to update property status"));
+                    .body(Map.of("message", "Authentication required to " + action));
         }
 
         String token = authHeader.substring(7).trim();
@@ -362,31 +946,6 @@ public class HotelController {
                     .body(Map.of("message", "Access denied: Hotel Manager or Admin role required"));
         }
 
-        Optional<HotelProperty> hotelOpt = hotelRepository.findById(hotelId);
-        if (hotelOpt.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Hotel property not found"));
-        }
-
-        HotelProperty hotel = hotelOpt.get();
-
-        if (principal.isHotelManager() && !principal.userId().equals(hotel.getManagerId())) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "Access denied: Cannot change status for a property you do not own"));
-        }
-
-        String normalizedStatus = status.trim().toUpperCase();
-        if (!"ACTIVE".equals(normalizedStatus) && !"INACTIVE".equals(normalizedStatus)) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Invalid status value. Must be ACTIVE or INACTIVE"));
-        }
-
-        hotel.setStatus(normalizedStatus);
-        hotelRepository.save(hotel);
-
-        log.info("Hotel property ID {} status updated to '{}' by user ID: {}", hotelId, normalizedStatus, principal.userId());
-        return ResponseEntity.ok(Map.of(
-                "message", "Hotel status updated successfully",
-                "hotelId", hotelId,
-                "status", normalizedStatus
-        ));
+        return null;
     }
 }

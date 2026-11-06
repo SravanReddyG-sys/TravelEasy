@@ -24,4 +24,14 @@ public class RoomType {
     private Integer totalRooms;
     private Integer availableRooms;
     private String amenities; // King Bed, AC, Mini Bar, City View
+
+    @Builder.Default
+    private String status = "ACTIVE";
+
+    @PostLoad
+    public void ensureStatus() {
+        if (this.status == null || this.status.isBlank()) {
+            this.status = "ACTIVE";
+        }
+    }
 }

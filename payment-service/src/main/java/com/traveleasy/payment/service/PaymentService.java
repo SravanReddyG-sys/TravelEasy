@@ -19,4 +19,5 @@ public interface PaymentService {
 
     PaymentStatsResponse getAdminStats();
     List<DailyRevenueTrendResponse> getAdminRevenueTrends(int days);
+    HotelRevenueReportResponse getHotelRevenueSummary(HotelRevenueReportRequest request, String callerRole, Long callerUserId);
 }

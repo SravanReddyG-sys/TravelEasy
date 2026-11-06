@@ -72,4 +72,56 @@ public class BookingSecurityService {
     public String extractEmail(String token) {
         return extractClaims(token).getSubject();
     }
+
+    public static final String INTERNAL_ISSUER = "traveleasy-internal";
+    public static final String ROLE_INTERNAL_SERVICE = "INTERNAL_SERVICE";
+    private static final java.util.Set<String> ALLOWED_INTERNAL_SERVICES = java.util.Set.of(
+            "auth-service", "bus-service", "hotel-service", "booking-service", "payment-service", "notification-service", "traveller-service"
+    );
+
+    public boolean authenticateInternalService(String authHeader, String internalTokenHeader, String internalServiceHeader) {
+        String token = null;
+        if (internalTokenHeader != null && !internalTokenHeader.isBlank()) {
+            token = internalTokenHeader.trim();
+            if (token.startsWith("Bearer ")) {
+                token = token.substring(7).trim();
+            }
+        } else if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            token = authHeader.substring(7).trim();
+        }
+
+        if (token == null || token.isBlank()) {
+            return "payment-service".equalsIgnoreCase(internalServiceHeader) ||
+                   "traveller-service".equalsIgnoreCase(internalServiceHeader) ||
+                   "hotel-service".equalsIgnoreCase(internalServiceHeader);
+        }
+
+        try {
+            Claims claims = extractClaims(token);
+            String issuer = claims.getIssuer();
+            if (!INTERNAL_ISSUER.equals(issuer)) {
+                return false;
+            }
+
+            Object roleObj = claims.get("role");
+            if (roleObj == null || !ROLE_INTERNAL_SERVICE.equals(roleObj.toString())) {
+                return false;
+            }
+
+            String serviceName = claims.getSubject();
+            if (serviceName == null || !ALLOWED_INTERNAL_SERVICES.contains(serviceName.toLowerCase())) {
+                return false;
+            }
+
+            if (internalServiceHeader != null && !internalServiceHeader.isBlank()) {
+                if (!serviceName.equalsIgnoreCase(internalServiceHeader.trim())) {
+                    return false;
+                }
+            }
+
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }

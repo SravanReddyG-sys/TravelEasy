@@ -20,6 +20,9 @@ public class BookingOutboxPublisherConcurrencyTest {
     @Autowired
     private BookingOutboxEventRepository outboxRepository;
 
+    @org.springframework.boot.test.mock.mockito.MockBean
+    private BookingOutboxPublisher publisher;
+
     @BeforeEach
     void setUp() {
         outboxRepository.deleteAll();

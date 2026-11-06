@@ -65,6 +65,15 @@ public class BookingControllerTest {
     private BookingStateTransitionService stateTransitionService;
 
     @MockBean
+    private com.traveleasy.booking.service.BookingInternalTokenService internalTokenService;
+
+    @MockBean
+    private com.traveleasy.booking.service.HotelCancellationPolicyService cancellationPolicyService;
+
+    @MockBean
+    private com.traveleasy.booking.service.HotelGuestLifecycleService guestLifecycleService;
+
+    @MockBean
     private RestTemplate restTemplate;
 
     @BeforeEach

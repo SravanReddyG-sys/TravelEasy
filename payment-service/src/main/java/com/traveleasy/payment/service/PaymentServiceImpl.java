@@ -773,6 +773,98 @@ public class PaymentServiceImpl implements PaymentService {
         return response;
     }
 
+    @Override
+    public HotelRevenueReportResponse getHotelRevenueSummary(HotelRevenueReportRequest request, String callerRole, Long callerUserId) {
+        if (request == null) {
+            request = new HotelRevenueReportRequest();
+        }
+        LocalDate startDate = request.getStartDate() != null ? request.getStartDate() : LocalDate.now().minusDays(6);
+        LocalDate endDate = request.getEndDate() != null ? request.getEndDate() : LocalDate.now();
+        if (startDate.isAfter(endDate)) {
+            LocalDate temp = startDate;
+            startDate = endDate;
+            endDate = temp;
+        }
+
+        List<String> bookingRefs = request.getBookingRefs();
+        Map<LocalDate, Double> dailyPayments = new LinkedHashMap<>();
+        Map<LocalDate, Double> dailyRefunds = new LinkedHashMap<>();
+
+        LocalDate cur = startDate;
+        while (!cur.isAfter(endDate)) {
+            dailyPayments.put(cur, 0.0);
+            dailyRefunds.put(cur, 0.0);
+            cur = cur.plusDays(1);
+        }
+
+        double totalCaptured = 0.0;
+        int paymentsCount = 0;
+        double totalRefunded = 0.0;
+        int refundsCount = 0;
+
+        if (bookingRefs != null && !bookingRefs.isEmpty()) {
+            List<PaymentTransaction> txns = paymentRepository.findByBookingRefIn(bookingRefs);
+            for (PaymentTransaction txn : txns) {
+                if (txn == null) continue;
+
+                // 1. Eligible captured payment (SUCCESS, REFUND_INITIATED, REFUNDED)
+                String status = txn.getStatus() != null ? txn.getStatus().toUpperCase() : "";
+                boolean isSuccessfulPayment = "SUCCESS".equals(status) || "REFUND_INITIATED".equals(status) || "REFUNDED".equals(status);
+                if (isSuccessfulPayment && txn.getTimestamp() != null) {
+                    LocalDate captureDate = txn.getTimestamp().toLocalDate();
+                    if (!captureDate.isBefore(startDate) && !captureDate.isAfter(endDate)) {
+                        double amount = txn.getAmount() != null ? txn.getAmount() : 0.0;
+                        totalCaptured += amount;
+                        paymentsCount++;
+                        dailyPayments.put(captureDate, dailyPayments.getOrDefault(captureDate, 0.0) + amount);
+                    }
+                }
+
+                // 2. Processed refund attributed strictly to refundedAt
+                boolean isProcessedRefund = "PROCESSED".equalsIgnoreCase(txn.getRefundStatus()) || ("REFUNDED".equalsIgnoreCase(status) && txn.getRefundedAt() != null);
+                if (isProcessedRefund && txn.getRefundedAt() != null) {
+                    LocalDate refundDate = txn.getRefundedAt().toLocalDate();
+                    if (!refundDate.isBefore(startDate) && !refundDate.isAfter(endDate)) {
+                        double rAmt = txn.getRefundAmount() != null
+                                ? txn.getRefundAmount()
+                                : ("REFUNDED".equalsIgnoreCase(txn.getStatus()) && txn.getAmount() != null ? txn.getAmount() : 0.0);
+                        totalRefunded += rAmt;
+                        refundsCount++;
+                        dailyRefunds.put(refundDate, dailyRefunds.getOrDefault(refundDate, 0.0) + rAmt);
+                    }
+                }
+            }
+        }
+
+        List<HotelRevenueReportResponse.DailyRevenueItem> dailyBreakdown = new ArrayList<>();
+        for (LocalDate date : dailyPayments.keySet()) {
+            double pAmt = dailyPayments.get(date);
+            double rAmt = dailyRefunds.get(date);
+            double net = pAmt - rAmt;
+            dailyBreakdown.add(HotelRevenueReportResponse.DailyRevenueItem.builder()
+                    .date(date)
+                    .paymentAmount(pAmt)
+                    .refundAmount(rAmt)
+                    .netRevenue(net)
+                    .build());
+        }
+
+        double netRevenue = totalCaptured - totalRefunded;
+
+        return HotelRevenueReportResponse.builder()
+                .hotelId(request.getHotelId())
+                .startDate(startDate)
+                .endDate(endDate)
+                .successfulPaymentsAmount(totalCaptured)
+                .successfulPaymentsCount(paymentsCount)
+                .processedRefundsAmount(totalRefunded)
+                .processedRefundsCount(refundsCount)
+                .netRevenue(netRevenue)
+                .dailyBreakdown(dailyBreakdown)
+                .build();
+    }
+
+
     private BigDecimal parseBigDecimal(Object obj) {
         if (obj == null) {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
