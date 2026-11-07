@@ -77,11 +77,11 @@
              (click)="toggleUserDropdown($event)">
           <!-- Avatar Circle -->
           <div class="hm-avatar">
-            <span>{{ getInitials() }}</span>
+            <span>{{ selectedHotel?.name ? getHotelInitials(selectedHotel.name) : getInitials() }}</span>
           </div>
           <!-- Role & Portal Text -->
           <div class="d-none d-sm-block text-start lh-sm">
-            <div class="fw-bold text-dark small">{{ currentUser?.fullName || 'Hotel Manager' }}</div>
+            <div class="fw-bold text-dark small">{{ selectedHotel?.name || currentUser?.fullName || 'Hotel Manager' }}</div>
             <div class="text-muted" style="font-size: 11px;">Hotel Manager Portal</div>
           </div>
           <i class="fa-solid fa-chevron-down text-muted ms-1" style="font-size: 11px;"></i>
@@ -2143,8 +2143,8 @@
                       <button class="btn btn-teal-primary text-white px-3" type="button" (click)="submitAddCustomAmenity()">Add</button>
                       <button class="btn btn-outline-secondary px-3" type="button" (click)="cancelAddCustomAmenity()">Cancel</button>
                     </div>
-                    <div *ngIf="customAmenityError" class="text-danger small mt-1">
-                      <i class="fa-solid fa-circle-exclamation me-1"></i>{{ customAmenityError }}
+                    <div *ngIf="roomCustomAmenityError" class="text-danger small mt-1">
+                      <i class="fa-solid fa-circle-exclamation me-1"></i>{{ roomCustomAmenityError }}
                     </div>
                   </div>
 
@@ -2920,54 +2920,1229 @@
 
       </div>
 
+      <!-- ==================== TAB: ROOM MANAGEMENT ==================== -->
       <div *ngIf="activeNav === 'rooms'">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-          <div>
-            <h3 class="fw-bold text-dark mb-1">Room Categories &amp; Pricing</h3>
-            <p class="text-muted small mb-0">Manage room configurations for <strong>{{ selectedHotel?.name || 'All Properties' }}</strong></p>
+
+        <!-- VIEW 1: ROOM TYPES LISTING (WP-06 REDESIGN) -->
+        <div *ngIf="roomViewMode === 'list'" class="room-management-listing-view">
+
+          <!-- 1. Page Header -->
+          <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+            <div>
+              <h3 class="fw-bold text-dark mb-1">Room Management</h3>
+              <p class="text-muted small mb-0">Manage room types and their configurations for your property.</p>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <button type="button" class="btn btn-outline-teal px-3 py-2 fw-semibold d-inline-flex align-items-center gap-2 rounded-3" (click)="viewArchivedRoomTypes()">
+                <i class="fa-solid fa-box-archive"></i>
+                <span>Archived Room Types</span>
+              </button>
+              <button type="button" class="btn btn-teal-submit px-3 py-2 fw-semibold d-inline-flex align-items-center gap-2 rounded-3" (click)="startAddRoomType()">
+                <i class="fa-solid fa-plus"></i>
+                <span>Add Room Type</span>
+              </button>
+            </div>
           </div>
-          <button class="btn btn-info text-white rounded-pill fw-bold" (click)="openAddRoomModal()">
-            <i class="fa-solid fa-plus me-1"></i> Add Room Category
-          </button>
+
+          <!-- Archive Action Success Banner -->
+          <div *ngIf="archiveRoomSuccess" class="alert alert-success d-flex align-items-center justify-content-between p-3 mb-4 rounded-3 shadow-sm border-0 bg-success-subtle text-success">
+            <div class="d-flex align-items-center gap-2">
+              <i class="fa-solid fa-circle-check fs-5"></i>
+              <span class="fw-medium">{{ archiveRoomSuccess }}</span>
+            </div>
+            <button type="button" class="btn-close" (click)="archiveRoomSuccess = ''"></button>
+          </div>
+
+          <!-- 2. Summary Metric Cards (3 Cards Row) -->
+          <div class="row g-3 mb-4">
+            <!-- Total Room Types -->
+            <div class="col-12 col-md-4">
+              <div class="summary-metric-card d-flex align-items-center p-3 p-xl-4 bg-white rounded-3 border">
+                <div class="metric-icon-box bg-cyan-light text-cyan me-3 rounded-3 d-flex align-items-center justify-content-center">
+                  <i class="fa-solid fa-bed fs-4"></i>
+                </div>
+                <div>
+                  <div class="text-muted small fw-medium mb-1">Total Room Types</div>
+                  <div class="metric-value fs-2 fw-bold text-dark lh-1">{{ totalRoomTypesCount }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Active Room Types -->
+            <div class="col-12 col-md-4">
+              <div class="summary-metric-card d-flex align-items-center p-3 p-xl-4 bg-white rounded-3 border">
+                <div class="metric-icon-box bg-green-light text-green me-3 rounded-3 d-flex align-items-center justify-content-center">
+                  <i class="fa-solid fa-bed fs-4"></i>
+                </div>
+                <div>
+                  <div class="text-muted small fw-medium mb-1">Active Room Types</div>
+                  <div class="metric-value fs-2 fw-bold text-dark lh-1">{{ activeRoomTypesCount }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Archived Room Types -->
+            <div class="col-12 col-md-4">
+              <div class="summary-metric-card d-flex align-items-center p-3 p-xl-4 bg-white rounded-3 border">
+                <div class="metric-icon-box bg-purple-light text-purple me-3 rounded-3 d-flex align-items-center justify-content-center">
+                  <i class="fa-solid fa-box-archive fs-4"></i>
+                </div>
+                <div>
+                  <div class="text-muted small fw-medium mb-1">Archived Room Types</div>
+                  <div class="metric-value fs-2 fw-bold text-dark lh-1">{{ archivedRoomTypesCount }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Search & Filter Toolbar -->
+          <div class="room-filter-toolbar bg-white rounded-3 border p-3 mb-4">
+            <div class="d-flex flex-column flex-lg-row align-items-stretch align-items-lg-center justify-content-between gap-3">
+              
+              <!-- Search Input -->
+              <div class="search-input-wrapper position-relative flex-grow-1" style="max-width: 420px;">
+                <i class="fa-solid fa-magnifying-glass position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
+                <input 
+                  type="text" 
+                  class="form-control ps-5 py-2 rounded-2" 
+                  placeholder="Search room type by name..." 
+                  [(ngModel)]="roomListingSearchQuery">
+              </div>
+
+              <!-- Controls Group: Status, Sort, View Toggle -->
+              <div class="d-flex flex-wrap align-items-center justify-content-end gap-3">
+                
+                <!-- Status Filter -->
+                <div class="d-flex align-items-center gap-2">
+                  <label class="text-muted small fw-medium text-nowrap mb-0">Status</label>
+                  <select class="form-select form-select-sm py-2 px-3 rounded-2" style="width: auto; min-width: 120px;" [(ngModel)]="roomListingStatusFilter">
+                    <option value="Active">Active</option>
+                    <option value="Archived">Archived</option>
+                    <option value="All">All</option>
+                  </select>
+                </div>
+
+                <!-- Sort By -->
+                <div class="d-flex align-items-center gap-2">
+                  <label class="text-muted small fw-medium text-nowrap mb-0">Sort by</label>
+                  <select class="form-select form-select-sm py-2 px-3 rounded-2" style="width: auto; min-width: 200px;" [(ngModel)]="roomListingSortBy">
+                    <option value="name-asc">Room Type Name (A – Z)</option>
+                    <option value="name-desc">Room Type Name (Z – A)</option>
+                    <option value="rooms-asc">Total Rooms (Low – High)</option>
+                    <option value="rooms-desc">Total Rooms (High – Low)</option>
+                    <option value="occupancy-asc">Maximum Occupancy (Low – High)</option>
+                    <option value="occupancy-desc">Maximum Occupancy (High – Low)</option>
+                  </select>
+                </div>
+
+                <!-- View Mode Toggle -->
+                <div class="btn-group view-toggle-group" role="group">
+                  <button 
+                    type="button" 
+                    class="btn btn-sm btn-view-mode" 
+                    [class.active]="roomListingViewMode === 'grid'" 
+                    (click)="roomListingViewMode = 'grid'" 
+                    title="Grid View">
+                    <i class="fa-solid fa-table-cells-large"></i>
+                  </button>
+                  <button 
+                    type="button" 
+                    class="btn btn-sm btn-view-mode" 
+                    [class.active]="roomListingViewMode === 'list'" 
+                    (click)="roomListingViewMode = 'list'" 
+                    title="List View">
+                    <i class="fa-solid fa-list-ul"></i>
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Content Area: Grid View / List View / Empty States -->
+
+          <!-- EMPTY STATE 1: No room types configured at all -->
+          <div *ngIf="totalRoomTypesCount === 0" class="bg-white rounded-3 border p-5 text-center my-3">
+            <div class="metric-icon-box bg-cyan-light text-cyan rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 64px; height: 64px;">
+              <i class="fa-solid fa-bed fs-3"></i>
+            </div>
+            <h5 class="fw-bold text-dark mb-1">No Room Types Configured</h5>
+            <p class="text-muted small mb-4" style="max-width: 480px; margin: 0 auto;">
+              You have not configured any room types for this property yet. Start configuring your room categories, occupancy limits, and total room capacity.
+            </p>
+            <button type="button" class="btn btn-teal-submit px-4 py-2 fw-semibold" (click)="startAddRoomType()">
+              <i class="fa-solid fa-plus me-1"></i> Add Room Type
+            </button>
+          </div>
+
+          <!-- EMPTY STATE 2: Filter/Search results empty -->
+          <div *ngIf="totalRoomTypesCount > 0 && filteredRoomTypes.length === 0" class="bg-white rounded-3 border p-5 text-center my-3">
+            <div class="metric-icon-box bg-light text-muted rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 64px; height: 64px;">
+              <i class="fa-solid fa-magnifying-glass fs-3 text-secondary"></i>
+            </div>
+            <h5 class="fw-bold text-dark mb-1">No Room Types Found</h5>
+            <p class="text-muted small mb-3">No room categories match your current search criteria or status filter.</p>
+            <button type="button" class="btn btn-outline-secondary btn-sm px-3 py-2 fw-semibold" (click)="resetRoomFilters()">
+              <i class="fa-solid fa-rotate-left me-1"></i> Reset Filters
+            </button>
+          </div>
+
+          <!-- VIEW MODE A: GRID VIEW (MATCHES APPROVED MOCKUP) -->
+          <div *ngIf="totalRoomTypesCount > 0 && filteredRoomTypes.length > 0 && roomListingViewMode === 'grid'" class="row g-4">
+            <div class="col-12 col-xl-6" *ngFor="let room of filteredRoomTypes">
+              <div class="room-listing-card bg-white rounded-3 border p-3 h-100 d-flex flex-column flex-sm-row gap-3">
+                
+                <!-- Room Thumbnail -->
+                <div class="room-card-media-wrapper flex-shrink-0">
+                  <img 
+                    *ngIf="room.imageUrl" 
+                    [src]="room.imageUrl" 
+                    [alt]="room.roomTypeName" 
+                    class="room-card-img rounded-3" 
+                    (error)="room.imageUrl = ''" />
+                  <div *ngIf="!room.imageUrl" class="room-card-placeholder rounded-3 d-flex flex-column align-items-center justify-content-center text-muted">
+                    <i class="fa-solid fa-bed fs-2 mb-1 text-secondary opacity-50"></i>
+                    <span class="small" style="font-size: 11px;">No Image</span>
+                  </div>
+                </div>
+
+                <!-- Room Details -->
+                <div class="d-flex flex-column justify-content-between flex-grow-1 min-w-0">
+                  
+                  <!-- Top: Name + Status Badge -->
+                  <div>
+                    <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+                      <h5 class="fw-bold text-dark mb-0 text-truncate" [title]="room.roomTypeName">{{ room.roomTypeName }}</h5>
+                      <span *ngIf="(room.status || 'ACTIVE').toUpperCase() === 'ACTIVE'" class="badge-status-active">
+                        Active
+                      </span>
+                      <span *ngIf="(room.status || '').toUpperCase() === 'ARCHIVED'" class="badge-status-archived">
+                        Archived
+                      </span>
+                    </div>
+
+                    <!-- Meta: Occupancy & Physical Rooms -->
+                    <div class="d-flex flex-wrap align-items-center gap-3 text-secondary small mb-2 pb-1">
+                      <span class="d-inline-flex align-items-center">
+                        <i class="fa-solid fa-user me-1 text-secondary opacity-75"></i>
+                        {{ room.maxOccupancy }} Guests
+                      </span>
+                      <span class="d-inline-flex align-items-center">
+                        <i class="fa-solid fa-bed me-1 text-secondary opacity-75"></i>
+                        {{ room.totalRooms }} Total Rooms
+                      </span>
+                    </div>
+
+                    <!-- Amenities Chips Preview (Max 3 + "+N more") -->
+                    <div class="amenities-preview-row d-flex flex-wrap align-items-center gap-1 mb-3">
+                      <ng-container *ngIf="getRoomAmenitiesList(room.amenities).length > 0; else noAmenitiesTpl">
+                        <span 
+                          *ngFor="let am of getAmenitiesPreview(room.amenities).displayed" 
+                          class="amenity-preview-chip d-inline-flex align-items-center">
+                          <i [class]="getRoomAmenityIcon(am)" class="me-1"></i>
+                          <span>{{ am }}</span>
+                        </span>
+                        <span 
+                          *ngIf="getAmenitiesPreview(room.amenities).remainingCount > 0" 
+                          class="amenity-preview-more">
+                          +{{ getAmenitiesPreview(room.amenities).remainingCount }} more
+                        </span>
+                      </ng-container>
+                      <ng-template #noAmenitiesTpl>
+                        <span class="text-muted small fst-italic" style="font-size: 11px;">No amenities specified</span>
+                      </ng-template>
+                    </div>
+                  </div>
+
+                  <!-- Bottom Actions Row -->
+                  <div class="room-card-actions d-flex align-items-center gap-2 pt-2 border-top">
+                    <button 
+                      type="button" 
+                      class="btn btn-sm btn-outline-teal rounded-pill px-3 py-1 fw-semibold d-inline-flex align-items-center gap-1"
+                      (click)="onViewRoomDetails(room)">
+                      <i class="fa-solid fa-eye small"></i>
+                      <span>View Details</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-semibold d-inline-flex align-items-center gap-1"
+                      (click)="onEditRoom(room)">
+                      <i class="fa-solid fa-pen-to-square small"></i>
+                      <span>Edit</span>
+                    </button>
+                    <button 
+                      *ngIf="(room.status || 'ACTIVE').toUpperCase() === 'ACTIVE'"
+                      type="button" 
+                      class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-semibold d-inline-flex align-items-center gap-1"
+                      (click)="openArchiveRoomModal(room)">
+                      <i class="fa-solid fa-box-archive small"></i>
+                      <span>Archive</span>
+                    </button>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- VIEW MODE B: LIST VIEW (TABLE - NO PRICING OR AVAILABILITY) -->
+          <div *ngIf="totalRoomTypesCount > 0 && filteredRoomTypes.length > 0 && roomListingViewMode === 'list'" class="bg-white rounded-3 border overflow-hidden">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th class="ps-4">Room Type</th>
+                    <th>Maximum Occupancy</th>
+                    <th>Total Rooms</th>
+                    <th>Amenities</th>
+                    <th>Status</th>
+                    <th class="text-end pe-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let room of filteredRoomTypes">
+                    <td class="ps-4">
+                      <div class="d-flex align-items-center gap-2">
+                        <img 
+                          *ngIf="room.imageUrl" 
+                          [src]="room.imageUrl" 
+                          alt="" 
+                          class="rounded-2" 
+                          style="width: 48px; height: 36px; object-fit: cover;" 
+                          (error)="room.imageUrl = ''" />
+                        <div *ngIf="!room.imageUrl" class="rounded-2 bg-light d-flex align-items-center justify-content-center text-muted" style="width: 48px; height: 36px;">
+                          <i class="fa-solid fa-bed small opacity-50"></i>
+                        </div>
+                        <span class="fw-bold text-dark">{{ room.roomTypeName }}</span>
+                      </div>
+                    </td>
+                    <td><i class="fa-solid fa-user me-1 text-secondary opacity-75"></i> {{ room.maxOccupancy }} Guests</td>
+                    <td><i class="fa-solid fa-bed me-1 text-secondary opacity-75"></i> {{ room.totalRooms }} Total Rooms</td>
+                    <td>
+                      <div class="d-flex flex-wrap gap-1" style="max-width: 280px;">
+                        <span *ngFor="let am of getAmenitiesPreview(room.amenities).displayed" class="amenity-preview-chip">
+                          <i [class]="getRoomAmenityIcon(am)" class="me-1"></i>{{ am }}
+                        </span>
+                        <span *ngIf="getAmenitiesPreview(room.amenities).remainingCount > 0" class="amenity-preview-more">
+                          +{{ getAmenitiesPreview(room.amenities).remainingCount }} more
+                        </span>
+                        <span *ngIf="!room.amenities" class="text-muted small fst-italic">None</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span *ngIf="(room.status || 'ACTIVE').toUpperCase() === 'ACTIVE'" class="badge-status-active">
+                        Active
+                      </span>
+                      <span *ngIf="(room.status || '').toUpperCase() === 'ARCHIVED'" class="badge-status-archived">
+                        Archived
+                      </span>
+                    </td>
+                    <td class="text-end pe-4">
+                      <div class="d-inline-flex align-items-center gap-2">
+                        <button 
+                          type="button" 
+                          class="btn btn-sm btn-outline-teal rounded-pill px-3 py-1 fw-semibold"
+                          (click)="onViewRoomDetails(room)">
+                          <i class="fa-solid fa-eye me-1"></i> Details
+                        </button>
+                        <button 
+                          type="button" 
+                          class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-semibold"
+                          (click)="onEditRoom(room)">
+                          <i class="fa-solid fa-pen-to-square me-1"></i> Edit
+                        </button>
+                        <button 
+                          *ngIf="(room.status || 'ACTIVE').toUpperCase() === 'ACTIVE'"
+                          type="button" 
+                          class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-semibold"
+                          (click)="openArchiveRoomModal(room)">
+                          <i class="fa-solid fa-box-archive me-1"></i> Archive
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SOFT ARCHIVE CONFIRMATION MODAL -->
+          <div *ngIf="showArchiveRoomModal" class="modal-backdrop-custom d-flex align-items-center justify-content-center">
+            <div class="modal-dialog-custom bg-white rounded-4 shadow-lg p-4" style="max-width: 500px; width: 92%;">
+              <div class="d-flex align-items-start gap-3 mb-3">
+                <div class="metric-icon-box bg-purple-light text-purple rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px;">
+                  <i class="fa-solid fa-box-archive fs-5"></i>
+                </div>
+                <div class="flex-grow-1">
+                  <h5 class="fw-bold text-dark mb-1">Archive Room Type</h5>
+                  <p class="text-muted small mb-0">Are you sure you want to archive <strong>"{{ roomToArchive?.roomTypeName }}"</strong>?</p>
+                </div>
+                <button type="button" class="btn-close" (click)="cancelArchiveRoom()" [disabled]="isArchivingRoom"></button>
+              </div>
+
+              <div class="alert alert-info py-2 px-3 small d-flex align-items-start gap-2 mb-3 rounded-2">
+                <i class="fa-solid fa-circle-info text-info fs-6 mt-1 flex-shrink-0"></i>
+                <div>
+                  <strong>Preserves Operational Records:</strong> Archiving will immediately prevent new reservations for this room type. All historical bookings, invoices, and performance statistics will be preserved.
+                </div>
+              </div>
+
+              <div *ngIf="archiveRoomError" class="alert alert-danger py-2 px-3 small d-flex align-items-center gap-2 mb-3 rounded-2">
+                <i class="fa-solid fa-triangle-exclamation text-danger flex-shrink-0"></i>
+                <div>{{ archiveRoomError }}</div>
+              </div>
+
+              <div class="d-flex justify-content-end align-items-center gap-2 pt-2">
+                <button type="button" class="btn btn-light rounded-3 px-3 py-2 fw-semibold" (click)="cancelArchiveRoom()" [disabled]="isArchivingRoom">
+                  Cancel
+                </button>
+                <button type="button" class="btn btn-teal-submit px-3 py-2 fw-semibold d-inline-flex align-items-center gap-2" (click)="confirmArchiveRoom()" [disabled]="isArchivingRoom">
+                  <span *ngIf="isArchivingRoom" class="spinner-border spinner-border-sm" role="status"></span>
+                  <i *ngIf="!isArchivingRoom" class="fa-solid fa-box-archive"></i>
+                  <span>{{ isArchivingRoom ? 'Archiving...' : 'Confirm Archive' }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ROOM TYPE DETAILS MODAL (WP-06) -->
+          <div *ngIf="showRoomDetailsModal" 
+               class="modal-backdrop-custom d-flex align-items-center justify-content-center"
+               (click)="closeRoomDetailsModal()"
+               role="dialog"
+               aria-modal="true"
+               aria-labelledby="roomDetailsModalTitle">
+            
+            <div class="modal-dialog-custom room-details-modal-card bg-white rounded-4 shadow-lg p-4 p-md-5" 
+                 style="max-width: 880px; width: 92%; max-height: 90vh; overflow-y: auto;"
+                 (click)="$event.stopPropagation()">
+              
+              <!-- Modal Header -->
+              <div class="d-flex align-items-start justify-content-between pb-3 mb-4 border-bottom border-light-subtle">
+                <div class="d-flex align-items-center gap-3">
+                  <div class="metric-icon-box bg-cyan-light text-cyan rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px;">
+                    <i class="fa-solid fa-eye fs-4"></i>
+                  </div>
+                  <div>
+                    <h4 class="fw-bold text-dark mb-0" id="roomDetailsModalTitle">Room Type Details</h4>
+                    <p class="text-muted small mb-0">View the complete details of this room type.</p>
+                  </div>
+                </div>
+                <button type="button" class="btn-close ms-2" (click)="closeRoomDetailsModal()" aria-label="Close" title="Close modal (Esc)"></button>
+              </div>
+
+              <!-- Loading State -->
+              <div *ngIf="isLoadingRoomDetails && !selectedRoomDetails" class="text-center py-5">
+                <div class="spinner-border text-teal mb-3" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="text-muted small mb-0">Fetching room type details...</p>
+              </div>
+
+              <!-- Main Content: Two-Column Layout -->
+              <div *ngIf="selectedRoomDetails" class="row g-4 align-items-stretch">
+                
+                <!-- Left Column: Room Image -->
+                <div class="col-12 col-md-5 d-flex flex-column">
+                  <div class="room-details-hero-image-wrapper rounded-3 overflow-hidden border bg-light shadow-2xs position-relative flex-grow-1" style="min-height: 280px; max-height: 380px;">
+                    <img 
+                      *ngIf="selectedRoomDetails.imageUrl" 
+                      [src]="selectedRoomDetails.imageUrl" 
+                      [alt]="selectedRoomDetails.roomTypeName" 
+                      class="w-100 h-100 object-fit-cover" 
+                      (error)="selectedRoomDetails.imageUrl = ''" />
+                    <div *ngIf="!selectedRoomDetails.imageUrl" class="w-100 h-100 d-flex flex-column align-items-center justify-content-center text-muted p-4">
+                      <i class="fa-solid fa-bed fs-1 text-secondary opacity-40 mb-2"></i>
+                      <span class="small fw-medium text-secondary">No image available for this room type</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right Column: Room Information -->
+                <div class="col-12 col-md-7 d-flex flex-column">
+                  
+                  <!-- Room Title & Status Header -->
+                  <div class="d-flex align-items-center justify-content-between gap-3 mb-3 pb-1">
+                    <h4 class="fw-bold text-dark mb-0 text-truncate" [title]="selectedRoomDetails.roomTypeName">
+                      {{ selectedRoomDetails.roomTypeName }}
+                    </h4>
+                    <span *ngIf="(selectedRoomDetails.status || 'ACTIVE').toUpperCase() === 'ACTIVE'" class="badge-status-active">
+                      Active
+                    </span>
+                    <span *ngIf="(selectedRoomDetails.status || '').toUpperCase() === 'ARCHIVED'" class="badge-status-archived">
+                      Archived
+                    </span>
+                  </div>
+
+                  <!-- Card 1: Basic Information -->
+                  <div class="room-detail-info-card bg-white rounded-3 border p-3 mb-3 shadow-2xs">
+                    <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom border-light-subtle">
+                      <i class="fa-solid fa-bed text-cyan"></i>
+                      <span class="fw-bold text-dark small">Basic Information</span>
+                    </div>
+                    <div class="detail-info-rows">
+                      <div class="detail-info-row d-flex align-items-center justify-content-between py-2 border-bottom border-light-subtle small">
+                        <span class="text-secondary d-inline-flex align-items-center">
+                          <i class="fa-solid fa-tag me-2 text-muted"></i>
+                          Room Type ID
+                        </span>
+                        <span class="fw-semibold text-dark">{{ formatRoomTypeId(selectedRoomDetails.id) }}</span>
+                      </div>
+                      <div class="detail-info-row d-flex align-items-center justify-content-between py-2 border-bottom border-light-subtle small">
+                        <span class="text-secondary d-inline-flex align-items-center">
+                          <i class="fa-solid fa-bed me-2 text-muted"></i>
+                          Room Type Name
+                        </span>
+                        <span class="fw-semibold text-dark text-truncate ms-2" style="max-width: 250px;">{{ selectedRoomDetails.roomTypeName }}</span>
+                      </div>
+                      <div class="detail-info-row d-flex align-items-center justify-content-between py-2 border-bottom border-light-subtle small">
+                        <span class="text-secondary d-inline-flex align-items-center">
+                          <i class="fa-solid fa-users me-2 text-muted"></i>
+                          Maximum Occupancy
+                        </span>
+                        <span class="fw-semibold text-dark">{{ selectedRoomDetails.maxOccupancy }} Guests</span>
+                      </div>
+                      <div class="detail-info-row d-flex align-items-center justify-content-between py-2 small">
+                        <span class="text-secondary d-inline-flex align-items-center">
+                          <i class="fa-solid fa-door-closed me-2 text-muted"></i>
+                          Total Rooms
+                        </span>
+                        <span class="fw-semibold text-dark">{{ selectedRoomDetails.totalRooms }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Card 2: Amenities -->
+                  <div class="room-detail-info-card bg-white rounded-3 border p-3 shadow-2xs flex-grow-1">
+                    <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom border-light-subtle">
+                      <i class="fa-solid fa-star text-cyan"></i>
+                      <span class="fw-bold text-dark small">Amenities</span>
+                    </div>
+                    <div *ngIf="getRoomAmenitiesList(selectedRoomDetails.amenities).length > 0; else emptyAmenitiesTpl" class="d-flex flex-wrap gap-2 pt-2">
+                      <span *ngFor="let am of getRoomAmenitiesList(selectedRoomDetails.amenities)" class="amenity-detail-pill">
+                        <i [class]="getRoomAmenityIcon(am)" class="me-1.5"></i>
+                        <span>{{ am }}</span>
+                      </span>
+                    </div>
+                    <ng-template #emptyAmenitiesTpl>
+                      <p class="text-muted small fst-italic mb-0 py-2">No amenities configured for this room type.</p>
+                    </ng-template>
+                  </div>
+
+                </div>
+
+              </div>
+
+              <!-- Footer Actions -->
+              <div class="d-flex justify-content-end align-items-center gap-2 pt-3 mt-4 border-top border-light-subtle">
+                <button type="button" class="btn btn-outline-secondary rounded-3 px-4 py-2 fw-semibold" (click)="closeRoomDetailsModal()">
+                  Close
+                </button>
+                <button type="button" class="btn btn-teal-submit rounded-3 px-4 py-2 fw-semibold d-inline-flex align-items-center gap-2" (click)="onEditRoomFromModal(selectedRoomDetails)">
+                  <i class="fa-solid fa-pen-to-square"></i>
+                  <span>Edit Room Type</span>
+                </button>
+              </div>
+
+            </div>
+          </div>
+
         </div>
 
-        <div class="content-card">
-          <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th>Category</th>
-                  <th>Occupancy</th>
-                  <th>Base Price / Night</th>
-                  <th>Total Rooms</th>
-                  <th>Available</th>
-                  <th>Amenities</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let r of roomTypes">
-                  <td class="fw-bold text-dark">{{ r.roomTypeName }}</td>
-                  <td><i class="fa-solid fa-user me-1 text-secondary"></i> Up to {{ r.maxOccupancy }} Guests</td>
-                  <td class="fw-bold text-info">{{ formatCurrency(r.pricePerNight) }}</td>
-                  <td>{{ r.totalRooms }}</td>
-                  <td>
-                    <span class="badge" [class.bg-success]="r.availableRooms > 2" [class.bg-warning]="r.availableRooms <= 2">
-                      {{ r.availableRooms }} left
-                    </span>
-                  </td>
-                  <td class="small text-muted">{{ r.amenities }}</td>
-                  <td><span class="badge bg-success-subtle text-success border border-success-subtle">Active</span></td>
-                </tr>
-                <tr *ngIf="roomTypes.length === 0">
-                  <td colspan="7" class="text-center py-4 text-muted small">
-                    No room categories configured yet. Click "+ Add Room Category" to add one.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        <!-- VIEW 2: ADD ROOM TYPE INTEGRATED SINGLE-PAGE VIEW (WP-06) -->
+        <div *ngIf="roomViewMode === 'add'" class="add-room-type-container">
+          
+          <!-- Back Navigation and Heading -->
+          <div class="d-flex align-items-center mb-4">
+            <button type="button" class="btn btn-back-circle me-3" (click)="cancelAddRoomType()" title="Back to Room Management">
+              <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div>
+              <h4 class="fw-bold text-dark mb-0">Add Room Type</h4>
+              <p class="text-muted small mb-0">Configure a new room type for your property.</p>
+            </div>
           </div>
+
+          <!-- Notification Banners -->
+          <div *ngIf="roomTypeFormSuccess" class="alert alert-success d-flex align-items-center mb-4 rounded-3 shadow-sm border-0">
+            <i class="fa-solid fa-circle-check fs-5 me-2 text-success"></i>
+            <div>{{ roomTypeFormSuccess }}</div>
+          </div>
+          <div *ngIf="roomTypeFormError" class="alert alert-danger d-flex align-items-center mb-4 rounded-3 shadow-sm border-0">
+            <i class="fa-solid fa-circle-exclamation fs-5 me-2 text-danger"></i>
+            <div>{{ roomTypeFormError }}</div>
+          </div>
+
+          <!-- 2-Column Form Layout -->
+          <div class="row g-4">
+
+            <!-- LEFT COLUMN: Basic Information, Room Count, Amenities -->
+            <div class="col-lg-8">
+
+              <!-- Card 1: Basic Information -->
+              <div class="card add-room-card mb-4 border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+                  <div class="d-flex align-items-center gap-3 mb-4">
+                    <div class="card-icon-badge">
+                      <i class="fa-solid fa-bed"></i>
+                    </div>
+                    <div>
+                      <h5 class="fw-bold text-dark mb-0">Basic Information</h5>
+                      <span class="text-muted small">Provide the key details of the room type.</span>
+                    </div>
+                  </div>
+
+                  <div class="row g-3">
+                    <!-- Room Type Name -->
+                    <div class="col-md-6">
+                      <label class="form-label fw-semibold text-dark small mb-1">
+                        Room Type Name <span class="text-danger">*</span>
+                      </label>
+                      <input type="text"
+                             class="form-control form-control-custom"
+                             [(ngModel)]="newRoomType.roomTypeName"
+                             (blur)="roomTypeTouched.roomTypeName = true"
+                             placeholder="e.g., Deluxe Double Room"
+                             maxlength="100"
+                             [class.is-invalid]="roomTypeTouched.roomTypeName && !isRoomTypeNameValid()">
+                      <div *ngIf="roomTypeTouched.roomTypeName && (!newRoomType.roomTypeName || !newRoomType.roomTypeName.trim())" class="text-danger small mt-1">
+                        Room type name is required.
+                      </div>
+                      <div *ngIf="roomTypeTouched.roomTypeName && newRoomType.roomTypeName.trim() && isDuplicateRoomTypeName(newRoomType.roomTypeName)" class="text-danger small mt-1">
+                        Room category '{{ newRoomType.roomTypeName.trim() }}' already exists for this property.
+                      </div>
+                    </div>
+
+                    <!-- Maximum Occupancy -->
+                    <div class="col-md-6">
+                      <label class="form-label fw-semibold text-dark small mb-1">
+                        Maximum Occupancy <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group input-group-custom" [class.is-invalid]="roomTypeTouched.maxOccupancy && !isMaxOccupancyValid()">
+                        <span class="input-group-text bg-white border-end-0 text-muted">
+                          <i class="fa-solid fa-user-group"></i>
+                        </span>
+                        <input type="number"
+                               class="form-control border-start-0 border-end-0 text-center fw-semibold"
+                               [(ngModel)]="newRoomType.maxOccupancy"
+                               (input)="onOccupancyChange()"
+                               (blur)="roomTypeTouched.maxOccupancy = true"
+                               min="1" max="20"
+                               placeholder="2">
+                        <div class="stepper-buttons-vertical d-flex flex-column border-start">
+                          <button type="button" class="btn stepper-btn stepper-btn-up" (click)="incrementOccupancy()" title="Increase occupancy">
+                            <i class="fa-solid fa-chevron-up"></i>
+                          </button>
+                          <button type="button" class="btn stepper-btn stepper-btn-down" (click)="decrementOccupancy()" title="Decrease occupancy">
+                            <i class="fa-solid fa-chevron-down"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div *ngIf="roomTypeTouched.maxOccupancy && !isMaxOccupancyValid()" class="text-danger small mt-1">
+                        Maximum occupancy must be between 1 and 20 guests.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 2: Room Count -->
+              <div class="card add-room-card mb-4 border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+                  <div class="d-flex align-items-center gap-3 mb-4">
+                    <div class="card-icon-badge">
+                      <i class="fa-solid fa-layer-group"></i>
+                    </div>
+                    <div>
+                      <h5 class="fw-bold text-dark mb-0">Room Count</h5>
+                      <span class="text-muted small">Configure the total number of physical rooms for this room type.</span>
+                    </div>
+                  </div>
+
+                  <div class="row g-3 align-items-center">
+                    <!-- Total Rooms -->
+                    <div class="col-md-6">
+                      <label class="form-label fw-semibold text-dark small mb-1">
+                        Total Rooms <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group input-group-custom" [class.is-invalid]="roomTypeTouched.totalRooms && !isTotalRoomsValid()">
+                        <span class="input-group-text bg-white border-end-0 text-muted">
+                          <i class="fa-solid fa-bed"></i>
+                        </span>
+                        <input type="number"
+                               class="form-control border-start-0 border-end-0 fw-semibold"
+                               [(ngModel)]="newRoomType.totalRooms"
+                               (blur)="roomTypeTouched.totalRooms = true"
+                               min="1"
+                               placeholder="e.g., 10">
+                        <div class="stepper-buttons-vertical d-flex flex-column border-start">
+                          <button type="button" class="btn stepper-btn stepper-btn-up" (click)="incrementTotalRooms()" title="Increase total rooms">
+                            <i class="fa-solid fa-chevron-up"></i>
+                          </button>
+                          <button type="button" class="btn stepper-btn stepper-btn-down" (click)="decrementTotalRooms()" title="Decrease total rooms">
+                            <i class="fa-solid fa-chevron-down"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div *ngIf="roomTypeTouched.totalRooms && !isTotalRoomsValid()" class="text-danger small mt-1">
+                        Total rooms count must be at least 1.
+                      </div>
+                    </div>
+
+                    <!-- Info Box Callout -->
+                    <div class="col-md-6">
+                      <div class="capacity-info-box d-flex align-items-center p-3 rounded-3 mt-md-4">
+                        <i class="fa-solid fa-circle-info capacity-info-icon me-2 flex-shrink-0"></i>
+                        <span class="capacity-info-text small">
+                          This is the total room count for this room type (not the daily availability).
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 3: Amenities -->
+              <div class="card add-room-card mb-4 border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+                  <div class="d-flex align-items-center gap-3 mb-4">
+                    <div class="card-icon-badge">
+                      <i class="fa-solid fa-star"></i>
+                    </div>
+                    <div>
+                      <h5 class="fw-bold text-dark mb-0">Amenities</h5>
+                      <span class="text-muted small">Select from common amenities or add your own custom amenities.</span>
+                    </div>
+                  </div>
+
+                  <!-- Predefined Select Amenities -->
+                  <div class="mb-4">
+                    <label class="form-label fw-semibold text-dark small mb-2">Select Amenities</label>
+                    <div class="d-flex flex-wrap gap-2">
+                      <button type="button"
+                              *ngFor="let a of predefinedRoomAmenities"
+                              class="btn amenity-chip-btn"
+                              [class.active]="isAmenitySelected(a.name)"
+                              (click)="toggleAmenity(a.name)">
+                        <i [class]="a.icon + ' me-2'"></i> {{ a.name }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Add Custom Amenity -->
+                  <div class="mb-4">
+                    <label class="form-label fw-semibold text-dark small mb-2">Add Custom Amenity</label>
+                    <div class="input-group custom-amenity-group">
+                      <input type="text"
+                             class="form-control form-control-custom"
+                             [(ngModel)]="customAmenityInput"
+                             (keydown.enter)="addCustomAmenity(); $event.preventDefault()"
+                             placeholder="+ Enter an amenity (e.g., Bathtub)">
+                      <button type="button" class="btn btn-add-custom fw-semibold px-4" (click)="addCustomAmenity()">
+                        <i class="fa-solid fa-plus me-1"></i> Add
+                      </button>
+                    </div>
+                    <div *ngIf="roomCustomAmenityError" class="text-danger small mt-1">
+                      {{ roomCustomAmenityError }}
+                    </div>
+                  </div>
+
+                  <!-- Selected Amenities -->
+                  <div *ngIf="newRoomType.amenities.length > 0">
+                    <label class="form-label fw-semibold text-dark small mb-2">
+                      Selected Amenities ({{ newRoomType.amenities.length }})
+                    </label>
+                    <div class="d-flex flex-wrap gap-2">
+                      <span *ngFor="let a of newRoomType.amenities" class="badge selected-amenity-pill d-inline-flex align-items-center">
+                        <i [class]="getRoomAmenityIcon(a) + ' me-2 text-teal'"></i>
+                        <span class="amenity-text">{{ a }}</span>
+                        <button type="button" class="btn-remove-chip ms-2" (click)="removeAmenity(a)" title="Remove amenity">
+                          &times;
+                        </button>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN: Room Image -->
+            <div class="col-lg-4">
+              <div class="card add-room-card mb-4 border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body p-4 d-flex flex-column">
+                  <div class="d-flex align-items-center gap-3 mb-4">
+                    <div class="card-icon-badge">
+                      <i class="fa-regular fa-image"></i>
+                    </div>
+                    <div>
+                      <h5 class="fw-bold text-dark mb-0">Room Image</h5>
+                      <span class="text-muted small">Add an image representing this room type.</span>
+                    </div>
+                  </div>
+
+                  <!-- Large Dashed Upload Zone -->
+                  <div class="room-upload-zone text-center p-4 flex-grow-1 d-flex flex-column justify-content-center align-items-center cursor-pointer"
+                       [class.drag-over]="isRoomImageDragOver"
+                       (dragover)="onRoomImageDragOver($event)"
+                       (dragleave)="onRoomImageDragLeave($event)"
+                       (drop)="onRoomImageDrop($event)"
+                       (click)="roomFileInput.click()">
+
+                    <input type="file"
+                           #roomFileInput
+                           class="d-none"
+                           accept=".jpg,.jpeg,.png,.webp"
+                           (change)="onRoomImageSelected($event)">
+
+                    <!-- Initial State (No preview, Not uploading) -->
+                    <div *ngIf="!roomImagePreview && !isUploadingRoomImage" class="upload-zone-prompt py-4">
+                      <div class="upload-icon-graphic mb-3 position-relative d-inline-block">
+                        <div class="graphic-frame">
+                          <i class="fa-regular fa-image"></i>
+                        </div>
+                        <div class="graphic-badge">
+                          <i class="fa-solid fa-plus"></i>
+                        </div>
+                      </div>
+                      <h6 class="fw-bold text-dark mb-1">Upload Room Image</h6>
+                      <p class="text-muted small mb-0">Drag and drop an image here, or click to browse</p>
+                    </div>
+
+                    <!-- Uploading State -->
+                    <div *ngIf="isUploadingRoomImage" class="py-5 text-center">
+                      <div class="spinner-border text-teal mb-2" role="status"></div>
+                      <div class="text-muted small">Uploading image...</div>
+                    </div>
+
+                    <!-- Preview State -->
+                    <div *ngIf="roomImagePreview && !isUploadingRoomImage" class="preview-wrapper w-100">
+                      <img [src]="roomImagePreview" alt="Room preview" class="room-preview-image img-fluid rounded-3 mb-3">
+                      <div class="d-flex justify-content-center gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" (click)="$event.stopPropagation(); roomFileInput.click()">
+                          <i class="fa-solid fa-arrows-rotate me-1"></i> Replace
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3" (click)="$event.stopPropagation(); removeRoomImage()">
+                          <i class="fa-solid fa-trash me-1"></i> Remove
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  <!-- Format and Size info footer -->
+                  <div class="d-flex justify-content-between align-items-center mt-3 pt-2 text-muted" style="font-size: 11px;">
+                    <span>Supported formats: JPG, JPEG, PNG, WebP</span>
+                    <span>Max size: &le; 1 MB</span>
+                  </div>
+
+                  <!-- Image Error -->
+                  <div *ngIf="roomImageError" class="alert alert-danger p-2 small mt-2 mb-0">
+                    <i class="fa-solid fa-circle-exclamation me-1"></i> {{ roomImageError }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Bottom Action Buttons Footer -->
+          <div class="d-flex justify-content-end align-items-center gap-3 pt-4 mt-2 border-top">
+            <button type="button" class="btn btn-outline-secondary rounded-3 px-4 fw-semibold py-2" (click)="cancelAddRoomType()">
+              Cancel
+            </button>
+            <button type="button"
+                    class="btn btn-teal-submit text-white rounded-3 px-4 fw-semibold py-2 d-inline-flex align-items-center"
+                    [disabled]="isSubmittingRoomType"
+                    (click)="submitCreateRoomType()">
+              <span *ngIf="isSubmittingRoomType" class="spinner-border spinner-border-sm me-2"></span>
+              <i *ngIf="!isSubmittingRoomType" class="fa-solid fa-door-open me-2"></i>
+              Create Room Type
+            </button>
+          </div>
+
         </div>
+
+        <!-- VIEW 3: EDIT ROOM TYPE INTEGRATED FULL-PAGE VIEW (WP-06) -->
+        <div *ngIf="roomViewMode === 'edit' && editingRoomType" class="edit-room-type-container">
+          
+          <!-- Back Navigation and Heading -->
+          <div class="d-flex align-items-center mb-3">
+            <button type="button" class="btn btn-back-circle me-3" (click)="cancelEditRoomType()" title="Back to Room Management">
+              <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div>
+              <h4 class="fw-bold text-dark mb-0">Edit Room Type</h4>
+              <p class="text-muted small mb-0">Update the details and configuration of this room type.</p>
+            </div>
+          </div>
+
+          <!-- Context Summary Bar -->
+          <div class="edit-room-context-bar card border-0 shadow-sm rounded-4 px-4 py-3 mb-4 bg-white">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+              <!-- Left: Room Name -->
+              <div class="d-flex align-items-center gap-3">
+                <div class="card-icon-badge" style="width: 38px; height: 38px; min-width: 38px;">
+                  <i class="fa-solid fa-bed text-teal"></i>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                  <span class="text-secondary small">Editing:</span>
+                  <span class="fw-bold text-dark">{{ originalRoomType?.roomTypeName || editingRoomType.roomTypeName }}</span>
+                </div>
+              </div>
+
+              <div class="d-none d-lg-block vr opacity-25" style="height: 24px;"></div>
+
+              <!-- Room Type ID -->
+              <div class="d-flex align-items-center gap-2 small">
+                <i class="fa-solid fa-tag text-muted"></i>
+                <span class="text-secondary">Room Type ID:</span>
+                <span class="fw-semibold text-dark">{{ formatRoomTypeId(editingRoomType.id) }}</span>
+              </div>
+
+              <!-- Status Badge -->
+              <div class="d-flex align-items-center">
+                <span *ngIf="(editingRoomType.status || 'ACTIVE').toUpperCase() === 'ACTIVE'" class="badge-status-active">
+                  Active
+                </span>
+                <span *ngIf="(editingRoomType.status || '').toUpperCase() === 'ARCHIVED'" class="badge-status-archived">
+                  Archived
+                </span>
+              </div>
+
+              <div class="d-none d-lg-block vr opacity-25" style="height: 24px;"></div>
+
+              <!-- Total Rooms -->
+              <div class="d-flex align-items-center gap-2 small">
+                <i class="fa-solid fa-door-closed text-muted"></i>
+                <span class="text-secondary">Total Rooms:</span>
+                <span class="fw-bold text-dark">{{ editingRoomType.totalRooms }}</span>
+              </div>
+
+              <div class="d-none d-lg-block vr opacity-25" style="height: 24px;"></div>
+
+              <!-- Max Occupancy -->
+              <div class="d-flex align-items-center gap-2 small">
+                <i class="fa-solid fa-user-group text-muted"></i>
+                <span class="text-secondary">Max Occupancy:</span>
+                <span class="fw-bold text-dark">{{ editingRoomType.maxOccupancy }} Guests</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Notification Banners -->
+          <div *ngIf="editRoomTypeFormSuccess" class="alert alert-success d-flex align-items-center mb-4 rounded-3 shadow-sm border-0">
+            <i class="fa-solid fa-circle-check fs-5 me-2 text-success"></i>
+            <div>{{ editRoomTypeFormSuccess }}</div>
+          </div>
+          <div *ngIf="editRoomTypeFormError" class="alert alert-danger d-flex align-items-center mb-4 rounded-3 shadow-sm border-0">
+            <i class="fa-solid fa-circle-exclamation fs-5 me-2 text-danger"></i>
+            <div>{{ editRoomTypeFormError }}</div>
+          </div>
+
+          <!-- 2-Column Form Layout -->
+          <div class="row g-4">
+
+            <!-- LEFT COLUMN: Basic Information, Room Capacity, Amenities -->
+            <div class="col-lg-8">
+
+              <!-- Card 1: Basic Information -->
+              <div class="card add-room-card mb-4 border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+                  <div class="d-flex align-items-center gap-3 mb-4">
+                    <div class="card-icon-badge">
+                      <i class="fa-solid fa-bed"></i>
+                    </div>
+                    <div>
+                      <h5 class="fw-bold text-dark mb-0">Basic Information</h5>
+                      <span class="text-muted small">Provide the key details of the room type.</span>
+                    </div>
+                  </div>
+
+                  <div class="row g-3">
+                    <!-- Room Type Name -->
+                    <div class="col-md-6">
+                      <label class="form-label fw-semibold text-dark small mb-1">
+                        Room Type Name <span class="text-danger">*</span>
+                      </label>
+                      <input type="text"
+                             class="form-control form-control-custom"
+                             [(ngModel)]="editingRoomType.roomTypeName"
+                             (blur)="editRoomTypeTouched.roomTypeName = true"
+                             placeholder="e.g., Deluxe Double Room"
+                             maxlength="100"
+                             [class.is-invalid]="editRoomTypeTouched.roomTypeName && !isEditRoomTypeNameValid()">
+                      <div *ngIf="editRoomTypeTouched.roomTypeName && (!editingRoomType.roomTypeName || !editingRoomType.roomTypeName.trim())" class="text-danger small mt-1">
+                        Room type name is required.
+                      </div>
+                      <div *ngIf="editRoomTypeTouched.roomTypeName && editingRoomType.roomTypeName.trim() && isEditDuplicateRoomTypeName(editingRoomType.roomTypeName)" class="text-danger small mt-1">
+                        Room category '{{ editingRoomType.roomTypeName.trim() }}' already exists for this property.
+                      </div>
+                    </div>
+
+                    <!-- Maximum Occupancy -->
+                    <div class="col-md-6">
+                      <label class="form-label fw-semibold text-dark small mb-1">
+                        Maximum Occupancy <span class="text-danger">*</span>
+                      </label>
+                      <div class="edit-occupancy-stepper-box d-flex align-items-center justify-content-between px-3 py-2 border rounded-3 bg-white"
+                           [class.border-danger]="editRoomTypeTouched.maxOccupancy && !isEditOccupancyValid()">
+                        <div class="d-flex align-items-center gap-2 text-muted">
+                          <i class="fa-solid fa-user-group"></i>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                          <button type="button" class="btn btn-stepper-inline" (click)="decrementEditOccupancy()" [disabled]="editingRoomType.maxOccupancy <= 1" title="Decrease occupancy">
+                            <i class="fa-solid fa-minus"></i>
+                          </button>
+                          <span class="fw-bold fs-6 text-dark px-2">{{ editingRoomType.maxOccupancy }}</span>
+                          <button type="button" class="btn btn-stepper-inline" (click)="incrementEditOccupancy()" [disabled]="editingRoomType.maxOccupancy >= 20" title="Increase occupancy">
+                            <i class="fa-solid fa-plus"></i>
+                          </button>
+                          <span class="text-muted small fw-medium ms-1">Guests</span>
+                        </div>
+                      </div>
+                      <div *ngIf="editRoomTypeTouched.maxOccupancy && !isEditOccupancyValid()" class="text-danger small mt-1">
+                        Maximum occupancy must be between 1 and 20 guests.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 2: Room Capacity -->
+              <div class="card add-room-card mb-4 border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+                  <div class="d-flex align-items-center gap-3 mb-4">
+                    <div class="card-icon-badge">
+                      <i class="fa-solid fa-layer-group"></i>
+                    </div>
+                    <div>
+                      <h5 class="fw-bold text-dark mb-0">Room Capacity</h5>
+                      <span class="text-muted small">Configure the total number of physical rooms for this room type.</span>
+                    </div>
+                  </div>
+
+                  <div class="row g-3 align-items-center">
+                    <!-- Total Rooms -->
+                    <div class="col-md-5">
+                      <label class="form-label fw-semibold text-dark small mb-1">
+                        Total Rooms <span class="text-danger">*</span>
+                      </label>
+                      <div class="edit-capacity-stepper-box d-flex align-items-center justify-content-between px-3 py-2 border rounded-3 bg-white"
+                           [class.border-danger]="editRoomTypeTouched.totalRooms && !isEditTotalRoomsValid()">
+                        <div class="d-flex align-items-center gap-2 text-muted">
+                          <i class="fa-solid fa-bed"></i>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                          <button type="button" class="btn btn-stepper-inline" (click)="decrementEditTotalRooms()" [disabled]="editingRoomType.totalRooms <= 1" title="Decrease room count">
+                            <i class="fa-solid fa-minus"></i>
+                          </button>
+                          <span class="fw-bold fs-6 text-dark px-2">{{ editingRoomType.totalRooms }}</span>
+                          <button type="button" class="btn btn-stepper-inline" (click)="incrementEditTotalRooms()" title="Increase room count">
+                            <i class="fa-solid fa-plus"></i>
+                          </button>
+                        </div>
+                      </div>
+                      <div *ngIf="editRoomTypeTouched.totalRooms && !isEditTotalRoomsValid()" class="text-danger small mt-1">
+                        Total rooms count must be at least 1.
+                      </div>
+                    </div>
+
+                    <!-- Room Capacity Info Callout -->
+                    <div class="col-md-7">
+                      <div class="room-capacity-info-callout p-3 rounded-3 d-flex align-items-center gap-3 mt-md-4">
+                        <i class="fa-solid fa-circle-info text-teal fs-5 flex-shrink-0"></i>
+                        <span class="small text-teal-dark">
+                          This is the total room count for this room type (not the daily availability).
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Card 3: Amenities -->
+              <div class="card add-room-card mb-4 border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+                  <div class="d-flex align-items-center gap-3 mb-2">
+                    <div class="card-icon-badge">
+                      <i class="fa-solid fa-star"></i>
+                    </div>
+                    <div>
+                      <h5 class="fw-bold text-dark mb-0">Amenities</h5>
+                      <span class="text-muted small">Select amenities for this room type.</span>
+                    </div>
+                  </div>
+
+                  <!-- Predefined Amenities Chips -->
+                  <div class="mb-4 pt-2">
+                    <label class="form-label fw-semibold text-dark small mb-2">Select Amenities</label>
+                    <div class="d-flex flex-wrap gap-2">
+                      <button *ngFor="let am of predefinedRoomAmenities"
+                              type="button"
+                              class="btn amenity-chip-btn d-inline-flex align-items-center"
+                              [class.active]="isEditAmenitySelected(am.name)"
+                              (click)="toggleEditAmenity(am.name)">
+                        <i [class]="am.icon" class="me-2"></i>
+                        <span>{{ am.name }}</span>
+                        <span *ngIf="isEditAmenitySelected(am.name)" class="check-badge ms-2">
+                          <i class="fa-solid fa-check"></i>
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Add Custom Amenity -->
+                  <div class="mb-4">
+                    <label class="form-label fw-semibold text-dark small mb-2">Add Custom Amenity</label>
+                    <div class="input-group input-group-custom">
+                      <span class="input-group-text bg-white border-end-0 text-muted">
+                        <i class="fa-solid fa-plus"></i>
+                      </span>
+                      <input type="text"
+                             class="form-control border-start-0 border-end-0"
+                             [(ngModel)]="editCustomAmenityInput"
+                             (keydown.enter)="$event.preventDefault(); addEditCustomAmenity()"
+                             placeholder="Enter an amenity (e.g., Bathtub)"
+                             maxlength="50">
+                      <button type="button" class="btn btn-teal-submit px-3" (click)="addEditCustomAmenity()">
+                        <i class="fa-solid fa-plus me-1"></i> Add
+                      </button>
+                    </div>
+                    <div *ngIf="editRoomCustomAmenityError" class="text-danger small mt-1">
+                      {{ editRoomCustomAmenityError }}
+                    </div>
+                  </div>
+
+                  <!-- Selected Amenities Summary -->
+                  <div *ngIf="editingRoomType.amenitiesList && editingRoomType.amenitiesList.length > 0">
+                    <label class="form-label fw-semibold text-dark small mb-2">
+                      Selected Amenities ({{ editingRoomType.amenitiesList.length }})
+                    </label>
+                    <div class="d-flex flex-wrap gap-2">
+                      <span *ngFor="let a of editingRoomType.amenitiesList" class="badge selected-amenity-pill d-inline-flex align-items-center">
+                        <i [class]="getRoomAmenityIcon(a) + ' me-2 text-teal'"></i>
+                        <span class="amenity-text">{{ a }}</span>
+                        <button type="button" class="btn-remove-chip ms-2" (click)="removeEditAmenity(a)" title="Remove amenity">
+                          &times;
+                        </button>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN: Room Image -->
+            <div class="col-lg-4">
+              <div class="card add-room-card mb-4 border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body p-4 d-flex flex-column">
+                  <div class="d-flex align-items-center gap-3 mb-4">
+                    <div class="card-icon-badge">
+                      <i class="fa-regular fa-image"></i>
+                    </div>
+                    <div>
+                      <h5 class="fw-bold text-dark mb-0">Room Image</h5>
+                      <span class="text-muted small">Update the room image for this room type.</span>
+                    </div>
+                  </div>
+
+                  <!-- Hidden File Input for Replace / Upload -->
+                  <input type="file"
+                         #editRoomFileInput
+                         class="d-none"
+                         accept=".jpg,.jpeg,.png,.webp"
+                         (change)="onEditRoomImageSelected($event)">
+
+                  <!-- Image Container -->
+                  <div class="room-upload-zone text-center p-3 flex-grow-1 d-flex flex-column justify-content-center align-items-center"
+                       [class.drag-over]="isEditRoomImageDragOver"
+                       [class.cursor-pointer]="!editRoomImagePreview"
+                       (dragover)="onEditRoomImageDragOver($event)"
+                       (dragleave)="onEditRoomImageDragLeave($event)"
+                       (drop)="onEditRoomImageDrop($event)"
+                       (click)="!editRoomImagePreview ? editRoomFileInput.click() : null">
+
+                    <!-- Loading / Uploading State -->
+                    <div *ngIf="isUploadingEditRoomImage" class="py-5 text-center">
+                      <div class="spinner-border text-teal mb-2" role="status"></div>
+                      <div class="text-muted small">Uploading image...</div>
+                    </div>
+
+                    <!-- Active Image Preview State -->
+                    <div *ngIf="editRoomImagePreview && !isUploadingEditRoomImage" class="preview-wrapper w-100">
+                      <div class="edit-room-image-frame rounded-3 overflow-hidden border mb-3 shadow-2xs" style="max-height: 240px; background: #f8fafc;">
+                        <img [src]="editRoomImagePreview"
+                             alt="Room image"
+                             class="w-100 h-100 object-fit-cover"
+                             style="max-height: 240px;"
+                             (error)="editRoomImagePreview = null; isEditRoomImageRemoved = true;">
+                      </div>
+                      <div class="d-flex justify-content-center gap-3">
+                        <button type="button"
+                                class="btn btn-outline-teal-replace rounded-pill px-4 py-2 fw-semibold d-inline-flex align-items-center gap-2"
+                                (click)="$event.stopPropagation(); editRoomFileInput.click()">
+                          <i class="fa-solid fa-arrows-rotate"></i> Replace
+                        </button>
+                        <button type="button"
+                                class="btn btn-outline-danger-remove rounded-pill px-4 py-2 fw-semibold d-inline-flex align-items-center gap-2"
+                                (click)="$event.stopPropagation(); removeEditRoomImage()">
+                          <i class="fa-solid fa-trash-can"></i> Remove
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- No Image / Dropzone State (e.g. after remove) -->
+                    <div *ngIf="!editRoomImagePreview && !isUploadingEditRoomImage" class="upload-zone-prompt py-4">
+                      <div class="upload-icon-graphic mb-3 position-relative d-inline-block">
+                        <div class="graphic-frame">
+                          <i class="fa-regular fa-image"></i>
+                        </div>
+                        <div class="graphic-badge">
+                          <i class="fa-solid fa-plus"></i>
+                        </div>
+                      </div>
+                      <h6 class="fw-bold text-dark mb-1">Upload Room Image</h6>
+                      <p class="text-muted small mb-0">Drag and drop an image here, or click to browse</p>
+                    </div>
+
+                  </div>
+
+                  <!-- Format and Size info footer -->
+                  <div class="d-flex justify-content-between align-items-center mt-3 pt-2 text-muted" style="font-size: 11px;">
+                    <span>Supported formats: JPG, JPEG, PNG, WebP</span>
+                    <span>Max size: &le; 1 MB</span>
+                  </div>
+
+                  <!-- Image Error -->
+                  <div *ngIf="editRoomImageError" class="alert alert-danger p-2 small mt-2 mb-0">
+                    <i class="fa-solid fa-circle-exclamation me-1"></i> {{ editRoomImageError }}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Bottom Action Buttons Footer -->
+          <div class="d-flex justify-content-end align-items-center gap-3 pt-4 mt-2 border-top">
+            <button type="button" class="btn btn-outline-secondary rounded-3 px-4 fw-semibold py-2" (click)="cancelEditRoomType()">
+              Cancel
+            </button>
+            <button type="button"
+                    class="btn btn-teal-submit text-white rounded-3 px-4 fw-semibold py-2 d-inline-flex align-items-center"
+                    [disabled]="isSubmittingEditRoomType"
+                    (click)="submitEditRoomType()">
+              <span *ngIf="isSubmittingEditRoomType" class="spinner-border spinner-border-sm me-2"></span>
+              <i *ngIf="!isSubmittingEditRoomType" class="fa-solid fa-check me-2"></i>
+              Save Changes
+            </button>
+          </div>
+
+        </div>
+
       </div>
 
       <!-- ==================== TAB: INVENTORY & PRICING ==================== -->

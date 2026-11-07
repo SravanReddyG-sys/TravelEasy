@@ -20,6 +20,7 @@ public class RoomTypeDto {
     private Integer availableRooms;
     private Integer allocatedRooms;
     private String amenities;
+    private String imageUrl;
     private String status;
 
     public static RoomTypeDto fromEntity(RoomType room) {
@@ -37,6 +38,7 @@ public class RoomTypeDto {
                 .availableRooms(room.getAvailableRooms())
                 .allocatedRooms(allocated)
                 .amenities(room.getAmenities())
+                .imageUrl(room.getImageUrl())
                 .status(room.getStatus() != null ? room.getStatus() : "ACTIVE")
                 .build();
     }

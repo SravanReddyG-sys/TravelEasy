@@ -6,7 +6,7 @@ import { Subscription, forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { AuthService } from '../../services/auth.service';
 import { HotelService } from '../../services/hotel.service';
-import { Hotel, HotelRoom, HotelImage, HotelStep1Request, HotelStep1Response, HotelStep2Request, HotelStep2Response, HotelStep3Request, HotelStep3Response, HotelStep4Request, HotelStep4Response, HotelStep5SubmitRequest, HotelStep5Response } from '../../models/hotel.model';
+import { Hotel, HotelRoom, HotelImage, HotelStep1Request, HotelStep1Response, HotelStep2Request, HotelStep2Response, HotelStep3Request, HotelStep3Response, HotelStep4Request, HotelStep4Response, HotelStep5SubmitRequest, HotelStep5Response, RoomTypeCreateRequest, RoomTypeDto } from '../../models/hotel.model';
 import { BookingService, HotelRevenueReportResponse } from '../../services/booking.service';
 import { NotificationService } from '../../services/notification.service';
 import { User } from '../../models/user.model';
@@ -427,6 +427,93 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   roomTotalCount: number = 20;
   roomAmenities: string = 'King Bed, Air Conditioning, City View, Free High-Speed Wi-Fi, Breakfast Included';
 
+  // =========================================================================
+  // WP-06: ADD ROOM TYPE INTEGRATED PAGE STATE
+  // =========================================================================
+  roomViewMode: 'list' | 'add' | 'edit' = 'list';
+
+  // =========================================================================
+  // WP-06: EDIT ROOM TYPE FULL-PAGE FORM STATE
+  // =========================================================================
+  editingRoomType: any = null;
+  originalRoomType: any = null;
+  isSubmittingEditRoomType: boolean = false;
+  editRoomTypeFormError: string = '';
+  editRoomTypeFormSuccess: string = '';
+  editRoomTypeTouched: { roomTypeName?: boolean; maxOccupancy?: boolean; totalRooms?: boolean } = {};
+
+  editCustomAmenityInput: string = '';
+  editRoomCustomAmenityError: string = '';
+
+  editRoomImageFile: File | null = null;
+  editRoomImagePreview: string | null = null;
+  editRoomImageError: string = '';
+  isUploadingEditRoomImage: boolean = false;
+  isEditRoomImageDragOver: boolean = false;
+  isEditRoomImageRemoved: boolean = false;
+
+  newRoomType: {
+    roomTypeName: string;
+    maxOccupancy: number;
+    totalRooms: number | null;
+    amenities: string[];
+    imageUrl: string;
+  } = {
+    roomTypeName: '',
+    maxOccupancy: 2,
+    totalRooms: null,
+    amenities: [],
+    imageUrl: ''
+  };
+
+  predefinedRoomAmenities: { name: string; icon: string }[] = [
+    { name: 'Wi-Fi', icon: 'fa-solid fa-wifi' },
+    { name: 'AC', icon: 'fa-solid fa-snowflake' },
+    { name: 'TV', icon: 'fa-solid fa-tv' },
+    { name: 'Private Bathroom', icon: 'fa-solid fa-bath' },
+    { name: 'Room Service', icon: 'fa-solid fa-bell-concierge' },
+    { name: 'Heater', icon: 'fa-solid fa-temperature-arrow-up' },
+    { name: 'Mini Fridge', icon: 'fa-solid fa-cube' },
+    { name: 'Balcony', icon: 'fa-solid fa-door-open' },
+    { name: 'Work Desk', icon: 'fa-solid fa-laptop' },
+    { name: 'Wardrobe', icon: 'fa-solid fa-warehouse' }
+  ];
+
+  customAmenityInput: string = '';
+  roomCustomAmenityError: string = '';
+
+  roomImageFile: File | null = null;
+  roomImagePreview: string | null = null;
+  isUploadingRoomImage: boolean = false;
+  isRoomImageDragOver: boolean = false;
+  roomImageError: string = '';
+
+  isSubmittingRoomType: boolean = false;
+  roomTypeFormError: string = '';
+  roomTypeFormSuccess: string = '';
+  roomTypeTouched: { roomTypeName?: boolean; maxOccupancy?: boolean; totalRooms?: boolean } = {};
+
+  // =========================================================================
+  // WP-06: ROOM TYPES LISTING STATE (SEARCH, FILTER, SORT, VIEW MODE)
+  // =========================================================================
+  roomListingSearchQuery: string = '';
+  roomListingStatusFilter: 'Active' | 'Archived' | 'All' = 'Active';
+  roomListingSortBy: string = 'name-asc';
+  roomListingViewMode: 'grid' | 'list' = 'grid';
+
+  // Archive Room Modal State
+  showArchiveRoomModal: boolean = false;
+  roomToArchive: any = null;
+  isArchivingRoom: boolean = false;
+  archiveRoomError: string = '';
+  archiveRoomSuccess: string = '';
+
+  // Room Details Modal State (WP-06)
+  showRoomDetailsModal: boolean = false;
+  selectedRoomDetails: any = null;
+  isLoadingRoomDetails: boolean = false;
+  roomDetailsError: string = '';
+
   // Form Models - Block Rooms
   blockRoomId: number | null = null;
   blockStartDate: string = '';
@@ -466,7 +553,15 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    document.body.style.overflow = '';
     this.subscriptions.unsubscribe();
+  }
+
+  @HostListener('document:keydown.escape', ['$event'])
+  onEscapeKeyDown(event: KeyboardEvent): void {
+    if (this.showRoomDetailsModal) {
+      this.closeRoomDetailsModal();
+    }
   }
 
   @HostListener('document:click', ['$event'])
@@ -1288,6 +1383,810 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
       error: (err) => {
         console.error('Add hotel error:', err);
         alert(err.error?.message || 'Failed to register hotel property.');
+      }
+    });
+  }
+
+  getHotelInitials(name?: string): string {
+    if (!name) return this.getInitials();
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return parts[0].substring(0, 2).toUpperCase();
+  }
+
+  startAddRoomType(hotel?: any): void {
+    this.selectedHotelForRoom = hotel || this.selectedHotel;
+    if (!this.selectedHotelForRoom && this.myHotels.length > 0) {
+      this.selectedHotelForRoom = this.myHotels[0];
+    }
+    if (!this.selectedHotelForRoom) {
+      alert('Please register or select a hotel property before adding room types.');
+      return;
+    }
+    this.newRoomType = {
+      roomTypeName: '',
+      maxOccupancy: 2,
+      totalRooms: null,
+      amenities: [],
+      imageUrl: ''
+    };
+    this.customAmenityInput = '';
+    this.roomCustomAmenityError = '';
+    this.roomImageFile = null;
+    this.roomImagePreview = null;
+    this.roomImageError = '';
+    this.isUploadingRoomImage = false;
+    this.isRoomImageDragOver = false;
+    this.isSubmittingRoomType = false;
+    this.roomTypeFormError = '';
+    this.roomTypeFormSuccess = '';
+    this.roomTypeTouched = {};
+    this.roomViewMode = 'add';
+  }
+
+  cancelAddRoomType(): void {
+    this.roomViewMode = 'list';
+    this.roomTypeFormError = '';
+    this.roomTypeFormSuccess = '';
+  }
+
+  incrementOccupancy(): void {
+    if (this.newRoomType.maxOccupancy < 20) {
+      this.newRoomType.maxOccupancy++;
+    }
+    this.roomTypeTouched.maxOccupancy = true;
+  }
+
+  decrementOccupancy(): void {
+    if (this.newRoomType.maxOccupancy > 1) {
+      this.newRoomType.maxOccupancy--;
+    }
+    this.roomTypeTouched.maxOccupancy = true;
+  }
+
+  onOccupancyChange(): void {
+    this.roomTypeTouched.maxOccupancy = true;
+    if (this.newRoomType.maxOccupancy != null) {
+      if (this.newRoomType.maxOccupancy < 1) this.newRoomType.maxOccupancy = 1;
+      if (this.newRoomType.maxOccupancy > 20) this.newRoomType.maxOccupancy = 20;
+    }
+  }
+
+  incrementTotalRooms(): void {
+    if (this.newRoomType.totalRooms == null || this.newRoomType.totalRooms < 1) {
+      this.newRoomType.totalRooms = 1;
+    } else {
+      this.newRoomType.totalRooms++;
+    }
+    this.roomTypeTouched.totalRooms = true;
+  }
+
+  decrementTotalRooms(): void {
+    if (this.newRoomType.totalRooms != null && this.newRoomType.totalRooms > 1) {
+      this.newRoomType.totalRooms--;
+    }
+    this.roomTypeTouched.totalRooms = true;
+  }
+
+  isAmenitySelected(name: string): boolean {
+    return this.newRoomType.amenities.some(a => a.toLowerCase() === name.toLowerCase());
+  }
+
+  toggleAmenity(name: string): void {
+    const idx = this.newRoomType.amenities.findIndex(a => a.toLowerCase() === name.toLowerCase());
+    if (idx >= 0) {
+      this.newRoomType.amenities.splice(idx, 1);
+    } else {
+      this.newRoomType.amenities.push(name);
+    }
+  }
+
+  getRoomAmenityIcon(name: string): string {
+    const match = this.predefinedRoomAmenities.find(a => a.name.toLowerCase() === name.toLowerCase());
+    if (match) return match.icon;
+    const lower = name.toLowerCase();
+    if (lower.includes('bath') || lower.includes('tub')) return 'fa-solid fa-bath';
+    if (lower.includes('bed')) return 'fa-solid fa-bed';
+    if (lower.includes('coffee') || lower.includes('tea')) return 'fa-solid fa-mug-hot';
+    if (lower.includes('safe') || lower.includes('locker')) return 'fa-solid fa-vault';
+    if (lower.includes('view')) return 'fa-solid fa-mountain-sun';
+    if (lower.includes('iron')) return 'fa-solid fa-shirt';
+    return 'fa-solid fa-check';
+  }
+
+  addCustomAmenity(): void {
+    this.roomCustomAmenityError = '';
+    const trimmed = (this.customAmenityInput || '').trim();
+    if (!trimmed) return;
+
+    if (this.newRoomType.amenities.some(a => a.toLowerCase() === trimmed.toLowerCase())) {
+      this.roomCustomAmenityError = `"${trimmed}" is already in the selected amenities.`;
+      return;
+    }
+
+    const predefined = this.predefinedRoomAmenities.find(a => a.name.toLowerCase() === trimmed.toLowerCase());
+    if (predefined) {
+      this.newRoomType.amenities.push(predefined.name);
+    } else {
+      this.newRoomType.amenities.push(trimmed);
+    }
+    this.customAmenityInput = '';
+  }
+
+  removeAmenity(name: string): void {
+    this.newRoomType.amenities = this.newRoomType.amenities.filter(a => a.toLowerCase() !== name.toLowerCase());
+  }
+
+  onRoomImageDragOver(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isRoomImageDragOver = true;
+  }
+
+  onRoomImageDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isRoomImageDragOver = false;
+  }
+
+  onRoomImageDrop(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isRoomImageDragOver = false;
+    if (event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+      this.processRoomImageFile(event.dataTransfer.files[0]);
+    }
+  }
+
+  onRoomImageSelected(event: any): void {
+    if (event.target && event.target.files && event.target.files.length > 0) {
+      this.processRoomImageFile(event.target.files[0]);
+    }
+  }
+
+  private processRoomImageFile(file: File): void {
+    this.roomImageError = '';
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type.toLowerCase()) && !file.name.match(/\.(jpg|jpeg|png|webp)$/i)) {
+      this.roomImageError = 'Supported formats are JPG, JPEG, PNG, and WebP.';
+      return;
+    }
+
+    const maxSize = 1 * 1024 * 1024; // 1 MB
+    if (file.size > maxSize) {
+      const sizeKb = Math.round(file.size / 1024);
+      this.roomImageError = `Image size (${sizeKb} KB) exceeds the 1 MB limit. Please select a smaller image.`;
+      return;
+    }
+
+    this.roomImageFile = file;
+    this.isUploadingRoomImage = true;
+
+    this.hotelService.uploadHotelImage(file, 'room').subscribe({
+      next: (res) => {
+        this.isUploadingRoomImage = false;
+        this.newRoomType.imageUrl = res.imageUrl;
+        this.roomImagePreview = res.imageUrl;
+      },
+      error: (err) => {
+        this.isUploadingRoomImage = false;
+        console.error('Room image upload failed:', err);
+        this.roomImageError = err.error?.message || 'Failed to upload image. Please try again.';
+      }
+    });
+  }
+
+  removeRoomImage(): void {
+    this.roomImageFile = null;
+    this.roomImagePreview = null;
+    this.newRoomType.imageUrl = '';
+    this.roomImageError = '';
+  }
+
+  isDuplicateRoomTypeName(name: string): boolean {
+    if (!name || !name.trim()) return false;
+    const trimmed = name.trim().toLowerCase();
+    return this.roomTypes.some(rt => rt.status !== 'ARCHIVED' && (rt.roomTypeName || '').trim().toLowerCase() === trimmed);
+  }
+
+  isRoomTypeNameValid(): boolean {
+    const name = (this.newRoomType.roomTypeName || '').trim();
+    if (!name || name.length > 100) return false;
+    if (this.isDuplicateRoomTypeName(name)) return false;
+    return true;
+  }
+
+  isMaxOccupancyValid(): boolean {
+    const occ = this.newRoomType.maxOccupancy;
+    return occ != null && occ >= 1 && occ <= 20;
+  }
+
+  isTotalRoomsValid(): boolean {
+    const rooms = this.newRoomType.totalRooms;
+    return rooms != null && Number(rooms) >= 1;
+  }
+
+  isRoomTypeFormValid(): boolean {
+    return this.isRoomTypeNameValid() && this.isMaxOccupancyValid() && this.isTotalRoomsValid();
+  }
+
+  submitCreateRoomType(): void {
+    this.roomTypeTouched = {
+      roomTypeName: true,
+      maxOccupancy: true,
+      totalRooms: true
+    };
+    this.roomTypeFormError = '';
+    this.roomTypeFormSuccess = '';
+
+    if (!this.selectedHotelForRoom && this.selectedHotel) {
+      this.selectedHotelForRoom = this.selectedHotel;
+    }
+    if (!this.selectedHotelForRoom) {
+      this.roomTypeFormError = 'No hotel property selected. Please select a property.';
+      return;
+    }
+
+    if (!this.isRoomTypeFormValid()) {
+      if (!this.newRoomType.roomTypeName.trim()) {
+        this.roomTypeFormError = 'Room Type Name is required.';
+      } else if (this.isDuplicateRoomTypeName(this.newRoomType.roomTypeName)) {
+        this.roomTypeFormError = `Room category '${this.newRoomType.roomTypeName.trim()}' already exists for this property.`;
+      } else if (!this.isMaxOccupancyValid()) {
+        this.roomTypeFormError = 'Maximum occupancy must be between 1 and 20 guests.';
+      } else if (!this.isTotalRoomsValid()) {
+        this.roomTypeFormError = 'Total rooms count must be at least 1.';
+      }
+      return;
+    }
+
+    this.isSubmittingRoomType = true;
+
+    const payload: RoomTypeCreateRequest = {
+      roomTypeName: this.newRoomType.roomTypeName.trim(),
+      maxOccupancy: this.newRoomType.maxOccupancy,
+      totalRooms: Number(this.newRoomType.totalRooms),
+      amenities: this.newRoomType.amenities.length > 0 ? this.newRoomType.amenities.join(', ') : undefined,
+      imageUrl: this.newRoomType.imageUrl ? this.newRoomType.imageUrl : undefined
+    };
+
+    this.hotelService.addRoomType(this.selectedHotelForRoom.id, payload).subscribe({
+      next: (created) => {
+        this.isSubmittingRoomType = false;
+        this.roomTypeFormSuccess = `Room type "${created.roomTypeName || payload.roomTypeName}" created successfully!`;
+        this.loadDashboardData();
+        setTimeout(() => {
+          this.roomViewMode = 'list';
+          this.roomTypeFormSuccess = '';
+        }, 1200);
+      },
+      error: (err) => {
+        this.isSubmittingRoomType = false;
+        console.error('Failed to create room type:', err);
+        this.roomTypeFormError = err.error?.message || 'Failed to create room type. Please try again.';
+      }
+    });
+  }
+
+  // =========================================================================
+  // WP-06: ROOM TYPES LISTING GETTERS & METHODS
+  // =========================================================================
+
+  get totalRoomTypesCount(): number {
+    return this.roomTypes ? this.roomTypes.length : 0;
+  }
+
+  get activeRoomTypesCount(): number {
+    if (!this.roomTypes) return 0;
+    return this.roomTypes.filter(r => (r.status || 'ACTIVE').toUpperCase() === 'ACTIVE').length;
+  }
+
+  get archivedRoomTypesCount(): number {
+    if (!this.roomTypes) return 0;
+    return this.roomTypes.filter(r => (r.status || '').toUpperCase() === 'ARCHIVED').length;
+  }
+
+  get filteredRoomTypes(): any[] {
+    if (!this.roomTypes) return [];
+
+    let result = [...this.roomTypes];
+
+    // 1. Status Filter
+    if (this.roomListingStatusFilter === 'Active') {
+      result = result.filter(r => (r.status || 'ACTIVE').toUpperCase() === 'ACTIVE');
+    } else if (this.roomListingStatusFilter === 'Archived') {
+      result = result.filter(r => (r.status || '').toUpperCase() === 'ARCHIVED');
+    }
+    // 'All' includes all statuses
+
+    // 2. Search Query (by room type name, case-insensitive)
+    const query = (this.roomListingSearchQuery || '').trim().toLowerCase();
+    if (query) {
+      result = result.filter(r => (r.roomTypeName || '').toLowerCase().includes(query));
+    }
+
+    // 3. Sorting
+    switch (this.roomListingSortBy) {
+      case 'name-asc':
+        result.sort((a, b) => (a.roomTypeName || '').localeCompare(b.roomTypeName || ''));
+        break;
+      case 'name-desc':
+        result.sort((a, b) => (b.roomTypeName || '').localeCompare(a.roomTypeName || ''));
+        break;
+      case 'rooms-asc':
+        result.sort((a, b) => (Number(a.totalRooms) || 0) - (Number(b.totalRooms) || 0));
+        break;
+      case 'rooms-desc':
+        result.sort((a, b) => (Number(b.totalRooms) || 0) - (Number(a.totalRooms) || 0));
+        break;
+      case 'occupancy-asc':
+        result.sort((a, b) => (Number(a.maxOccupancy) || 0) - (Number(b.maxOccupancy) || 0));
+        break;
+      case 'occupancy-desc':
+        result.sort((a, b) => (Number(b.maxOccupancy) || 0) - (Number(a.maxOccupancy) || 0));
+        break;
+      default:
+        result.sort((a, b) => (a.roomTypeName || '').localeCompare(b.roomTypeName || ''));
+    }
+
+    return result;
+  }
+
+  getRoomAmenitiesList(amenitiesStr?: string): string[] {
+    if (!amenitiesStr || !amenitiesStr.trim()) return [];
+    return amenitiesStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
+  }
+
+  getAmenitiesPreview(amenitiesStr?: string): { displayed: string[]; remainingCount: number } {
+    const list = this.getRoomAmenitiesList(amenitiesStr);
+    if (list.length <= 3) {
+      return { displayed: list, remainingCount: 0 };
+    }
+    return {
+      displayed: list.slice(0, 3),
+      remainingCount: list.length - 3
+    };
+  }
+
+  viewArchivedRoomTypes(): void {
+    this.roomViewMode = 'list';
+    this.roomListingStatusFilter = 'Archived';
+  }
+
+  resetRoomFilters(): void {
+    this.roomListingSearchQuery = '';
+    this.roomListingStatusFilter = 'Active';
+    this.roomListingSortBy = 'name-asc';
+  }
+
+  onViewRoomDetails(room: any): void {
+    if (!room) return;
+    this.selectedRoomDetails = { ...room };
+    this.showRoomDetailsModal = true;
+    this.roomDetailsError = '';
+    document.body.style.overflow = 'hidden';
+
+    // Fetch fresh details from backend to ensure data integrity
+    if (room.id) {
+      this.isLoadingRoomDetails = true;
+      this.hotelService.getRoomType(room.id).subscribe({
+        next: (freshRoom) => {
+          this.selectedRoomDetails = freshRoom;
+          this.isLoadingRoomDetails = false;
+        },
+        error: (err) => {
+          this.isLoadingRoomDetails = false;
+          console.warn('Could not fetch fresh room details from backend, retaining local data', err);
+        }
+      });
+    }
+  }
+
+  closeRoomDetailsModal(): void {
+    this.showRoomDetailsModal = false;
+    this.selectedRoomDetails = null;
+    this.isLoadingRoomDetails = false;
+    this.roomDetailsError = '';
+    document.body.style.overflow = '';
+  }
+
+  formatRoomTypeId(id: any): string {
+    if (id === null || id === undefined || id === '') return 'RT-0000';
+    const num = Number(id);
+    if (!isNaN(num)) {
+      return `RT-${num.toString().padStart(4, '0')}`;
+    }
+    const str = String(id).trim();
+    if (str.toUpperCase().startsWith('RT-')) return str;
+    return `RT-${str}`;
+  }
+
+  onEditRoomFromModal(room: any): void {
+    const targetRoom = room || this.selectedRoomDetails;
+    this.closeRoomDetailsModal();
+    if (targetRoom) {
+      this.startEditRoomType(targetRoom);
+    }
+  }
+
+  onEditRoom(room: any): void {
+    if (room) {
+      this.startEditRoomType(room);
+    }
+  }
+
+  // =========================================================================
+  // WP-06: EDIT ROOM TYPE METHODS
+  // =========================================================================
+  startEditRoomType(room: any): void {
+    if (!room) return;
+    this.closeRoomDetailsModal();
+    this.editingRoomType = {
+      id: room.id,
+      hotelId: room.hotelId || (this.selectedHotel ? this.selectedHotel.id : null),
+      roomTypeName: room.roomTypeName || '',
+      maxOccupancy: Number(room.maxOccupancy) || 2,
+      totalRooms: Number(room.totalRooms) || 1,
+      amenitiesList: this.getRoomAmenitiesList(room.amenities),
+      imageUrl: room.imageUrl || '',
+      status: room.status || 'ACTIVE',
+      pricePerNight: room.pricePerNight
+    };
+    this.originalRoomType = JSON.parse(JSON.stringify(this.editingRoomType));
+    this.editRoomImagePreview = room.imageUrl || null;
+    this.editRoomImageFile = null;
+    this.isEditRoomImageRemoved = false;
+    this.editRoomImageError = '';
+    this.editRoomTypeFormError = '';
+    this.editRoomTypeFormSuccess = '';
+    this.editRoomTypeTouched = {};
+    this.editCustomAmenityInput = '';
+    this.editRoomCustomAmenityError = '';
+    this.roomViewMode = 'edit';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  cancelEditRoomType(): void {
+    if (this.hasEditFormChanges()) {
+      if (!confirm('You have unsaved changes. Discard changes and return to room listing?')) {
+        return;
+      }
+    }
+    this.roomViewMode = 'list';
+    this.editingRoomType = null;
+    this.originalRoomType = null;
+    this.editRoomTypeFormError = '';
+    this.editRoomTypeFormSuccess = '';
+    this.editRoomImagePreview = null;
+    this.editRoomImageFile = null;
+    this.isEditRoomImageRemoved = false;
+  }
+
+  hasEditFormChanges(): boolean {
+    if (!this.editingRoomType || !this.originalRoomType) return false;
+    if ((this.editingRoomType.roomTypeName || '').trim() !== (this.originalRoomType.roomTypeName || '').trim()) return true;
+    if (Number(this.editingRoomType.maxOccupancy) !== Number(this.originalRoomType.maxOccupancy)) return true;
+    if (Number(this.editingRoomType.totalRooms) !== Number(this.originalRoomType.totalRooms)) return true;
+    if (this.isEditRoomImageRemoved) return true;
+    if (this.editRoomImagePreview !== this.originalRoomType.imageUrl) return true;
+    const currentList = [...(this.editingRoomType.amenitiesList || [])].sort().join(',');
+    const originalList = [...(this.originalRoomType.amenitiesList || [])].sort().join(',');
+    if (currentList !== originalList) return true;
+    return false;
+  }
+
+  incrementEditOccupancy(): void {
+    if (!this.editingRoomType) return;
+    const cur = Number(this.editingRoomType.maxOccupancy) || 1;
+    if (cur < 20) {
+      this.editingRoomType.maxOccupancy = cur + 1;
+    }
+  }
+
+  decrementEditOccupancy(): void {
+    if (!this.editingRoomType) return;
+    const cur = Number(this.editingRoomType.maxOccupancy) || 2;
+    if (cur > 1) {
+      this.editingRoomType.maxOccupancy = cur - 1;
+    }
+  }
+
+  onEditOccupancyChange(): void {
+    if (!this.editingRoomType) return;
+    let val = Number(this.editingRoomType.maxOccupancy);
+    if (isNaN(val) || val < 1) val = 1;
+    if (val > 20) val = 20;
+    this.editingRoomType.maxOccupancy = val;
+  }
+
+  incrementEditTotalRooms(): void {
+    if (!this.editingRoomType) return;
+    const cur = Number(this.editingRoomType.totalRooms) || 1;
+    this.editingRoomType.totalRooms = cur + 1;
+  }
+
+  decrementEditTotalRooms(): void {
+    if (!this.editingRoomType) return;
+    const cur = Number(this.editingRoomType.totalRooms) || 1;
+    if (cur > 1) {
+      this.editingRoomType.totalRooms = cur - 1;
+    }
+  }
+
+  onEditTotalRoomsChange(): void {
+    if (!this.editingRoomType) return;
+    let val = Number(this.editingRoomType.totalRooms);
+    if (isNaN(val) || val < 1) val = 1;
+    this.editingRoomType.totalRooms = val;
+  }
+
+  isEditAmenitySelected(amenityName: string): boolean {
+    if (!this.editingRoomType || !this.editingRoomType.amenitiesList) return false;
+    return this.editingRoomType.amenitiesList.includes(amenityName);
+  }
+
+  toggleEditAmenity(amenityName: string): void {
+    if (!this.editingRoomType) return;
+    if (!this.editingRoomType.amenitiesList) {
+      this.editingRoomType.amenitiesList = [];
+    }
+    const idx = this.editingRoomType.amenitiesList.indexOf(amenityName);
+    if (idx > -1) {
+      this.editingRoomType.amenitiesList.splice(idx, 1);
+    } else {
+      this.editingRoomType.amenitiesList.push(amenityName);
+    }
+  }
+
+  addEditCustomAmenity(): void {
+    this.editRoomCustomAmenityError = '';
+    if (!this.editingRoomType) return;
+    if (!this.editingRoomType.amenitiesList) {
+      this.editingRoomType.amenitiesList = [];
+    }
+    const trimmed = (this.editCustomAmenityInput || '').trim();
+    if (!trimmed) {
+      this.editRoomCustomAmenityError = 'Please enter an amenity name.';
+      return;
+    }
+    if (trimmed.length > 50) {
+      this.editRoomCustomAmenityError = 'Amenity name cannot exceed 50 characters.';
+      return;
+    }
+    if (trimmed.includes(',')) {
+      this.editRoomCustomAmenityError = 'Amenity name cannot contain commas.';
+      return;
+    }
+    const exists = this.editingRoomType.amenitiesList.some(
+      (a: string) => a.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (exists) {
+      this.editRoomCustomAmenityError = 'This amenity has already been added.';
+      return;
+    }
+    this.editingRoomType.amenitiesList.push(trimmed);
+    this.editCustomAmenityInput = '';
+  }
+
+  removeEditAmenity(amenityName: string): void {
+    if (!this.editingRoomType || !this.editingRoomType.amenitiesList) return;
+    this.editingRoomType.amenitiesList = this.editingRoomType.amenitiesList.filter(
+      (a: string) => a !== amenityName
+    );
+  }
+
+  onEditRoomImageSelected(event: any): void {
+    const file = event.target?.files?.[0];
+    if (file) {
+      this.processEditRoomImageFile(file);
+    }
+  }
+
+  onEditRoomImageDrop(event: DragEvent): void {
+    event.preventDefault();
+    this.isEditRoomImageDragOver = false;
+    const file = event.dataTransfer?.files?.[0];
+    if (file) {
+      this.processEditRoomImageFile(file);
+    }
+  }
+
+  onEditRoomImageDragOver(event: DragEvent): void {
+    event.preventDefault();
+    this.isEditRoomImageDragOver = true;
+  }
+
+  onEditRoomImageDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    this.isEditRoomImageDragOver = false;
+  }
+
+  processEditRoomImageFile(file: File): void {
+    this.editRoomImageError = '';
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type.toLowerCase())) {
+      this.editRoomImageError = 'Supported formats: JPG, JPEG, PNG, WebP.';
+      return;
+    }
+    if (file.size > 1048576) {
+      this.editRoomImageError = 'Image file size must be ≤ 1 MB.';
+      return;
+    }
+
+    this.editRoomImageFile = file;
+    this.isUploadingEditRoomImage = true;
+
+    const propertyId = this.selectedHotel?.id || this.editingRoomType?.hotelId;
+    if (propertyId) {
+      this.hotelService.uploadHotelImage(file, propertyId).subscribe({
+        next: (res) => {
+          this.isUploadingEditRoomImage = false;
+          this.editRoomImagePreview = res.imageUrl;
+          this.editingRoomType.imageUrl = res.imageUrl;
+          this.isEditRoomImageRemoved = false;
+        },
+        error: (err) => {
+          this.isUploadingEditRoomImage = false;
+          console.warn('Upload image API failed, falling back to local FileReader preview:', err);
+          const reader = new FileReader();
+          reader.onload = (e: any) => {
+            this.editRoomImagePreview = e.target.result;
+            this.isEditRoomImageRemoved = false;
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e: any) => {
+        this.isUploadingEditRoomImage = false;
+        this.editRoomImagePreview = e.target.result;
+        this.isEditRoomImageRemoved = false;
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  removeEditRoomImage(): void {
+    this.editRoomImagePreview = null;
+    this.editRoomImageFile = null;
+    if (this.editingRoomType) {
+      this.editingRoomType.imageUrl = '';
+    }
+    this.isEditRoomImageRemoved = true;
+    this.editRoomImageError = '';
+  }
+
+  isEditDuplicateRoomTypeName(name?: string): boolean {
+    const trimmed = (name || this.editingRoomType?.roomTypeName || '').trim().toLowerCase();
+    if (!trimmed || !this.editingRoomType) return false;
+    const rooms = this.roomTypes || [];
+    return rooms.some((r: any) => {
+      if (r.id === this.editingRoomType.id) return false;
+      const status = (r.status || 'ACTIVE').toUpperCase();
+      return status === 'ACTIVE' && (r.roomTypeName || '').trim().toLowerCase() === trimmed;
+    });
+  }
+
+  isEditRoomTypeNameValid(): boolean {
+    if (!this.editingRoomType || !this.editingRoomType.roomTypeName) return false;
+    const trimmed = this.editingRoomType.roomTypeName.trim();
+    if (!trimmed || trimmed.length > 100) return false;
+    if (this.isEditDuplicateRoomTypeName(trimmed)) return false;
+    return true;
+  }
+
+  isEditOccupancyValid(): boolean {
+    if (!this.editingRoomType) return false;
+    const num = Number(this.editingRoomType.maxOccupancy);
+    return !isNaN(num) && num >= 1 && num <= 20;
+  }
+
+  isEditTotalRoomsValid(): boolean {
+    if (!this.editingRoomType) return false;
+    const num = Number(this.editingRoomType.totalRooms);
+    return !isNaN(num) && num >= 1;
+  }
+
+  isEditFormValid(): boolean {
+    return this.isEditRoomTypeNameValid() && this.isEditOccupancyValid() && this.isEditTotalRoomsValid();
+  }
+
+  submitEditRoomType(): void {
+    if (!this.editingRoomType) return;
+    this.editRoomTypeTouched = { roomTypeName: true, maxOccupancy: true, totalRooms: true };
+    if (!this.isEditFormValid()) {
+      this.editRoomTypeFormError = 'Please correct the highlighted errors before saving.';
+      return;
+    }
+
+    this.isSubmittingEditRoomType = true;
+    this.editRoomTypeFormError = '';
+    this.editRoomTypeFormSuccess = '';
+
+    const payload: any = {
+      roomTypeName: this.editingRoomType.roomTypeName.trim(),
+      maxOccupancy: Number(this.editingRoomType.maxOccupancy),
+      totalRooms: Number(this.editingRoomType.totalRooms),
+      amenities: (this.editingRoomType.amenitiesList || []).join(', ')
+    };
+
+    if (this.isEditRoomImageRemoved) {
+      payload.imageUrl = '';
+    } else if (this.editingRoomType.imageUrl) {
+      payload.imageUrl = this.editingRoomType.imageUrl;
+    }
+
+    this.hotelService.updateRoomType(this.editingRoomType.id, payload).subscribe({
+      next: (updatedRoom: any) => {
+        this.isSubmittingEditRoomType = false;
+        const name = updatedRoom.roomTypeName || this.editingRoomType.roomTypeName;
+        this.editRoomTypeFormSuccess = `Room type "${name}" has been updated successfully.`;
+
+        // Update local arrays for instant feedback
+        if (this.roomTypes) {
+          const idx = this.roomTypes.findIndex((r: any) => r.id === updatedRoom.id);
+          if (idx > -1) {
+            this.roomTypes[idx] = { ...this.roomTypes[idx], ...updatedRoom };
+          }
+        }
+
+        this.loadDashboardData();
+
+        setTimeout(() => {
+          this.roomViewMode = 'list';
+          this.editRoomTypeFormSuccess = '';
+          this.editingRoomType = null;
+          this.originalRoomType = null;
+        }, 1200);
+      },
+      error: (err: any) => {
+        this.isSubmittingEditRoomType = false;
+        console.error('Failed to update room type:', err);
+        this.editRoomTypeFormError = err.error?.message || 'Failed to update room type. Please review your input and try again.';
+      }
+    });
+  }
+
+  openArchiveRoomModal(room: any): void {
+    this.roomToArchive = room;
+    this.archiveRoomError = '';
+    this.showArchiveRoomModal = true;
+  }
+
+  cancelArchiveRoom(): void {
+    this.showArchiveRoomModal = false;
+    this.roomToArchive = null;
+    this.archiveRoomError = '';
+  }
+
+  confirmArchiveRoom(): void {
+    if (!this.roomToArchive || !this.roomToArchive.id) return;
+
+    this.isArchivingRoom = true;
+    this.archiveRoomError = '';
+
+    this.hotelService.archiveRoomType(this.roomToArchive.id).subscribe({
+      next: () => {
+        this.isArchivingRoom = false;
+        const archivedName = this.roomToArchive.roomTypeName;
+        this.showArchiveRoomModal = false;
+        this.roomToArchive = null;
+        this.archiveRoomSuccess = `Room type "${archivedName}" has been successfully archived.`;
+
+        // Reload property room types to get updated status and counts
+        this.loadDashboardData();
+
+        setTimeout(() => {
+          this.archiveRoomSuccess = '';
+        }, 4000);
+      },
+      error: (err) => {
+        this.isArchivingRoom = false;
+        console.error('Failed to archive room type:', err);
+        this.archiveRoomError = err.error?.message || 'Failed to archive room type. Please ensure no active reservations exist for this category.';
       }
     });
   }

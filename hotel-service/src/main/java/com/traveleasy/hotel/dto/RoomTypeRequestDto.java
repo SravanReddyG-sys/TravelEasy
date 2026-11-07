@@ -17,12 +17,10 @@ public class RoomTypeRequestDto {
     @Size(max = 100, message = "Room category name cannot exceed 100 characters")
     private String roomTypeName;
 
-    @NotNull(message = "Max occupancy is required")
     @Min(value = 1, message = "Max occupancy must be at least 1 person")
     @Max(value = 20, message = "Max occupancy cannot exceed 20 people")
     private Integer maxOccupancy;
 
-    @NotNull(message = "Price per night is required")
     @DecimalMin(value = "1.0", message = "Price per night must be at least 1.0")
     private Double pricePerNight;
 
@@ -30,6 +28,9 @@ public class RoomTypeRequestDto {
     @Min(value = 1, message = "Total rooms must be at least 1")
     private Integer totalRooms;
 
-    @Size(max = 500, message = "Amenities list cannot exceed 500 characters")
+    @Size(max = 1000, message = "Amenities list cannot exceed 1000 characters")
     private String amenities;
+
+    @Size(max = 500, message = "Image URL cannot exceed 500 characters")
+    private String imageUrl;
 }

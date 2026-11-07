@@ -15,6 +15,8 @@ public interface HotelBookingAllocationRepository extends JpaRepository<HotelBoo
 
     List<HotelBookingAllocation> findByRoomIdAndStatus(Long roomId, String status);
 
+    List<HotelBookingAllocation> findByRoomIdAndStatusIn(Long roomId, List<String> statuses);
+
     List<HotelBookingAllocation> findByRoomIdAndCheckOutDateGreaterThanEqualAndCheckInDateLessThanEqual(
             Long roomId, LocalDate fromDate, LocalDate toDate);
 }

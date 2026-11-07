@@ -25,6 +25,9 @@ public class RoomType {
     private Integer availableRooms;
     private String amenities; // King Bed, AC, Mini Bar, City View
 
+    @Column(name = "image_url")
+    private String imageUrl;
+
     @Builder.Default
     private String status = "ACTIVE";
 

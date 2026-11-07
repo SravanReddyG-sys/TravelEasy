@@ -21,7 +21,8 @@
 | **WP-05-REG-2** | **Hotel Property Registration Wizard (Step 2 — Location & Address)** | Approved UI (`TravelEasy Location & Address Portal(1).png`), 7 structured address fields (`addressLine1`, `addressLine2`, `country`, `state`, `city`, `postalCode`, `landmark`), MySQL `hotel_properties` extension, legacy `address` auto-sync, 19 supported countries, all 28 Indian States + 8 UTs, Indian 6-digit PIN validation (`^[1-9][0-9]{5}$`), single-row draft persistence (`registrationStep = 2`), manager isolation (403/401), bidirectional navigation | **COMPLETED & VERIFIED** | **PASS (16/16 Dedicated Step 2 Tests, 112/112 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-05_PROPERTY_REGISTRATION_STEP2_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-05_PROPERTY_REGISTRATION_STEP2_IMPLEMENTATION_REPORT.md) |
 | **WP-05-REG-3** | **Hotel Property Registration Wizard (Step 3 — Property Information)** | Approved UI (`media_1794031767598_f92c3ff7.jpg`), 5 collapsible accordion subsections (Property Contact Details, Business Registration Details, GST Details, Property Manager Details, Operating Hours), conditional GSTIN regex & GST fields, conditional custom business registration, conditional limited reception hours, MySQL `hotel_properties` extension (22 columns), single-row draft persistence (`registrationStep = 3`), manager isolation (403/401), bidirectional navigation | **COMPLETED & VERIFIED** | **PASS (16/16 Dedicated Step 3 Tests, 128/128 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-05_PROPERTY_REGISTRATION_STEP3_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-05_PROPERTY_REGISTRATION_STEP3_IMPLEMENTATION_REPORT.md) |
 | **WP-05-REG-4** | **Hotel Property Registration Wizard (Step 4 — Facilities & Policies)** | Approved UI (`media_1794041582166_418ee857.jpg`), 3 collapsible accordion subsections (Property Facilities & Amenities, Guest Policies, Additional Property Rules), 7 predefined categories with 18 standard amenities, dynamic custom amenity creation with duplicate detection, 4 mandatory guest policies, multi-select identification with conditional custom ID, 1000-char additional rules counter, MySQL `hotel_properties` extension (9 columns), legacy `amenities` synchronization, single-row draft persistence (`registrationStep = 4`), manager isolation (403/401), bidirectional navigation | **COMPLETED & VERIFIED** | **PASS (13/13 Dedicated Step 4 Tests, 141/141 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-05_PROPERTY_REGISTRATION_STEP4_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-05_PROPERTY_REGISTRATION_STEP4_IMPLEMENTATION_REPORT.md) |
-| **WP-06** | Testing & System Stabilization | End-to-end integration tests, load tests, regressions | Planned | Pending WP-05 | TBD |
+| **WP-05-REG-5** | **Hotel Property Registration Wizard (Step 5 — Review & Submit)** | Approved UI (`media_1794045327682_35fea960.jpg`), 4 independent multi-open expandable review sections (Basic Details, Location & Address, Property Information, Facilities & Policies), individual section Edit buttons with bidirectional navigation, accuracy confirmation checkbox, Partner Terms & Conditions modal, final registration & BD-03 activation, duplicate-submission prevention, draft status cleanup, manager ownership checks | **COMPLETED & VERIFIED** | **PASS (11/11 Dedicated Step 5 Tests, 152/152 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-05_PROPERTY_REGISTRATION_STEP5_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-05_PROPERTY_REGISTRATION_STEP5_IMPLEMENTATION_REPORT.md) |
+| **WP-06** | **Room Management (Listing, Add, Details Modal & Edit Room Type)** | Approved UIs (`media_1794059956325_d111e7c5.jpg`, `media_1794069851155_a0cea92a.jpg`, `media_1794073143182_fe92d404.jpg`, `media_1794075021966_99d66a94.jpg`). Full-page Add Room Type, card-based Room Types listing (filter, sort, search, metrics, soft archive), centered Room Type Details modal overlay, and full-page Edit Room Type form (context summary bar, inline steppers, amenity chips with checkmark badges, image replace/remove dropzone, bidirectional structural occupancy check, date-wise capacity validation, pricing preservation, non-owner 403 enforcement). | **COMPLETED & VERIFIED** | **PASS (23/23 Dedicated WP-06 Tests, 175/175 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-06_EDIT_ROOM_TYPE_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-06_EDIT_ROOM_TYPE_IMPLEMENTATION_REPORT.md) |
 
 ---
 
@@ -179,7 +180,7 @@
   - `BD-02`: Hotel Property Profile & Multi-Property Ownership (Multi-property ownership switcher in dashboard header with immediate metric re-aggregation).
   - `BD-03`: Immediate Activation of Registered Hotel Properties (Hotels created via registration modal activate immediately with status `ACTIVE`).
   - `BD-04`: Cancellation & Refund Processing Architecture (Net Revenue calculation deducting period refunds; cancellations excluded from active bookings and occupied nights).
-  - BD-05: Traveller Hotel Details and Room Discovery (Room types, prices, and availability are presented on the hotel details page rather than initial search results; room capacity and guest requirements are validated and availability is revalidated before reservation).
+  - BD-05: Traveller Hotel Details and Room Discovery (Room types, prices, and availability are presented on the hotel details page rather than initial search results; room count and guest requirements are validated and availability is revalidated before reservation).
   - `BD-06`: Automatic Date-Wise Inventory Allocation & Baseline Capacity (Automatic baseline capacity derivation without manual day-by-day initialization).
   - `BD-07`: Room Type Modification, Structural Restrictions & Archival (Room type management modals adhere to capacity restrictions and active booking preservation).
   - `BD-08`: Soft Property Deactivation & Operational Pause (Deactivated properties preserve historical metrics and reservations while pausing new bookings).
@@ -459,3 +460,52 @@
     - Full `hotel-service` test suite: **152/152 tests passed (100% pass rate, 0 failures, 0 errors)**.
     - Angular production build (`ng build`): **Clean bundle generation (0 errors, 1.73 MB production bundle)**.
 - **Report Reference:** [`WP-05_PROPERTY_REGISTRATION_STEP5_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-05_PROPERTY_REGISTRATION_STEP5_IMPLEMENTATION_REPORT.md)
+
+
+---
+
+## 12. WP-06: Room Management — Add Room Type & Room Types Listing Page Redesign
+
+- **Status:** **COMPLETED & VERIFIED**
+- **Date Completed:** November 7, 2026
+- **Authoritative Mockups:**
+  - Add Room Type: `media_1794059956325_d111e7c5.jpg`
+  - Room Count Naming Convention: `media_1794062276952_70dab92a.png`
+  - Room Types Listing Page: `media_1794069851155_a0cea92a.jpg`
+  - Room Type Details Centered Modal: `media_1794073143182_fe92d404.jpg`
+- **Key Deliverables:**
+  1. **Add Room Type Single-Page Form:**
+     - Replaced legacy modal room creation with an integrated 2-column form.
+     - Basic Information: Room Type Name (max 100, active duplicate check), Maximum Occupancy (stepper 1–20, defaults to 2).
+     - Room Count: Total Rooms (stepper $\ge 1$) with capacity info panel explaining total physical rooms vs daily availability.
+     - Amenities: 10 predefined chips (Wi-Fi, AC, TV, Private Bathroom, Room Service, Heater, Mini Fridge, Balcony, Work Desk, Wardrobe), custom amenity creation with duplicate detection, selected amenities preview with remove controls.
+     - Room Image: Drag-and-drop dropzone ($\le 1$ MB, JPG/JPEG/PNG/WebP), preview, replace, and remove.
+     - Footer: Cancel and Create Room Type.
+  2. **Room Types Listing Page Redesign:**
+     - Header: Title **Room Management**, subtitle, top-right `Archived Room Types` (outlined teal) and `+ Add Room Type` (solid teal).
+     - 3 Metric Cards: Total Room Types (cyan bed), Active Room Types (green bed), Archived Room Types (purple box).
+     - Toolbar: Real-time search by name, status filter (Active, Archived, All), 6-option sort dropdown, and Grid/List view switcher.
+     - 2-Column Responsive Grid View: Room photo thumbnail/placeholder, room type name, active/archived status pill badge, specs (`X Guests`, `Y Total Rooms`), up to 3 amenity chips preview + `+N more` badge, and action buttons (`View Details`, `Edit`, `Archive` [active only]).
+     - List View (Table): Compact table without pricing or availability columns.
+     - Empty states: `No Room Types Configured` (with `+ Add Room Type` button) and `No Room Types Found` (with `Reset Filters` button).
+     - Soft Archive Modal: Explains archiving prevents new reservations while preserving historical data and bookings.
+  3. **Room Type Details Centered Modal Overlay (`media_1794073143182_fe92d404.jpg`):**
+     - Centered large modal overlay with background dimming backdrop.
+     - Header: Cyan eye icon box, title `Room Type Details`, subtitle, top-right close button.
+     - Two-column content layout: Left column room image (`imageUrl` with cover object-fit and fallback placeholder); Right column: Room name, status badge (`Active` in green or `Archived` in gray), Basic Information card (Room Type ID e.g. `RT-0004`, Room Type Name, Maximum Occupancy `X Guests`, Total Rooms `Y`), and Amenities card (complete list of all predefined and custom amenities rendered as rounded chips with icons).
+     - Footer actions: Neutral outlined `Close` and filled teal `Edit Room Type` (passing selected room ID to edit workflow dependency).
+     - Modal lifecycle & accessibility: Escape key closes, backdrop click closes, close icon/button closes, background scrolling disabled when open, dialog semantics (`role="dialog"`).
+  4. **Strict Separation of Concerns:**
+     - **Zero Pricing in Room Management:** `pricePerNight`, base rates, and overrides strictly omitted from Room Management and isolated to Inventory & Pricing.
+     - **Zero Availability in Room Management:** `availableRooms`, daily inventory, booked/held counts, and occupancy percentages strictly omitted from Room Management.
+  5. **Database & API Integration:**
+     - Extended `room_types` table with `image_url VARCHAR(500)` and `amenities VARCHAR(1000)`.
+     - `POST /{hotelId}/rooms`: Creates room type with optional `pricePerNight` and auto-initialized daily inventory.
+     - `GET /{hotelId}/rooms`: Returns both Active and Archived room types for managers/admins; returns only Active for public/travellers.
+     - `GET /rooms/{roomId}`: Fetches individual room type details for the details modal.
+     - `DELETE /rooms/{roomId}`: Soft-archives room type (`status = "ARCHIVED"`) after validating no active allocations exist (`allocatedRooms == 0`).
+  6. **Automated Verification:**
+     - Dedicated Test Suite: [`RoomTypeCreationTest.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/test/java/com/traveleasy/hotel/RoomTypeCreationTest.java) — **14/14 tests passed (100%)**.
+     - Full Regression Suite: **166/166 tests passed (100% pass rate, 0 failures, 0 errors across 9 test classes)**.
+     - Angular Production Build: **Clean bundle generation (0 errors, 1.76 MB production bundle)**.
+- **Report Reference:** [`WP-06_ROOM_MANAGEMENT_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-06_ADD_ROOM_TYPE_IMPLEMENTATION_REPORT.md)

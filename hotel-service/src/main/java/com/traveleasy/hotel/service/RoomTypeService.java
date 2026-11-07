@@ -4,9 +4,13 @@ import com.traveleasy.hotel.dto.RoomTypeRequestDto;
 import com.traveleasy.hotel.exception.DomainValidationException;
 import com.traveleasy.hotel.exception.OwnershipAccessDeniedException;
 import com.traveleasy.hotel.exception.ResourceNotFoundException;
+import com.traveleasy.hotel.model.HotelBookingAllocation;
 import com.traveleasy.hotel.model.HotelProperty;
+import com.traveleasy.hotel.model.RoomDailyInventory;
 import com.traveleasy.hotel.model.RoomType;
+import com.traveleasy.hotel.repository.HotelBookingAllocationRepository;
 import com.traveleasy.hotel.repository.HotelPropertyRepository;
+import com.traveleasy.hotel.repository.RoomDailyInventoryRepository;
 import com.traveleasy.hotel.repository.RoomTypeRepository;
 import com.traveleasy.hotel.security.HotelSecurityService.CallerPrincipal;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +30,8 @@ public class RoomTypeService {
 
     private final RoomTypeRepository roomTypeRepository;
     private final HotelPropertyRepository hotelRepository;
+    private final HotelBookingAllocationRepository allocationRepository;
+    private final RoomDailyInventoryRepository dailyInventoryRepository;
     @Lazy
     private final HotelInventoryService inventoryService;
 
@@ -54,6 +60,7 @@ public class RoomTypeService {
                 .totalRooms(request.getTotalRooms())
                 .availableRooms(request.getTotalRooms())
                 .amenities(request.getAmenities() != null ? request.getAmenities().trim() : null)
+                .imageUrl(request.getImageUrl() != null && !request.getImageUrl().trim().isEmpty() ? request.getImageUrl().trim() : null)
                 .status("ACTIVE")
                 .build();
 
@@ -114,19 +121,48 @@ public class RoomTypeService {
         roomType.setTotalRooms(newTotal);
         roomType.setAvailableRooms(newAvailable);
 
-        // BD-07: Structural modification check for room occupancy
-        int targetOccupancy = request.getMaxOccupancy() != null ? request.getMaxOccupancy() : roomType.getMaxOccupancy();
-        if (targetOccupancy < roomType.getMaxOccupancy() && allocatedRooms > 0) {
-            throw new DomainValidationException("Cannot reduce room maximum occupancy from " +
-                    roomType.getMaxOccupancy() + " to " + targetOccupancy +
-                    " while active reservations exist for this room category (" + allocatedRooms + " reserved room(s)).");
+        // Determine whether active bookings or allocations exist for this room category
+        boolean hasActiveBookings = allocatedRooms > 0;
+        if (!hasActiveBookings && allocationRepository != null) {
+            List<HotelBookingAllocation> activeAllocs = allocationRepository.findByRoomIdAndStatusIn(
+                    roomId, List.of("HELD", "CONFIRMED"));
+            LocalDate today = LocalDate.now();
+            hasActiveBookings = activeAllocs.stream()
+                    .anyMatch(a -> a.getCheckOutDate() == null || !a.getCheckOutDate().isBefore(today));
+        }
+        if (!hasActiveBookings && dailyInventoryRepository != null) {
+            List<RoomDailyInventory> futureInvs = dailyInventoryRepository
+                    .findByRoomIdAndInventoryDateGreaterThanEqualOrderByInventoryDateAsc(roomId, LocalDate.now());
+            hasActiveBookings = futureInvs.stream()
+                    .anyMatch(inv -> (inv.getBookedRooms() != null && inv.getBookedRooms() > 0)
+                            || (inv.getHeldRooms() != null && inv.getHeldRooms() > 0));
+        }
+
+        // BD-07: Structural modification check for room occupancy (bidirectional)
+        int currentOccupancy = roomType.getMaxOccupancy() != null ? roomType.getMaxOccupancy() : 2;
+        int targetOccupancy = request.getMaxOccupancy() != null ? request.getMaxOccupancy() : currentOccupancy;
+        if (targetOccupancy != currentOccupancy && hasActiveBookings) {
+            if (targetOccupancy < currentOccupancy) {
+                throw new DomainValidationException("Cannot reduce maximum occupancy from " +
+                        currentOccupancy + " to " + targetOccupancy +
+                        " while active bookings exist for this room type. Maximum occupancy is structural and cannot be modified when reservations exist.");
+            } else {
+                throw new DomainValidationException("Cannot increase maximum occupancy from " +
+                        currentOccupancy + " to " + targetOccupancy +
+                        " while active bookings exist for this room type. Maximum occupancy is structural and cannot be modified when reservations exist.");
+            }
         }
         roomType.setMaxOccupancy(targetOccupancy);
 
-        // Non-structural updates (amenities, name, base price)
+        // Non-structural updates (amenities, name, base price, imageUrl)
         roomType.setRoomTypeName(request.getRoomTypeName().trim());
         roomType.setAmenities(request.getAmenities() != null ? request.getAmenities().trim() : null);
-        roomType.setPricePerNight(request.getPricePerNight());
+        if (request.getPricePerNight() != null) {
+            roomType.setPricePerNight(request.getPricePerNight());
+        }
+        if (request.getImageUrl() != null) {
+            roomType.setImageUrl(request.getImageUrl().trim().isEmpty() ? null : request.getImageUrl().trim());
+        }
 
         RoomType updated = roomTypeRepository.save(roomType);
         log.info("Room category ID {} updated by user ID: {}", roomId, principal.userId());
@@ -150,9 +186,23 @@ public class RoomTypeService {
         int allocatedRooms = Math.max(0, oldTotal - oldAvailable);
 
         // Cannot delete/archive if active allocations exist
-        if (allocatedRooms > 0) {
-            throw new DomainValidationException("Cannot archive room category while active reservations exist (" +
-                    allocatedRooms + " allocated room(s)).");
+        boolean hasActiveBookings = allocatedRooms > 0;
+        if (!hasActiveBookings && allocationRepository != null) {
+            List<HotelBookingAllocation> activeAllocs = allocationRepository.findByRoomIdAndStatusIn(
+                    roomId, List.of("HELD", "CONFIRMED"));
+            LocalDate today = LocalDate.now();
+            hasActiveBookings = activeAllocs.stream()
+                    .anyMatch(a -> a.getCheckOutDate() == null || !a.getCheckOutDate().isBefore(today));
+        }
+        if (!hasActiveBookings && dailyInventoryRepository != null) {
+            List<RoomDailyInventory> futureInvs = dailyInventoryRepository
+                    .findByRoomIdAndInventoryDateGreaterThanEqualOrderByInventoryDateAsc(roomId, LocalDate.now());
+            hasActiveBookings = futureInvs.stream()
+                    .anyMatch(inv -> (inv.getBookedRooms() != null && inv.getBookedRooms() > 0)
+                            || (inv.getHeldRooms() != null && inv.getHeldRooms() > 0));
+        }
+        if (hasActiveBookings) {
+            throw new DomainValidationException("Cannot archive room category while active reservations exist.");
         }
 
         // BD-07: Historical room types must not be permanently deleted
@@ -212,7 +262,10 @@ public class RoomTypeService {
         if (request.getMaxOccupancy() != null && request.getMaxOccupancy() < 1) {
             throw new DomainValidationException("Room max occupancy must be at least 1 person");
         }
-        if (request.getPricePerNight() == null || request.getPricePerNight() <= 0.0) {
+        if (request.getMaxOccupancy() != null && request.getMaxOccupancy() > 20) {
+            throw new DomainValidationException("Room max occupancy cannot exceed 20 people");
+        }
+        if (request.getPricePerNight() != null && request.getPricePerNight() <= 0.0) {
             throw new DomainValidationException("Price per night must be greater than zero");
         }
         if (request.getTotalRooms() == null || request.getTotalRooms() < 1) {

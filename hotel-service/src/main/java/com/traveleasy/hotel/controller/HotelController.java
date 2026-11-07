@@ -426,7 +426,7 @@ public class HotelController {
     @PostMapping("/{hotelId}/rooms")
     public ResponseEntity<?> addRoomType(
             @PathVariable Long hotelId,
-            @RequestBody RoomTypeRequestDto request,
+            @Valid @RequestBody RoomTypeRequestDto request,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
 
         ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "add room category");
@@ -440,7 +440,7 @@ public class HotelController {
     @PutMapping("/rooms/{roomId}")
     public ResponseEntity<?> updateRoomType(
             @PathVariable Long roomId,
-            @RequestBody RoomTypeRequestDto request,
+            @Valid @RequestBody RoomTypeRequestDto request,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
 
         ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "update room category");

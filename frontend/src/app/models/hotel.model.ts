@@ -194,3 +194,25 @@ export interface HotelStep5Response extends HotelStep4Response {
   message?: string;
 }
 
+export interface RoomTypeCreateRequest {
+  roomTypeName: string;
+  maxOccupancy?: number;
+  totalRooms: number;
+  amenities?: string;
+  imageUrl?: string;
+}
+
+export interface RoomTypeDto {
+  id?: number;
+  hotelId?: number;
+  roomTypeName: string;
+  maxOccupancy: number;
+  pricePerNight?: number;
+  totalRooms: number;
+  availableRooms?: number;
+  allocatedRooms?: number;
+  amenities?: string;
+  imageUrl?: string;
+  status?: string;
+}
+
