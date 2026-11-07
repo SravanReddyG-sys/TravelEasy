@@ -17,7 +17,10 @@
 | **WP-03** | **Inventory, Pricing & Availability** | Date-wise room inventory (BD-01, BD-06), multi-night atomic allocation & concurrency control, date-specific pricing & base price fallback, quantity-based operational room blocking (BD-10), booking-service idempotent coordination | **COMPLETED & VERIFIED** | **PASS (76/76 Hotel Tests, 89/89 Booking Tests Passed, Angular Build Clean)** | [`WP-03_INVENTORY_PRICING_AVAILABILITY_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-03_INVENTORY_PRICING_AVAILABILITY_IMPLEMENTATION_REPORT.md) |
 | **WP-04** | **Booking Lifecycle & Cancellation Integration** | Central cancellation policy (BD-04), check-in/out, no-show (BD-09), policy snapshot (BD-07), cross-service inventory release | **COMPLETED & VERIFIED** | **PASS (105/105 Booking Tests, 76/76 Hotel Tests Passed, 16/16 Dedicated WP-04 Tests Passed)** | [`WP-04_BOOKING_LIFECYCLE_CANCELLATION_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-04_BOOKING_LIFECYCLE_CANCELLATION_IMPLEMENTATION_REPORT.md) |
 | **WP-05** | **Hotel Manager Dashboard Overview UI** | Manager console UX matching approved visual mockup, 4 KPI cards, trend chart, occupancy donut, quick actions, alerts, reservations; Date-Range Integration (7 presets + custom range), Previous Equivalent Period comparisons, WP-03 date-wise inventory occupancy aggregation (`HotelInventorySummaryDto`), Net Revenue tracking with refunds, corrected operational alert rules | **COMPLETED & VERIFIED** | **PASS (77/77 Hotel Tests Passed, Angular Build Clean 0 Errors)** | [`WP-05_DASHBOARD_OVERVIEW_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-05_DASHBOARD_OVERVIEW_IMPLEMENTATION_REPORT.md) |
-| **WP-05-REG** | **Hotel Property Registration Wizard (Step 1 — Basic Property Details)** | Approved 5-step registration wizard UI (`TravelEasy Property Registration Form(1).png`), Step 1 basic property details, input validations, conditional custom classification, short description live counter (<=300 chars), up to 4 images with mandatory cover image tile, magic bytes and <=1 MB size enforcement, MySQL `hotel_images` and `hotel_properties` extension, draft persistence (`DRAFT` status per BD-03, multi-property per BD-02, backward-compatible `starRating` & `imageUrl`), Step 2 placeholder & navigation | **COMPLETED & VERIFIED** | **PASS (90/90 Hotel Tests Passed, 18/18 Dedicated Step 1 Tests, Angular Build Clean 0 Errors)** | [`WP-05_PROPERTY_REGISTRATION_STEP1_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-05_PROPERTY_REGISTRATION_STEP1_IMPLEMENTATION_REPORT.md) |
+| **WP-05-REG-1** | **Hotel Property Registration Wizard (Step 1 — Basic Property Details)** | Approved 5-step registration wizard UI (`TravelEasy Property Registration Form(1).png`), Step 1 basic property details, input validations, conditional custom classification, short description live counter (<=300 chars), up to 4 images with mandatory cover image tile, magic bytes and <=1 MB size enforcement, MySQL `hotel_images` and `hotel_properties` extension, draft persistence (`DRAFT` status per BD-03, multi-property per BD-02, backward-compatible `starRating` & `imageUrl`), Step 2 placeholder & navigation | **COMPLETED & VERIFIED** | **PASS (19/19 Dedicated Step 1 Tests, 112/112 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-05_PROPERTY_REGISTRATION_STEP1_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-05_PROPERTY_REGISTRATION_STEP1_IMPLEMENTATION_REPORT.md) |
+| **WP-05-REG-2** | **Hotel Property Registration Wizard (Step 2 — Location & Address)** | Approved UI (`TravelEasy Location & Address Portal(1).png`), 7 structured address fields (`addressLine1`, `addressLine2`, `country`, `state`, `city`, `postalCode`, `landmark`), MySQL `hotel_properties` extension, legacy `address` auto-sync, 19 supported countries, all 28 Indian States + 8 UTs, Indian 6-digit PIN validation (`^[1-9][0-9]{5}$`), single-row draft persistence (`registrationStep = 2`), manager isolation (403/401), bidirectional navigation | **COMPLETED & VERIFIED** | **PASS (16/16 Dedicated Step 2 Tests, 112/112 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-05_PROPERTY_REGISTRATION_STEP2_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-05_PROPERTY_REGISTRATION_STEP2_IMPLEMENTATION_REPORT.md) |
+| **WP-05-REG-3** | **Hotel Property Registration Wizard (Step 3 — Property Information)** | Approved UI (`media_1794031767598_f92c3ff7.jpg`), 5 collapsible accordion subsections (Property Contact Details, Business Registration Details, GST Details, Property Manager Details, Operating Hours), conditional GSTIN regex & GST fields, conditional custom business registration, conditional limited reception hours, MySQL `hotel_properties` extension (22 columns), single-row draft persistence (`registrationStep = 3`), manager isolation (403/401), bidirectional navigation | **COMPLETED & VERIFIED** | **PASS (16/16 Dedicated Step 3 Tests, 128/128 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-05_PROPERTY_REGISTRATION_STEP3_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-05_PROPERTY_REGISTRATION_STEP3_IMPLEMENTATION_REPORT.md) |
+| **WP-05-REG-4** | **Hotel Property Registration Wizard (Step 4 — Facilities & Policies)** | Approved UI (`media_1794041582166_418ee857.jpg`), 3 collapsible accordion subsections (Property Facilities & Amenities, Guest Policies, Additional Property Rules), 7 predefined categories with 18 standard amenities, dynamic custom amenity creation with duplicate detection, 4 mandatory guest policies, multi-select identification with conditional custom ID, 1000-char additional rules counter, MySQL `hotel_properties` extension (9 columns), legacy `amenities` synchronization, single-row draft persistence (`registrationStep = 4`), manager isolation (403/401), bidirectional navigation | **COMPLETED & VERIFIED** | **PASS (13/13 Dedicated Step 4 Tests, 141/141 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-05_PROPERTY_REGISTRATION_STEP4_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-05_PROPERTY_REGISTRATION_STEP4_IMPLEMENTATION_REPORT.md) |
 | **WP-06** | Testing & System Stabilization | End-to-end integration tests, load tests, regressions | Planned | Pending WP-05 | TBD |
 
 ---
@@ -266,3 +269,193 @@
    - Full regression suite in `hotel-service`: **96/96 tests passed (100% pass rate, 0 failures, 0 errors)**.
    - Angular build: **Clean bundle generation (0 errors)**.
 - **Report Reference:** [`WP-05_PROPERTY_REGISTRATION_STEP1_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-05_PROPERTY_REGISTRATION_STEP1_IMPLEMENTATION_REPORT.md)
+
+
+---
+
+## 8. WP-05-REG (Step 2): Hotel Property Registration Wizard — Step 2: Location & Address
+
+- **Work Package ID:** WP-05-REG (Step 2)  
+- **Title:** Hotel Property Registration Wizard — Step 2: Location & Address Implementation  
+- **Completion Date:** 2026-11-07  
+- **Status:** **COMPLETED & VERIFIED**  
+- **Approved Visual Reference:** `TravelEasy Location & Address Portal(1).png`  
+- **Approved Business Decisions Addressed:**
+  - `BD-02`: Multiple Hotel Properties per Manager (preserves manager isolation and ownership across multi-step draft wizard).
+  - `BD-03`: Hotel Property Lifecycle & Activation Rules (draft persists in `DRAFT` status; Step 2 updates existing draft without duplicating rows; increments `registrationStep` to `2`).
+  - Backward Compatibility: Auto-synthesizes and updates legacy concatenated `address` and `city` columns in `hotel_properties` to ensure zero breakages for consumer searches, booking workflows, and admin portals.
+
+### Summary of Implementation:
+1. **Database Schema & Entity Evolution:**
+   - Added 6 structured columns to `hotel_properties` in `traveleasy_hotel_db`: `address_line1`, `address_line2`, `country`, `state`, `postal_code`, `landmark`.
+   - Updated [`HotelProperty.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/main/java/com/traveleasy/hotel/model/HotelProperty.java) with corresponding JPA properties and mappings.
+2. **Standardized Reference Data & Validation Logic:**
+   - Implemented [`AddressReferenceData.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/main/java/com/traveleasy/hotel/service/AddressReferenceData.java) supporting 19 countries, all 28 Indian States + 8 Union Territories, US states, UK countries, UAE emirates, Australia, Canada.
+   - Enforced country-specific postal code validation: strict 6-digit Indian PIN code `^[1-9][0-9]{5}$` (no leading zero) and international alphanumeric format (`^[a-zA-Z0-9\s-]{3,10}$`).
+   - State-Country consistency validation: verifies that the selected state is valid for the specified country.
+3. **Backend Service & REST Endpoints:**
+   - DTOs: [`HotelStep2RequestDto.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/main/java/com/traveleasy/hotel/dto/HotelStep2RequestDto.java) with Jakarta constraints; [`HotelStep2ResponseDto.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/main/java/com/traveleasy/hotel/dto/HotelStep2ResponseDto.java) returning complete draft state.
+   - Service: [`HotelPropertyService.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/main/java/com/traveleasy/hotel/service/HotelPropertyService.java) `saveStep2Draft()`, `buildLegacyAddress()`, and `validateStep2Request()`.
+   - Endpoints: `POST /api/hotels/draft/{draftId}/step-2`, `POST /api/hotels/draft/step-2`, `GET /api/hotels/reference/countries`, `GET /api/hotels/reference/states`.
+   - Security: Enforces manager authentication and draft ID ownership check (rejects cross-manager modifications with 403 Forbidden; unauthenticated with 401 Unauthorized).
+4. **High-Fidelity Angular UI (`TravelEasy Location & Address Portal(1).png`):**
+   - Stepper header: Step 1 completed (checkmark pill), Step 2 active (primary circle), Steps 3-5 pending.
+   - Form card: Custom icon box with teal map pin, section header `Step 2 of 5: Location & Address`, subtitle `Provide the complete address of your property for accurate listing and communication.`.
+   - 2-Column responsive layout with icons:
+     - Row 1: Address Line 1 * (building icon) | Address Line 2 (Optional) (building icon)
+     - Row 2: Country * (globe icon, default India) | State * (diamond/badge icon, dynamically filtered by Country)
+     - Row 3: City * (building icon) | Postal Code * (mail icon, numeric restriction & PIN check for India)
+     - Row 4: Landmark (Optional) (full-width, map pin icon)
+   - Navigation actions:
+     - `← Previous: Basic Details` preserves all entered Step 2 values and returns to Step 1.
+     - `Cancel` prompts unsaved changes confirmation if dirty and returns to My Properties.
+     - `Next: Property Information →` validates all fields, submits draft to backend, updates state, and advances to Step 3 placeholder.
+   - Draft resumption: opening any saved draft from My Properties restores all Step 1 and Step 2 fields accurately.
+5. **Verification Results:**
+   - Dedicated test suite [`HotelStep2RegistrationTest.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/test/java/com/traveleasy/hotel/HotelStep2RegistrationTest.java): **16/16 tests passed (100%)**.
+   - Regression test suite [`HotelStep1RegistrationTest.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/test/java/com/traveleasy/hotel/HotelStep1RegistrationTest.java): **19/19 tests passed (100%)**.
+   - Full regression suite in `hotel-service`: **112/112 tests passed (100% pass rate, 0 failures, 0 errors)**.
+   - Angular production build (`ng build`): **Clean bundle generation (0 errors, 1.61 MB production bundle, 10.4s)**.
+- **Report Reference:** [`WP-05_PROPERTY_REGISTRATION_STEP2_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-05_PROPERTY_REGISTRATION_STEP2_IMPLEMENTATION_REPORT.md)
+
+---
+
+## 9. WP-05-REG (Step 3): Hotel Property Registration Wizard — Step 3: Property Information
+
+- **Work Package ID:** WP-05-REG-3  
+- **Title:** Hotel Property Registration Wizard (Step 3 — Property Information)  
+- **Completion Date:** 2026-11-07  
+- **Status:** **COMPLETED & VERIFIED**  
+- **Approved Visual Reference:** `media_1794031767598_f92c3ff7.jpg`  
+- **Approved Business Decisions Addressed:**
+  - `BD-02`: Multiple Hotel Properties per Manager (preserves manager isolation and ownership across multi-step draft wizard; rejects cross-manager draft mutations with 403 Forbidden).
+  - `BD-03`: Hotel Property Lifecycle & Activation Rules (draft persists in `DRAFT` status; Step 3 updates existing draft without duplicating rows; increments `registrationStep` to `3`).
+  - Separation of Concerns: Operational property manager contact details are strictly decoupled from authenticated manager credentials (`manager_id`, `manager_name`).
+  - Policy Protection: Default hotel check-in/check-out operating hours do not alter the centralized 14:00 cancellation cutoff policy established in WP-04.
+
+### Summary of Implementation:
+1. **Database Schema & Entity Evolution:**
+   - Extended `hotel_properties` table in `traveleasy_hotel_db` with 22 structured columns across the 5 subsections:
+     - Property Contact Details: `property_contact_number`, `alternate_contact_number`, `property_email`, `website_url`.
+     - Business Registration Details: `registered_business_name`, `business_registration_type`, `other_business_registration_type`, `business_registration_number`, `registered_business_address`.
+     - GST Details: `is_gst_registered`, `gstin`, `gst_legal_name`, `gst_state`.
+     - Property Manager Details: `property_manager_name`, `property_manager_designation`, `property_manager_contact_number`, `property_manager_email`.
+     - Operating Hours: `check_in_time`, `check_out_time`, `reception_availability`, `reception_opening_time`, `reception_closing_time`.
+   - Updated [`HotelProperty.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/main/java/com/traveleasy/hotel/model/HotelProperty.java) JPA model with builders, getters, setters, and default configurations.
+2. **Validation Logic & Reference Data:**
+   - Property Contact: Required international phone format, optional alternate phone, required email format, optional URL.
+   - Business Registration: Required legal entity name, dropdown selection from 6 standard types (`Private Limited Company`, `Public Limited Company`, `Partnership Firm`, `Limited Liability Partnership (LLP)`, `Sole Proprietorship`, `Other`), conditional custom type required when `Other` is selected, required registration number, optional registered business address.
+   - GST Details: Binary toggle (`Yes`/`No`, default `No`). When `Yes`, validates 15-character Indian GSTIN (`^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$`), GST registered legal name, and GST state against valid Indian States/UTs. Automatically resets GST fields if set to `No`.
+   - Operational Contact: Required property manager name, designation, contact number, and operational email.
+   - Operating Hours: Required check-in time (`14:00` default) and check-out time (`11:00` default). Reception availability (`24-hour Reception` vs `Limited Operating Hours`). Conditional opening and closing times required when limited.
+3. **Backend Service & REST Endpoints:**
+   - DTOs: [`HotelStep3RequestDto.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/main/java/com/traveleasy/hotel/dto/HotelStep3RequestDto.java) and [`HotelStep3ResponseDto.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/main/java/com/traveleasy/hotel/dto/HotelStep3ResponseDto.java).
+   - Step 1 & Step 2 Response DTOs updated to include Step 3 fields for full draft restoration.
+   - Service: [`HotelPropertyService.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/main/java/com/traveleasy/hotel/service/HotelPropertyService.java) `saveStep3Draft()` and `validateStep3Request()`.
+   - Endpoints: `POST /api/hotels/draft/{draftId}/step-3` and `POST /api/hotels/draft/step-3`.
+   - Security: Manager authentication and ownership verification (rejects cross-manager draft manipulation with `403 Forbidden`; unauthenticated requests with `401 Unauthorized`).
+4. **High-Fidelity Angular UI (`media_1794031767598_f92c3ff7.jpg`):**
+   - Stepper header: Step 1 completed (checkmark pill), Step 2 completed (checkmark pill), Step 3 active (primary circle), Steps 4-5 pending.
+   - Form card: Custom icon box with teal property/building icon, section header `Step 3 of 5: Property Information`, subtitle `Provide the business, contact and operational details of your property.`.
+   - 5 Accordion Subsections:
+     - 1. Property Contact Details (expanded by default)
+     - 2. Business Registration Details
+     - 3. GST Details
+     - 4. Property Manager Details
+     - 5. Operating Hours
+   - Single-expansion accordion design: toggling an item expands it and collapses others; entered form data is fully retained across section toggles.
+   - Validation & Auto-Expansion: Clicking `Next: Facilities & Policies →` triggers comprehensive validation; if an error exists in a collapsed section, the accordion automatically expands the first invalid subsection and highlights the field.
+   - Navigation actions:
+     - `← Previous: Location & Address` preserves all entered Step 3 values and navigates back to Step 2.
+     - `Cancel` prompts unsaved changes confirmation if dirty and returns to My Properties.
+     - `Next: Facilities & Policies →` validates, submits Step 3 draft to backend, updates state, and advances to Step 4 placeholder.
+   - Draft resumption: opening any saved draft from My Properties restores all Step 1, Step 2, and Step 3 fields accurately.
+5. **Verification Results:**
+   - Dedicated test suite [`HotelStep3RegistrationTest.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/test/java/com/traveleasy/hotel/HotelStep3RegistrationTest.java): **16/16 tests passed (100%)**.
+   - Regression test suite [`HotelStep2RegistrationTest.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/test/java/com/traveleasy/hotel/HotelStep2RegistrationTest.java): **16/16 tests passed (100%)**.
+   - Regression test suite [`HotelStep1RegistrationTest.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/test/java/com/traveleasy/hotel/HotelStep1RegistrationTest.java): **19/19 tests passed (100%)**.
+   - Full regression suite in `hotel-service`: **128/128 tests passed (100% pass rate, 0 failures, 0 errors)**.
+   - Angular production build (`ng build`): **Clean bundle generation (0 errors, 1.65 MB production bundle, 18.4s)**.
+- **Report Reference:** [`WP-05_PROPERTY_REGISTRATION_STEP3_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-05_PROPERTY_REGISTRATION_STEP3_IMPLEMENTATION_REPORT.md)
+
+---
+
+## 10. WP-05-REG (Step 4): Hotel Property Registration Wizard — Step 4: Facilities & Policies
+
+- **Work Package ID:** WP-05-REG-4  
+- **Title:** Hotel Property Registration Wizard (Step 4 — Facilities & Policies)  
+- **Completion Date:** 2026-11-07  
+- **Status:** **COMPLETED & VERIFIED**  
+- **Approved Visual Reference:** `media_1794041582166_418ee857.jpg`  
+- **Approved Business Decisions Addressed:**
+  - `BD-02`: Multiple Hotel Properties per Manager (preserves manager isolation and ownership across multi-step draft wizard; rejects cross-manager draft mutations with 403 Forbidden).
+  - `BD-03`: Hotel Property Lifecycle & Activation Rules (draft persists in `DRAFT` status; Step 4 updates existing draft without duplicating rows; increments `registrationStep` to `4`).
+  - Separation of Concerns: Property-level facilities are strictly decoupled from room-specific amenities (which remain part of Room Management).
+  - Policy Protection: Default hotel check-in/check-out operating hours and guest rules do not alter the centralized 14:00 cancellation cutoff policy established in WP-04.
+  - Backward Compatibility: Synthesizes legacy `amenities` string in `hotel_properties` from both predefined and custom amenities to ensure zero regressions for search and legacy booking flows.
+
+### Summary of Implementation:
+1. **Database Schema & Entity Evolution:**
+   - Extended `hotel_properties` table in `traveleasy_hotel_db` with 9 structured columns:
+     - Facilities & Amenities: `predefined_amenities`, `custom_amenities`.
+     - Guest Policies: `children_policy`, `pet_policy`, `smoking_policy`, `extra_bed_policy`.
+     - Identification: `accepted_identification_types`, `custom_identification_type`.
+     - Property Rules: `additional_rules`.
+   - Updated [`HotelProperty.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/main/java/com/traveleasy/hotel/model/HotelProperty.java) JPA model.
+2. **Validation Logic & Reference Data:**
+   - 7 Predefined Amenity categories (Connectivity, Dining, Transport, Recreation, Safety, Accessibility, General) with 18 standard amenities.
+   - Dynamic custom amenity creation with duplicate detection against both predefined and custom facilities, non-blank checks, and <=50 char limits.
+   - 4 Mandatory single-choice guest policies (Children, Pet, Smoking, Extra Bed).
+   - Multi-select identification with at least one required selection (`Passport`, `Driving Licence`, `Voter ID`, `Government-issued Photo ID`, `Aadhaar Card`, `Other`) and conditional custom identification type when `Other` is selected.
+   - Additional property rules multiline textarea with live character counter (up to 1000 characters).
+3. **Backend Service & REST Endpoints:**
+   - DTOs: [`HotelStep4RequestDto.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/main/java/com/traveleasy/hotel/dto/HotelStep4RequestDto.java) and [`HotelStep4ResponseDto.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/main/java/com/traveleasy/hotel/dto/HotelStep4ResponseDto.java).
+   - Step 1, 2, and 3 Response DTOs updated to include Step 4 fields for draft restoration.
+   - Service: [`HotelPropertyService.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/main/java/com/traveleasy/hotel/service/HotelPropertyService.java) `saveStep4Draft()`, `validateStep4Request()`, and legacy `amenities` synthesizer.
+   - Endpoints: `POST /api/hotels/draft/{draftId}/step-4` and `POST /api/hotels/draft/step-4`.
+   - Security: Manager authentication and ownership verification (rejects cross-manager draft manipulation with `403 Forbidden`; unauthenticated requests with `401 Unauthorized`).
+4. **High-Fidelity Angular UI (`media_1794041582166_418ee857.jpg`):**
+   - Stepper header: Step 1, 2, and 3 completed (checkmark pills), Step 4 active (primary circle), Step 5 pending.
+   - Form card: Custom icon box with teal city icon, section header `Step 4 of 5: Facilities & Policies`, subtitle `Add property amenities, define guest policies and share additional property rules.`.
+   - 3 Accordion Subsections:
+     - 1. Property Facilities & Amenities (expanded by default with 7 category cards and + Add Custom Amenity button).
+     - 2. Guest Policies (collapsed initially with 4 mandatory single-choice policies and multi-select ID requirements).
+     - 3. Additional Property Rules (collapsed initially with live 1000-char counter).
+   - Smart Auto-Expansion: Clicking `Next: Review & Submit →` triggers comprehensive validation; if errors exist in a collapsed subsection, it automatically expands the first invalid subsection and highlights the field.
+   - Navigation actions:
+     - `← Previous: Property Information` preserves all entered Step 4 values and returns to Step 3.
+     - `Cancel` prompts unsaved changes confirmation if dirty and returns to My Properties.
+     - `Next: Review & Submit →` validates, submits Step 4 draft to backend, updates state, and advances to Step 5 placeholder.
+   - Draft resumption: opening any saved draft from My Properties restores all Step 1, 2, 3, and 4 fields accurately.
+5. **Verification Results:**
+   - Dedicated test suite [`HotelStep4RegistrationTest.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/test/java/com/traveleasy/hotel/HotelStep4RegistrationTest.java): **13/13 tests passed (100%)**.
+   - Full regression suite in `hotel-service`: **141/141 tests passed (100% pass rate, 0 failures, 0 errors)**.
+   - Angular production build (`ng build`): **Clean bundle generation (0 errors, 1.70 MB production bundle, 18.0s)**.
+- **Report Reference:** [`WP-05_PROPERTY_REGISTRATION_STEP4_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-05_PROPERTY_REGISTRATION_STEP4_IMPLEMENTATION_REPORT.md)
+
+---
+
+## 11. WP-05-REG-5: Hotel Property Registration Wizard — Step 5 (Review & Submit)
+
+- **Status:** **COMPLETED & VERIFIED**
+- **Date Completed:** November 7, 2026
+- **Authoritative Mockup:** `TravelEasy Property Review Dashboard(1).png` (`media_1794045327682_35fea960.jpg`)
+- **Key Deliverables:**
+  - **4 Multi-Open Review Accordions:**
+    1. *Basic Details* (expanded by default): Cover image thumbnail, Property Name, Property Type (with icon), Recognized Property Classification (with star icon), Property Segment (with gem icon), optional Brand Name, and Property Description. Total Rooms (Estimated) completely removed. Zero guest review ratings introduced.
+    2. *Location & Address* (collapsed initially, multi-open): Full formatted single-line address, City, State, Postal Code, Country (with flag).
+    3. *Property Information* (collapsed initially, multi-open): 5 distinct sub-sections covering Contact Details, Business Registration, GST Details (with status badge), Property Manager, Operating Hours.
+    4. *Facilities & Policies* (collapsed initially, multi-open): Selected Amenities (interactive teal chips with category icons), Guest Policies (child, pet, smoking, extra bed, identification), and Additional Property Rules (clean bulleted list).
+  - **Multi-Open Accordion State:** Section toggles operate independently; expanding one section does not collapse others.
+  - **Individual Edit Navigation:** Dedicated `Edit` buttons on all 4 review cards allow managers to navigate directly to any step, modify draft data, persist changes, and return immediately to Step 5 via `Save & Return to Review & Submit →`.
+  - **Mandatory Accuracy Confirmation:** Checkbox enforcing confirmation of information accuracy and agreement with TravelEasy Partner Terms & Conditions.
+  - **Partner Terms & Conditions Modal:** Interactive modal dialog presenting partnership guidelines, safety standards, booking obligations, and privacy compliance.
+  - **Immediate Property Activation (BD-03):** Final submission transitions property status from `DRAFT` to `ACTIVE` without an administrative approval bottleneck, capturing `submitted_at` and `activated_at` timestamps.
+  - **Idempotency & Duplicate Submission Safeguards:** Resubmission of an already active property safely returns the finalized property details without duplicate database records or state mutation.
+  - **Security & Ownership Controls:** Strict manager authentication and ownership checks (`401 Unauthorized` for unauthenticated requests, `403 Forbidden` for non-owners).
+  - **Registration Success View:** Celebratory card rendering property details, active status pill badge, activation timestamp, and navigation to My Properties.
+  - **Automated Verification:**
+    - `HotelStep5RegistrationTest`: **11/11 tests passed (100%)**.
+    - Full `hotel-service` test suite: **152/152 tests passed (100% pass rate, 0 failures, 0 errors)**.
+    - Angular production build (`ng build`): **Clean bundle generation (0 errors, 1.73 MB production bundle)**.
+- **Report Reference:** [`WP-05_PROPERTY_REGISTRATION_STEP5_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-05_PROPERTY_REGISTRATION_STEP5_IMPLEMENTATION_REPORT.md)

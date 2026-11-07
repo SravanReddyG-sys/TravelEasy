@@ -1,5 +1,7 @@
 package com.traveleasy.hotel.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.traveleasy.hotel.dto.*;
 import com.traveleasy.hotel.exception.DomainValidationException;
 import com.traveleasy.hotel.exception.OwnershipAccessDeniedException;
@@ -13,6 +15,7 @@ import com.traveleasy.hotel.repository.RoomTypeRepository;
 import com.traveleasy.hotel.security.HotelSecurityService.CallerPrincipal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import java.time.LocalDateTime;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +37,48 @@ public class HotelPropertyService {
             "SERVICED APARTMENT", "HOMESTAY / BED & BREAKFAST", "HERITAGE HOTEL", "MOTEL"
     );
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    // WP-05 STEP 4: PREDEFINED AMENITIES (7 categories, 18 amenities)
+    public static final Set<String> SUPPORTED_PREDEFINED_AMENITIES = Set.of(
+            // Connectivity
+            "Wi-Fi", "Business Centre",
+            // Dining
+            "Restaurant", "Room Service", "Complimentary Breakfast",
+            // Transport
+            "Parking", "Airport Shuttle",
+            // Recreation
+            "Swimming Pool", "Gym", "Spa",
+            // Safety
+            "CCTV", "24-hour Security", "Fire Safety",
+            // Accessibility
+            "Accessible Entrance", "Elevator",
+            // General
+            "Laundry", "Reception", "Luggage Storage"
+    );
+
+    // WP-05 STEP 4: GUEST POLICIES
+    public static final Set<String> SUPPORTED_CHILDREN_POLICIES = Set.of(
+            "Children Allowed", "Children Not Allowed"
+    );
+
+    public static final Set<String> SUPPORTED_PET_POLICIES = Set.of(
+            "Pets Allowed", "Pets Not Allowed"
+    );
+
+    public static final Set<String> SUPPORTED_SMOKING_POLICIES = Set.of(
+            "Smoking Prohibited", "Designated Smoking Areas", "Smoking Allowed"
+    );
+
+    public static final Set<String> SUPPORTED_EXTRA_BED_POLICIES = Set.of(
+            "Extra Bed Available", "Extra Bed Not Available"
+    );
+
+    // WP-05 STEP 4: ACCEPTED IDENTIFICATION TYPES
+    public static final Set<String> SUPPORTED_ID_TYPES = Set.of(
+            "Passport", "Driving Licence", "Voter ID", "Government-issued Photo ID", "Aadhaar Card", "Other"
+    );
+
     public static final Set<String> SUPPORTED_CLASSIFICATIONS = Set.of(
             "NOT_CLASSIFIED", "NOT OFFICIALLY CLASSIFIED",
             "1_STAR", "1 STAR",
@@ -47,6 +92,22 @@ public class HotelPropertyService {
 
     public static final Set<String> SUPPORTED_SEGMENTS = Set.of(
             "STANDARD", "COMFORT", "PREMIUM", "LUXURY", "ULTRA_LUXURY", "ULTRA LUXURY"
+    );
+
+    public static final Set<String> SUPPORTED_BUSINESS_REGISTRATION_TYPES = Set.of(
+            "PRIVATE LIMITED COMPANY",
+            "PUBLIC LIMITED COMPANY",
+            "PARTNERSHIP",
+            "LIMITED LIABILITY PARTNERSHIP (LLP)",
+            "LIMITED LIABILITY PARTNERSHIP",
+            "LLP",
+            "SOLE PROPRIETORSHIP",
+            "OTHER"
+    );
+
+    public static final Set<String> SUPPORTED_RECEPTION_AVAILABILITIES = Set.of(
+            "24-HOUR RECEPTION", "24_HOUR", "24_HOUR_RECEPTION",
+            "LIMITED OPERATING HOURS", "LIMITED_HOURS", "LIMITED_OPERATING_HOURS"
     );
 
     // =========================================================================
@@ -174,6 +235,442 @@ public class HotelPropertyService {
 
         return HotelStep1ResponseDto.fromEntity(saved, savedImages);
     }
+    // =========================================================================
+    // WP-05 STEP 4: FACILITIES & POLICIES DRAFT
+    // =========================================================================
+
+    @Transactional
+    public HotelStep4ResponseDto saveStep4Draft(Long draftId, HotelStep4RequestDto request, CallerPrincipal principal) {
+        validatePrincipal(principal);
+        final Long effectiveDraftId = (draftId != null && draftId > 0) ? draftId : request.getDraftId();
+        if (effectiveDraftId == null || effectiveDraftId <= 0) {
+            throw new DomainValidationException("Valid draft ID is mandatory to save Step 4 facilities and policies");
+        }
+
+        HotelProperty property = hotelRepository.findById(effectiveDraftId)
+                .orElseThrow(() -> new ResourceNotFoundException("Property draft not found with ID: " + effectiveDraftId));
+
+        enforcePropertyOwnership(property, principal);
+
+        if (!"DRAFT".equalsIgnoreCase(property.getStatus())) {
+            throw new DomainValidationException("Only property drafts in DRAFT status can be modified in the registration wizard");
+        }
+
+        validateStep4Request(request);
+
+        // Normalize and extract predefined amenities
+        List<String> normalizedPredefined = new ArrayList<>();
+        if (request.getPredefinedAmenities() != null) {
+            for (String item : request.getPredefinedAmenities()) {
+                if (item != null && !item.trim().isEmpty()) {
+                    String norm = normalizePredefinedAmenity(item.trim());
+                    if (!normalizedPredefined.contains(norm)) {
+                        normalizedPredefined.add(norm);
+                    }
+                }
+            }
+        }
+
+        // Normalize and extract custom amenities
+        List<String> normalizedCustom = new ArrayList<>();
+        if (request.getCustomAmenities() != null) {
+            for (String item : request.getCustomAmenities()) {
+                if (item != null && !item.trim().isEmpty()) {
+                    String trimmed = item.trim();
+                    boolean exists = normalizedCustom.stream().anyMatch(c -> c.equalsIgnoreCase(trimmed));
+                    if (!exists) {
+                        normalizedCustom.add(trimmed);
+                    }
+                }
+            }
+        }
+
+        // Guest Policies
+        String childrenPolicy = normalizePolicyOption(request.getChildrenPolicy(), SUPPORTED_CHILDREN_POLICIES, "Children policy");
+        String petPolicy = normalizePolicyOption(request.getPetPolicy(), SUPPORTED_PET_POLICIES, "Pet policy");
+        String smokingPolicy = normalizePolicyOption(request.getSmokingPolicy(), SUPPORTED_SMOKING_POLICIES, "Smoking policy");
+        String extraBedPolicy = normalizePolicyOption(request.getExtraBedPolicy(), SUPPORTED_EXTRA_BED_POLICIES, "Extra bed policy");
+
+        // Identification Requirements
+        List<String> normalizedIdTypes = new ArrayList<>();
+        for (String idType : request.getAcceptedIdentificationTypes()) {
+            if (idType != null && !idType.trim().isEmpty()) {
+                String norm = normalizeIdType(idType.trim());
+                if (!normalizedIdTypes.contains(norm)) {
+                    normalizedIdTypes.add(norm);
+                }
+            }
+        }
+
+        String customIdType = null;
+        if (normalizedIdTypes.contains("Other")) {
+            customIdType = request.getCustomIdentificationType() != null ? request.getCustomIdentificationType().trim() : null;
+        }
+
+        // Additional Rules
+        String additionalRules = (request.getAdditionalRules() != null && !request.getAdditionalRules().trim().isEmpty())
+                ? request.getAdditionalRules().trim() : null;
+
+        // Serialize to JSON
+        try {
+            property.setPredefinedAmenities(OBJECT_MAPPER.writeValueAsString(normalizedPredefined));
+            property.setCustomAmenities(OBJECT_MAPPER.writeValueAsString(normalizedCustom));
+            property.setAcceptedIdentificationTypes(OBJECT_MAPPER.writeValueAsString(normalizedIdTypes));
+        } catch (Exception e) {
+            log.error("Failed to serialize Step 4 lists to JSON: {}", e.getMessage());
+            throw new DomainValidationException("Failed to serialize facilities or identification requirements");
+        }
+
+        property.setChildrenPolicy(childrenPolicy);
+        property.setPetPolicy(petPolicy);
+        property.setSmokingPolicy(smokingPolicy);
+        property.setExtraBedPolicy(extraBedPolicy);
+        property.setCustomIdentificationType(customIdType);
+        property.setAdditionalRules(additionalRules);
+
+        // Update legacy amenities column (backward compatibility)
+        List<String> allAmenities = new ArrayList<>(normalizedPredefined);
+        allAmenities.addAll(normalizedCustom);
+        if (!allAmenities.isEmpty()) {
+            String combined = String.join(", ", allAmenities);
+            if (combined.length() > 255) {
+                combined = combined.substring(0, 252) + "...";
+            }
+            property.setAmenities(combined);
+        } else {
+            property.setAmenities(null);
+        }
+
+        // Advance registration step to at least 4
+        if (property.getRegistrationStep() == null || property.getRegistrationStep() < 4) {
+            property.setRegistrationStep(4);
+        }
+
+        HotelProperty saved = hotelRepository.save(property);
+        log.info("Hotel property draft ID: {} (Step 4: Facilities & Policies) saved by manager ID: {}", saved.getId(), principal.userId());
+
+        List<HotelImage> images = hotelImageRepository.findByHotelIdOrderByDisplayOrderAsc(saved.getId());
+        return HotelStep4ResponseDto.fromEntity(saved, images);
+    }
+
+    private void validateStep4Request(HotelStep4RequestDto req) {
+        if (req == null) {
+            throw new DomainValidationException("Step 4 facilities and policies payload cannot be null");
+        }
+
+        // 1. Predefined amenities validation
+        if (req.getPredefinedAmenities() != null) {
+            for (String item : req.getPredefinedAmenities()) {
+                if (item != null && !item.trim().isEmpty()) {
+                    normalizePredefinedAmenity(item.trim());
+                }
+            }
+        }
+
+        // 2. Custom amenities validation
+        if (req.getCustomAmenities() != null) {
+            Set<String> seenCustom = new HashSet<>();
+            for (String custom : req.getCustomAmenities()) {
+                if (custom == null || custom.trim().isEmpty()) {
+                    throw new DomainValidationException("Custom amenity name cannot be empty or whitespace");
+                }
+                String trimmed = custom.trim();
+                if (trimmed.length() > 50) {
+                    throw new DomainValidationException("Custom amenity name must not exceed 50 characters: " + trimmed);
+                }
+                // Prohibit duplicates of predefined amenities
+                for (String predefined : SUPPORTED_PREDEFINED_AMENITIES) {
+                    if (predefined.equalsIgnoreCase(trimmed)) {
+                        throw new DomainValidationException("Custom amenity '" + trimmed + "' already exists as a predefined facility");
+                    }
+                }
+                // Prohibit duplicate custom amenities
+                String lower = trimmed.toLowerCase();
+                if (seenCustom.contains(lower)) {
+                    throw new DomainValidationException("Duplicate custom amenity: " + trimmed);
+                }
+                seenCustom.add(lower);
+            }
+        }
+
+        // 3. Guest Policies Validation
+        if (req.getChildrenPolicy() == null || req.getChildrenPolicy().trim().isEmpty()) {
+            throw new DomainValidationException("Children policy is mandatory");
+        }
+        normalizePolicyOption(req.getChildrenPolicy(), SUPPORTED_CHILDREN_POLICIES, "Children policy");
+
+        if (req.getPetPolicy() == null || req.getPetPolicy().trim().isEmpty()) {
+            throw new DomainValidationException("Pet policy is mandatory");
+        }
+        normalizePolicyOption(req.getPetPolicy(), SUPPORTED_PET_POLICIES, "Pet policy");
+
+        if (req.getSmokingPolicy() == null || req.getSmokingPolicy().trim().isEmpty()) {
+            throw new DomainValidationException("Smoking policy is mandatory");
+        }
+        normalizePolicyOption(req.getSmokingPolicy(), SUPPORTED_SMOKING_POLICIES, "Smoking policy");
+
+        if (req.getExtraBedPolicy() == null || req.getExtraBedPolicy().trim().isEmpty()) {
+            throw new DomainValidationException("Extra bed policy is mandatory");
+        }
+        normalizePolicyOption(req.getExtraBedPolicy(), SUPPORTED_EXTRA_BED_POLICIES, "Extra bed policy");
+
+        // 4. Identification Requirements Validation
+        if (req.getAcceptedIdentificationTypes() == null || req.getAcceptedIdentificationTypes().isEmpty()) {
+            throw new DomainValidationException("At least one accepted identification type is required");
+        }
+        boolean hasOther = false;
+        Set<String> seenIds = new HashSet<>();
+        for (String idType : req.getAcceptedIdentificationTypes()) {
+            if (idType == null || idType.trim().isEmpty()) {
+                throw new DomainValidationException("Identification type cannot be empty");
+            }
+            String norm = normalizeIdType(idType.trim());
+            if (seenIds.contains(norm)) {
+                throw new DomainValidationException("Duplicate identification type: " + norm);
+            }
+            seenIds.add(norm);
+            if ("Other".equalsIgnoreCase(norm)) {
+                hasOther = true;
+            }
+        }
+
+        if (hasOther) {
+            if (req.getCustomIdentificationType() == null || req.getCustomIdentificationType().trim().isEmpty()) {
+                throw new DomainValidationException("Custom identification specification is required when 'Other' is selected");
+            }
+            if (req.getCustomIdentificationType().trim().length() > 150) {
+                throw new DomainValidationException("Custom identification requirement must not exceed 150 characters");
+            }
+        }
+
+        // 5. Additional Property Rules Validation
+        if (req.getAdditionalRules() != null && req.getAdditionalRules().trim().length() > 1000) {
+            throw new DomainValidationException("Additional property rules must not exceed 1000 characters");
+        }
+    }
+
+    private String normalizePredefinedAmenity(String name) {
+        for (String supported : SUPPORTED_PREDEFINED_AMENITIES) {
+            if (supported.equalsIgnoreCase(name)) {
+                return supported;
+            }
+        }
+        throw new DomainValidationException("Unsupported predefined amenity: " + name);
+    }
+
+    private String normalizePolicyOption(String input, Set<String> allowedOptions, String fieldName) {
+        if (input == null || input.trim().isEmpty()) {
+            throw new DomainValidationException(fieldName + " is mandatory");
+        }
+        String clean = input.trim();
+        for (String opt : allowedOptions) {
+            if (opt.equalsIgnoreCase(clean) || opt.replace(" ", "_").equalsIgnoreCase(clean)) {
+                return opt;
+            }
+        }
+        throw new DomainValidationException("Invalid " + fieldName.toLowerCase() + ": '" + input + "'. Supported options: " + allowedOptions);
+    }
+
+    private String normalizeIdType(String input) {
+        String clean = input.trim();
+        for (String opt : SUPPORTED_ID_TYPES) {
+            if (opt.equalsIgnoreCase(clean) || opt.replace(" ", "_").equalsIgnoreCase(clean)) {
+                return opt;
+            }
+        }
+        throw new DomainValidationException("Unsupported identification type: '" + input + "'. Supported options: " + SUPPORTED_ID_TYPES);
+    }
+
+
+
+    // =========================================================================
+    // WP-05 STEP 5: FINAL REGISTRATION SUBMISSION & ACTIVATION (BD-03)
+    // =========================================================================
+
+    @Transactional
+    public HotelStep5ResponseDto submitPropertyRegistration(Long draftId, HotelStep5SubmitRequestDto request, CallerPrincipal principal) {
+        validatePrincipal(principal);
+        final Long effectiveDraftId = (draftId != null && draftId > 0) ? draftId : (request != null ? request.getDraftId() : null);
+        if (effectiveDraftId == null || effectiveDraftId <= 0) {
+            throw new DomainValidationException("Valid draft ID is mandatory to finalize property registration");
+        }
+
+        HotelProperty property = hotelRepository.findById(effectiveDraftId)
+                .orElseThrow(() -> new ResourceNotFoundException("Property draft not found with ID: " + effectiveDraftId));
+
+        enforcePropertyOwnership(property, principal);
+
+        // Idempotency: If already ACTIVE, return existing active property details safely
+        if ("ACTIVE".equalsIgnoreCase(property.getStatus()) && property.getRegistrationStep() != null && property.getRegistrationStep() == 5) {
+            log.info("Property ID: {} is already ACTIVE. Returning finalized property details idempotently.", property.getId());
+            List<HotelImage> images = hotelImageRepository.findByHotelIdOrderByDisplayOrderAsc(property.getId());
+            return HotelStep5ResponseDto.fromEntity(property, images, "Property is already active in your portfolio.");
+        }
+
+        if (!"DRAFT".equalsIgnoreCase(property.getStatus())) {
+            throw new DomainValidationException("Only properties in DRAFT status can be submitted for final registration");
+        }
+
+        // Validate accuracy confirmation
+        if (request != null && Boolean.FALSE.equals(request.getConfirmationAccepted())) {
+            throw new DomainValidationException("You must confirm that the information provided is accurate and complete and agree to comply with TravelEasy's Partner Terms & Conditions");
+        }
+
+        // Validate complete draft data across all 4 steps
+        validateCompleteDraftForSubmission(property);
+
+        // Transition from DRAFT to ACTIVE immediately per BD-03
+        LocalDateTime now = LocalDateTime.now();
+        property.setStatus("ACTIVE");
+        property.setRegistrationStep(5);
+        property.setSubmittedAt(now);
+        property.setActivatedAt(now);
+
+        HotelProperty saved = hotelRepository.save(property);
+        log.info("Hotel property ID: {} successfully registered and activated by manager ID: {}", saved.getId(), principal.userId());
+
+        List<HotelImage> images = hotelImageRepository.findByHotelIdOrderByDisplayOrderAsc(saved.getId());
+        return HotelStep5ResponseDto.fromEntity(saved, images, "Property registration submitted and activated successfully.");
+    }
+
+    private void validateCompleteDraftForSubmission(HotelProperty property) {
+        if (property == null) {
+            throw new DomainValidationException("Property draft cannot be null for submission");
+        }
+
+        // --- STEP 1 VALIDATIONS ---
+        if (property.getName() == null || property.getName().trim().isEmpty()) {
+            throw new DomainValidationException("Step 1 Incomplete: Property name is mandatory");
+        }
+        if (property.getPropertyType() == null || property.getPropertyType().trim().isEmpty()) {
+            throw new DomainValidationException("Step 1 Incomplete: Property type is mandatory");
+        }
+        if (property.getPropertyClassification() == null || property.getPropertyClassification().trim().isEmpty()) {
+            throw new DomainValidationException("Step 1 Incomplete: Recognized property classification is mandatory");
+        }
+        if ("OTHER".equalsIgnoreCase(property.getPropertyClassification()) &&
+                (property.getCustomClassification() == null || property.getCustomClassification().trim().isEmpty())) {
+            throw new DomainValidationException("Step 1 Incomplete: Custom classification is mandatory when 'Other' is selected");
+        }
+        if (property.getPropertySegment() == null || property.getPropertySegment().trim().isEmpty()) {
+            throw new DomainValidationException("Step 1 Incomplete: Property segment is mandatory");
+        }
+        if (property.getDescription() == null || property.getDescription().trim().isEmpty()) {
+            throw new DomainValidationException("Step 1 Incomplete: Short description is mandatory");
+        }
+        if (property.getDescription().trim().length() > 300) {
+            throw new DomainValidationException("Step 1 Incomplete: Short description must not exceed 300 characters");
+        }
+        List<HotelImage> images = hotelImageRepository.findByHotelIdOrderByDisplayOrderAsc(property.getId());
+        if (images == null || images.isEmpty()) {
+            throw new DomainValidationException("Step 1 Incomplete: At least one property image is required");
+        }
+        boolean hasCover = images.stream().anyMatch(HotelImage::isCover);
+        if (!hasCover) {
+            throw new DomainValidationException("Step 1 Incomplete: Exactly one image must be designated as the Cover Image");
+        }
+
+        // --- STEP 2 VALIDATIONS ---
+        if (property.getAddressLine1() == null || property.getAddressLine1().trim().isEmpty()) {
+            throw new DomainValidationException("Step 2 Incomplete: Address Line 1 is mandatory");
+        }
+        if (property.getCountry() == null || property.getCountry().trim().isEmpty()) {
+            throw new DomainValidationException("Step 2 Incomplete: Country is mandatory");
+        }
+        if (!AddressReferenceData.isCountrySupported(property.getCountry())) {
+            throw new DomainValidationException("Step 2 Incomplete: Country '" + property.getCountry() + "' is not supported");
+        }
+        if (property.getState() == null || property.getState().trim().isEmpty()) {
+            throw new DomainValidationException("Step 2 Incomplete: State is mandatory");
+        }
+        if (!AddressReferenceData.isStateValidForCountry(property.getCountry(), property.getState())) {
+            throw new DomainValidationException("Step 2 Incomplete: State '" + property.getState() + "' is not valid for country " + property.getCountry());
+        }
+        if (property.getCity() == null || property.getCity().trim().isEmpty()) {
+            throw new DomainValidationException("Step 2 Incomplete: City is mandatory");
+        }
+        if (property.getPostalCode() == null || property.getPostalCode().trim().isEmpty()) {
+            throw new DomainValidationException("Step 2 Incomplete: Postal code is mandatory");
+        }
+        if (!AddressReferenceData.isValidPostalCode(property.getCountry(), property.getPostalCode())) {
+            throw new DomainValidationException("Step 2 Incomplete: Postal code format is invalid for " + property.getCountry());
+        }
+
+        // --- STEP 3 VALIDATIONS ---
+        if (property.getPropertyContactNumber() == null || property.getPropertyContactNumber().trim().isEmpty()) {
+            throw new DomainValidationException("Step 3 Incomplete: Property contact number is mandatory");
+        }
+        if (property.getPropertyEmail() == null || property.getPropertyEmail().trim().isEmpty()) {
+            throw new DomainValidationException("Step 3 Incomplete: Property email address is mandatory");
+        }
+        if (property.getRegisteredBusinessName() == null || property.getRegisteredBusinessName().trim().isEmpty()) {
+            throw new DomainValidationException("Step 3 Incomplete: Registered business name is mandatory");
+        }
+        if (property.getBusinessRegistrationType() == null || property.getBusinessRegistrationType().trim().isEmpty()) {
+            throw new DomainValidationException("Step 3 Incomplete: Business registration type is mandatory");
+        }
+        if ("OTHER".equalsIgnoreCase(normalizeBusinessRegistrationType(property.getBusinessRegistrationType())) &&
+                (property.getOtherBusinessRegistrationType() == null || property.getOtherBusinessRegistrationType().trim().isEmpty())) {
+            throw new DomainValidationException("Step 3 Incomplete: Custom business registration type is mandatory when 'Other' is selected");
+        }
+        if (property.getBusinessRegistrationNumber() == null || property.getBusinessRegistrationNumber().trim().isEmpty()) {
+            throw new DomainValidationException("Step 3 Incomplete: Business registration number is mandatory");
+        }
+        if (Boolean.TRUE.equals(property.getIsGstRegistered())) {
+            if (property.getGstin() == null || property.getGstin().trim().isEmpty()) {
+                throw new DomainValidationException("Step 3 Incomplete: GSTIN is mandatory when GST registered");
+            }
+            if (!property.getGstin().trim().matches("^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$")) {
+                throw new DomainValidationException("Step 3 Incomplete: Invalid GSTIN format");
+            }
+            if (property.getGstLegalName() == null || property.getGstLegalName().trim().isEmpty()) {
+                throw new DomainValidationException("Step 3 Incomplete: GST legal name is mandatory when GST registered");
+            }
+            if (property.getGstState() == null || property.getGstState().trim().isEmpty()) {
+                throw new DomainValidationException("Step 3 Incomplete: GST state is mandatory when GST registered");
+            }
+        }
+        if (property.getPropertyManagerName() == null || property.getPropertyManagerName().trim().isEmpty() ||
+                property.getPropertyManagerDesignation() == null || property.getPropertyManagerDesignation().trim().isEmpty() ||
+                property.getPropertyManagerContactNumber() == null || property.getPropertyManagerContactNumber().trim().isEmpty() ||
+                property.getPropertyManagerEmail() == null || property.getPropertyManagerEmail().trim().isEmpty()) {
+            throw new DomainValidationException("Step 3 Incomplete: Property operational manager details are mandatory");
+        }
+        if (property.getCheckInTime() == null || property.getCheckInTime().trim().isEmpty() ||
+                property.getCheckOutTime() == null || property.getCheckOutTime().trim().isEmpty() ||
+                property.getReceptionAvailability() == null || property.getReceptionAvailability().trim().isEmpty()) {
+            throw new DomainValidationException("Step 3 Incomplete: Operating hours and reception availability are mandatory");
+        }
+        if (property.getReceptionAvailability().toLowerCase().contains("limited") &&
+                (property.getReceptionOpeningTime() == null || property.getReceptionOpeningTime().trim().isEmpty() ||
+                 property.getReceptionClosingTime() == null || property.getReceptionClosingTime().trim().isEmpty())) {
+            throw new DomainValidationException("Step 3 Incomplete: Limited reception opening and closing times are mandatory");
+        }
+
+        // --- STEP 4 VALIDATIONS ---
+        if (property.getChildrenPolicy() == null || property.getChildrenPolicy().trim().isEmpty()) {
+            throw new DomainValidationException("Step 4 Incomplete: Children policy is mandatory");
+        }
+        if (property.getPetPolicy() == null || property.getPetPolicy().trim().isEmpty()) {
+            throw new DomainValidationException("Step 4 Incomplete: Pet policy is mandatory");
+        }
+        if (property.getSmokingPolicy() == null || property.getSmokingPolicy().trim().isEmpty()) {
+            throw new DomainValidationException("Step 4 Incomplete: Smoking policy is mandatory");
+        }
+        if (property.getExtraBedPolicy() == null || property.getExtraBedPolicy().trim().isEmpty()) {
+            throw new DomainValidationException("Step 4 Incomplete: Extra bed policy is mandatory");
+        }
+        List<String> idTypes = HotelStep4ResponseDto.parseJsonList(property.getAcceptedIdentificationTypes());
+        if (idTypes == null || idTypes.isEmpty()) {
+            throw new DomainValidationException("Step 4 Incomplete: At least one accepted identification requirement is mandatory");
+        }
+        if (idTypes.contains("Other") && (property.getCustomIdentificationType() == null || property.getCustomIdentificationType().trim().isEmpty())) {
+            throw new DomainValidationException("Step 4 Incomplete: Custom identification specification is mandatory when 'Other' is selected");
+        }
+        if (property.getAdditionalRules() != null && property.getAdditionalRules().trim().length() > 1000) {
+            throw new DomainValidationException("Step 4 Incomplete: Additional property rules must not exceed 1000 characters");
+        }
+    }
 
     @Transactional(readOnly = true)
     public HotelStep1ResponseDto getDraft(Long draftId, CallerPrincipal principal) {
@@ -226,6 +723,311 @@ public class HotelPropertyService {
         hotelRepository.delete(property);
         log.info("Manager ID {} deleted draft ID {} and removed associated image files", principal.userId(), draftId);
     }
+
+    // =========================================================================
+    // 1B. PROPERTY REGISTRATION WIZARD (WP-05 STEP 2: LOCATION & ADDRESS)
+    // =========================================================================
+
+    @Transactional
+    public HotelStep2ResponseDto saveStep2Draft(Long draftId, HotelStep2RequestDto request, CallerPrincipal principal) {
+        validatePrincipal(principal);
+        final Long effectiveDraftId = (draftId != null && draftId > 0) ? draftId : request.getDraftId();
+        if (effectiveDraftId == null || effectiveDraftId <= 0) {
+            throw new DomainValidationException("Valid draft ID is mandatory to save Step 2 address details");
+        }
+
+        HotelProperty property = hotelRepository.findById(effectiveDraftId)
+                .orElseThrow(() -> new ResourceNotFoundException("Property draft not found with ID: " + effectiveDraftId));
+
+        enforcePropertyOwnership(property, principal);
+
+        if (!"DRAFT".equalsIgnoreCase(property.getStatus())) {
+            throw new DomainValidationException("Only property drafts in DRAFT status can be modified in the registration wizard");
+        }
+
+        validateStep2Request(request);
+
+        // Update structured address fields
+        property.setAddressLine1(request.getAddressLine1().trim());
+        property.setAddressLine2(request.getAddressLine2() != null && !request.getAddressLine2().trim().isEmpty()
+                ? request.getAddressLine2().trim() : null);
+        property.setCountry(AddressReferenceData.normalizeCountry(request.getCountry()));
+        property.setState(AddressReferenceData.normalizeState(request.getCountry(), request.getState()));
+        property.setCity(request.getCity().trim());
+        property.setPostalCode(request.getPostalCode().trim());
+        property.setLandmark(request.getLandmark() != null && !request.getLandmark().trim().isEmpty()
+                ? request.getLandmark().trim() : null);
+
+        // Synchronize legacy address field for backward compatibility
+        String legacyAddress = buildLegacyAddress(property);
+        property.setAddress(legacyAddress);
+
+        // Advance registration step to at least 2
+        if (property.getRegistrationStep() == null || property.getRegistrationStep() < 2) {
+            property.setRegistrationStep(2);
+        }
+
+        HotelProperty saved = hotelRepository.save(property);
+        log.info("Hotel property draft ID: {} (Step 2: Location & Address) saved by manager ID: {}", saved.getId(), principal.userId());
+
+        List<HotelImage> images = hotelImageRepository.findByHotelIdOrderByDisplayOrderAsc(saved.getId());
+        return HotelStep2ResponseDto.fromEntity(saved, images);
+    }
+
+    private String buildLegacyAddress(HotelProperty property) {
+        StringBuilder sb = new StringBuilder();
+        if (property.getAddressLine1() != null && !property.getAddressLine1().isBlank()) {
+            sb.append(property.getAddressLine1().trim());
+        }
+        if (property.getAddressLine2() != null && !property.getAddressLine2().isBlank()) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(property.getAddressLine2().trim());
+        }
+        if (property.getLandmark() != null && !property.getLandmark().isBlank()) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(property.getLandmark().trim());
+        }
+        if (property.getCity() != null && !property.getCity().isBlank()) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(property.getCity().trim());
+        }
+        if (property.getState() != null && !property.getState().isBlank()) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(property.getState().trim());
+        }
+        if (property.getPostalCode() != null && !property.getPostalCode().isBlank()) {
+            if (sb.length() > 0) sb.append(" - ");
+            sb.append(property.getPostalCode().trim());
+        }
+        if (property.getCountry() != null && !property.getCountry().isBlank()) {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(property.getCountry().trim());
+        }
+        return sb.toString();
+    }
+
+    // =========================================================================
+    // 1C. PROPERTY REGISTRATION WIZARD (WP-05 STEP 3: PROPERTY INFORMATION)
+    // =========================================================================
+
+    @Transactional
+    public HotelStep3ResponseDto saveStep3Draft(Long draftId, HotelStep3RequestDto request, CallerPrincipal principal) {
+        validatePrincipal(principal);
+        final Long effectiveDraftId = (draftId != null && draftId > 0) ? draftId : request.getDraftId();
+        if (effectiveDraftId == null || effectiveDraftId <= 0) {
+            throw new DomainValidationException("Valid draft ID is mandatory to save Step 3 property information");
+        }
+
+        HotelProperty property = hotelRepository.findById(effectiveDraftId)
+                .orElseThrow(() -> new ResourceNotFoundException("Property draft not found with ID: " + effectiveDraftId));
+
+        enforcePropertyOwnership(property, principal);
+
+        if (!"DRAFT".equalsIgnoreCase(property.getStatus())) {
+            throw new DomainValidationException("Only property drafts in DRAFT status can be modified in the registration wizard");
+        }
+
+        validateStep3Request(request);
+
+        // 1. Property Contact
+        property.setPropertyContactNumber(request.getPropertyContactNumber().trim());
+        property.setAlternateContactNumber(request.getAlternateContactNumber() != null && !request.getAlternateContactNumber().trim().isEmpty()
+                ? request.getAlternateContactNumber().trim() : null);
+        property.setPropertyEmail(request.getPropertyEmail().trim().toLowerCase());
+        property.setWebsiteUrl(request.getWebsiteUrl() != null && !request.getWebsiteUrl().trim().isEmpty()
+                ? request.getWebsiteUrl().trim() : null);
+
+        // 2. Business Registration
+        property.setRegisteredBusinessName(request.getRegisteredBusinessName().trim());
+        String regType = normalizeBusinessRegistrationType(request.getBusinessRegistrationType());
+        property.setBusinessRegistrationType(regType);
+        if ("OTHER".equalsIgnoreCase(regType)) {
+            property.setOtherBusinessRegistrationType(request.getOtherBusinessRegistrationType().trim());
+        } else {
+            property.setOtherBusinessRegistrationType(null);
+        }
+        property.setBusinessRegistrationNumber(request.getBusinessRegistrationNumber().trim());
+        property.setRegisteredBusinessAddress(request.getRegisteredBusinessAddress() != null && !request.getRegisteredBusinessAddress().trim().isEmpty()
+                ? request.getRegisteredBusinessAddress().trim() : null);
+
+        // 3. GST Details
+        boolean isGst = Boolean.TRUE.equals(request.getIsGstRegistered());
+        property.setIsGstRegistered(isGst);
+        if (isGst) {
+            property.setGstin(request.getGstin().trim().toUpperCase());
+            property.setGstLegalName(request.getGstLegalName().trim());
+            property.setGstState(AddressReferenceData.normalizeState("India", request.getGstState()));
+        } else {
+            property.setGstin(null);
+            property.setGstLegalName(null);
+            property.setGstState(null);
+        }
+
+        // 4. Property Manager Details
+        property.setPropertyManagerName(request.getPropertyManagerName().trim());
+        property.setPropertyManagerDesignation(request.getPropertyManagerDesignation().trim());
+        property.setPropertyManagerContactNumber(request.getPropertyManagerContactNumber().trim());
+        property.setPropertyManagerEmail(request.getPropertyManagerEmail().trim().toLowerCase());
+
+        // 5. Operating Hours
+        property.setCheckInTime(request.getCheckInTime().trim());
+        property.setCheckOutTime(request.getCheckOutTime().trim());
+        String recAvail = normalizeReceptionAvailability(request.getReceptionAvailability());
+        property.setReceptionAvailability(recAvail);
+        if ("LIMITED_HOURS".equalsIgnoreCase(recAvail) || "LIMITED OPERATING HOURS".equalsIgnoreCase(recAvail)) {
+            property.setReceptionOpeningTime(request.getReceptionOpeningTime() != null ? request.getReceptionOpeningTime().trim() : null);
+            property.setReceptionClosingTime(request.getReceptionClosingTime() != null ? request.getReceptionClosingTime().trim() : null);
+        } else {
+            property.setReceptionOpeningTime(null);
+            property.setReceptionClosingTime(null);
+        }
+
+        // Advance registration step to at least 3
+        if (property.getRegistrationStep() == null || property.getRegistrationStep() < 3) {
+            property.setRegistrationStep(3);
+        }
+
+        HotelProperty saved = hotelRepository.save(property);
+        log.info("Hotel property draft ID: {} (Step 3: Property Information) saved by manager ID: {}", saved.getId(), principal.userId());
+
+        List<HotelImage> images = hotelImageRepository.findByHotelIdOrderByDisplayOrderAsc(saved.getId());
+        return HotelStep3ResponseDto.fromEntity(saved, images);
+    }
+
+    private void validateStep3Request(HotelStep3RequestDto req) {
+        if (req == null) {
+            throw new DomainValidationException("Step 3 property information request payload cannot be null");
+        }
+
+        // 1. Contact Validation
+        if (req.getPropertyContactNumber() == null || req.getPropertyContactNumber().trim().isEmpty()) {
+            throw new DomainValidationException("Property contact number is mandatory");
+        }
+        String cleanPhone = req.getPropertyContactNumber().trim();
+        if (!cleanPhone.matches("^[+]?[0-9\\s\\-\\(\\)]{7,20}$")) {
+            throw new DomainValidationException("Property contact number format is invalid. Must be 7-20 digits with optional calling code");
+        }
+        if (req.getAlternateContactNumber() != null && !req.getAlternateContactNumber().trim().isEmpty()) {
+            String altPhone = req.getAlternateContactNumber().trim();
+            if (!altPhone.matches("^[+]?[0-9\\s\\-\\(\\)]{7,20}$")) {
+                throw new DomainValidationException("Alternate contact number format is invalid. Must be 7-20 digits with optional calling code");
+            }
+        }
+        if (req.getPropertyEmail() == null || req.getPropertyEmail().trim().isEmpty()) {
+            throw new DomainValidationException("Property email address is mandatory");
+        }
+        if (!req.getPropertyEmail().trim().matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+            throw new DomainValidationException("Property email address format is invalid");
+        }
+        if (req.getWebsiteUrl() != null && !req.getWebsiteUrl().trim().isEmpty()) {
+            String url = req.getWebsiteUrl().trim().toLowerCase();
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                throw new DomainValidationException("Website URL must start with http:// or https://");
+            }
+        }
+
+        // 2. Business Registration Validation
+        if (req.getRegisteredBusinessName() == null || req.getRegisteredBusinessName().trim().isEmpty()) {
+            throw new DomainValidationException("Registered business name is mandatory");
+        }
+        if (req.getBusinessRegistrationType() == null || req.getBusinessRegistrationType().trim().isEmpty()) {
+            throw new DomainValidationException("Business registration type is mandatory");
+        }
+        String normalizedType = normalizeBusinessRegistrationType(req.getBusinessRegistrationType());
+        if ("OTHER".equalsIgnoreCase(normalizedType)) {
+            if (req.getOtherBusinessRegistrationType() == null || req.getOtherBusinessRegistrationType().trim().isEmpty()) {
+                throw new DomainValidationException("Please specify the custom business registration type when 'Other' is selected");
+            }
+        }
+        if (req.getBusinessRegistrationNumber() == null || req.getBusinessRegistrationNumber().trim().isEmpty()) {
+            throw new DomainValidationException("Business registration number is mandatory");
+        }
+
+        // 3. GST Validation
+        if (Boolean.TRUE.equals(req.getIsGstRegistered())) {
+            if (req.getGstin() == null || req.getGstin().trim().isEmpty()) {
+                throw new DomainValidationException("GSTIN is mandatory when business is GST registered");
+            }
+            String gstin = req.getGstin().trim().toUpperCase();
+            if (!gstin.matches("^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$")) {
+                throw new DomainValidationException("GSTIN format is invalid. Must follow standard 15-character Indian GST format (e.g., 36AAAAA0000A1Z5)");
+            }
+            if (req.getGstLegalName() == null || req.getGstLegalName().trim().isEmpty()) {
+                throw new DomainValidationException("GST legal name is mandatory when business is GST registered");
+            }
+            if (req.getGstState() == null || req.getGstState().trim().isEmpty()) {
+                throw new DomainValidationException("GST state is mandatory when business is GST registered");
+            }
+            if (!AddressReferenceData.INDIAN_STATES_AND_UTS.contains(req.getGstState().trim())) {
+                throw new DomainValidationException("GST state must be a valid Indian state or union territory");
+            }
+        }
+
+        // 4. Property Manager Validation
+        if (req.getPropertyManagerName() == null || req.getPropertyManagerName().trim().isEmpty()) {
+            throw new DomainValidationException("Property manager name is mandatory");
+        }
+        if (req.getPropertyManagerDesignation() == null || req.getPropertyManagerDesignation().trim().isEmpty()) {
+            throw new DomainValidationException("Property manager designation is mandatory");
+        }
+        if (req.getPropertyManagerContactNumber() == null || req.getPropertyManagerContactNumber().trim().isEmpty()) {
+            throw new DomainValidationException("Property manager contact number is mandatory");
+        }
+        String mgrPhone = req.getPropertyManagerContactNumber().trim();
+        if (!mgrPhone.matches("^[+]?[0-9\\s\\-\\(\\)]{7,20}$")) {
+            throw new DomainValidationException("Property manager contact number format is invalid. Must be 7-20 digits with optional calling code");
+        }
+        if (req.getPropertyManagerEmail() == null || req.getPropertyManagerEmail().trim().isEmpty()) {
+            throw new DomainValidationException("Property manager email address is mandatory");
+        }
+        if (!req.getPropertyManagerEmail().trim().matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+            throw new DomainValidationException("Property manager email address format is invalid");
+        }
+
+        // 5. Operating Hours Validation
+        if (req.getCheckInTime() == null || req.getCheckInTime().trim().isEmpty()) {
+            throw new DomainValidationException("Check-in time is mandatory");
+        }
+        if (req.getCheckOutTime() == null || req.getCheckOutTime().trim().isEmpty()) {
+            throw new DomainValidationException("Check-out time is mandatory");
+        }
+        if (req.getReceptionAvailability() == null || req.getReceptionAvailability().trim().isEmpty()) {
+            throw new DomainValidationException("Reception availability selection is mandatory");
+        }
+        String recAvail = normalizeReceptionAvailability(req.getReceptionAvailability());
+        if ("LIMITED_HOURS".equalsIgnoreCase(recAvail) || "LIMITED OPERATING HOURS".equalsIgnoreCase(recAvail)) {
+            if (req.getReceptionOpeningTime() == null || req.getReceptionOpeningTime().trim().isEmpty()) {
+                throw new DomainValidationException("Reception opening time is mandatory for limited operating hours");
+            }
+            if (req.getReceptionClosingTime() == null || req.getReceptionClosingTime().trim().isEmpty()) {
+                throw new DomainValidationException("Reception closing time is mandatory for limited operating hours");
+            }
+        }
+    }
+
+    private String normalizeBusinessRegistrationType(String input) {
+        if (input == null) return "OTHER";
+        String normalized = input.trim().toUpperCase();
+        for (String type : SUPPORTED_BUSINESS_REGISTRATION_TYPES) {
+            if (type.equalsIgnoreCase(normalized)) {
+                return type;
+            }
+        }
+        return input.trim();
+    }
+
+    private String normalizeReceptionAvailability(String input) {
+        if (input == null) return "24_HOUR";
+        String normalized = input.trim().toUpperCase();
+        if (normalized.contains("24")) {
+            return "24_HOUR";
+        }
+        if (normalized.contains("LIMITED")) {
+            return "LIMITED_HOURS";
+        }
+        return input.trim();
+    }
+
 
     // =========================================================================
     // LEGACY & EXISTING PROPERTY METHODS
@@ -423,6 +1225,77 @@ public class HotelPropertyService {
             if (img.getImageUrl() == null || img.getImageUrl().trim().isEmpty()) {
                 throw new DomainValidationException("Image URL cannot be blank");
             }
+        }
+    }
+
+    
+    private void validateStep2Request(HotelStep2RequestDto request) {
+        if (request == null) {
+            throw new DomainValidationException("Step 2 request body cannot be null");
+        }
+
+        // 1. Address Line 1
+        if (request.getAddressLine1() == null || request.getAddressLine1().trim().isEmpty()) {
+            throw new DomainValidationException("Address Line 1 is mandatory");
+        }
+        if (request.getAddressLine1().trim().length() > 255) {
+            throw new DomainValidationException("Address Line 1 cannot exceed 255 characters");
+        }
+
+        // 2. Address Line 2 (Optional)
+        if (request.getAddressLine2() != null && request.getAddressLine2().trim().length() > 255) {
+            throw new DomainValidationException("Address Line 2 cannot exceed 255 characters");
+        }
+
+        // 3. Country
+        if (request.getCountry() == null || request.getCountry().trim().isEmpty()) {
+            throw new DomainValidationException("Country is mandatory");
+        }
+        if (request.getCountry().trim().length() > 100) {
+            throw new DomainValidationException("Country cannot exceed 100 characters");
+        }
+        if (!AddressReferenceData.isCountrySupported(request.getCountry())) {
+            throw new DomainValidationException("Unsupported country: " + request.getCountry());
+        }
+
+        // 4. State
+        if (request.getState() == null || request.getState().trim().isEmpty()) {
+            throw new DomainValidationException("State is mandatory");
+        }
+        if (request.getState().trim().length() > 100) {
+            throw new DomainValidationException("State cannot exceed 100 characters");
+        }
+        if (!AddressReferenceData.isStateValidForCountry(request.getCountry(), request.getState())) {
+            throw new DomainValidationException("State '" + request.getState() + "' is not valid for country '" + request.getCountry() + "'");
+        }
+
+        // 5. City
+        if (request.getCity() == null || request.getCity().trim().isEmpty()) {
+            throw new DomainValidationException("City is mandatory");
+        }
+        if (request.getCity().trim().length() > 255) {
+            throw new DomainValidationException("City cannot exceed 255 characters");
+        }
+
+        // 6. Postal Code
+        if (request.getPostalCode() == null || request.getPostalCode().trim().isEmpty()) {
+            throw new DomainValidationException("Postal Code is mandatory");
+        }
+        if (request.getPostalCode().trim().length() > 20) {
+            throw new DomainValidationException("Postal Code cannot exceed 20 characters");
+        }
+        if (!AddressReferenceData.isValidPostalCode(request.getCountry(), request.getPostalCode())) {
+            String normCountry = AddressReferenceData.normalizeCountry(request.getCountry());
+            if ("India".equalsIgnoreCase(normCountry)) {
+                throw new DomainValidationException("Invalid postal code for India. Please enter a valid 6-digit PIN code (e.g., 520010)");
+            } else {
+                throw new DomainValidationException("Invalid postal code format for " + normCountry);
+            }
+        }
+
+        // 7. Landmark (Optional)
+        if (request.getLandmark() != null && request.getLandmark().trim().length() > 255) {
+            throw new DomainValidationException("Landmark cannot exceed 255 characters");
         }
     }
 

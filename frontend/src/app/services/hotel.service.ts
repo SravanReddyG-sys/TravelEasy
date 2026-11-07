@@ -172,6 +172,22 @@ export class HotelService {
     return this.http.post<any>(`${this.apiUrl}/draft/step-1`, step1Data);
   }
 
+  saveStep2Draft(draftId: number, step2Data: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/draft/${draftId}/step-2`, step2Data);
+  }
+
+  saveStep3Draft(draftId: number, step3Data: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/draft/${draftId}/step-3`, step3Data);
+  }
+
+  saveStep4Draft(draftId: number, step4Data: any): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/draft/${draftId}/step-4`, step4Data);
+  }
+
+  submitPropertyRegistration(draftId: number, submitData: any = { confirmationAccepted: true }): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/draft/${draftId}/submit`, submitData);
+  }
+
   getDraft(draftId: number): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/draft/${draftId}`);
   }

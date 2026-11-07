@@ -20,7 +20,13 @@ public class HotelManageDto {
     private String managerName;
     private String name;
     private String propertyType;
+    private String addressLine1;
+    private String addressLine2;
+    private String country;
+    private String state;
     private String city;
+    private String postalCode;
+    private String landmark;
     private String address;
     private Integer starRating;
     private String propertyClassification;
@@ -55,7 +61,13 @@ public class HotelManageDto {
                 .managerName(property.getManagerName())
                 .name(property.getName())
                 .propertyType(property.getPropertyType())
+                .addressLine1(property.getAddressLine1())
+                .addressLine2(property.getAddressLine2())
+                .country(property.getCountry())
+                .state(property.getState())
                 .city(property.getCity())
+                .postalCode(property.getPostalCode())
+                .landmark(property.getLandmark())
                 .address(property.getAddress())
                 .starRating(property.getStarRating())
                 .propertyClassification(property.getPropertyClassification())

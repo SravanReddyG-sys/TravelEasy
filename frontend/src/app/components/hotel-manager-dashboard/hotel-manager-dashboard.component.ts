@@ -6,7 +6,7 @@ import { Subscription, forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { AuthService } from '../../services/auth.service';
 import { HotelService } from '../../services/hotel.service';
-import { Hotel, HotelRoom, HotelImage, HotelStep1Request, HotelStep1Response } from '../../models/hotel.model';
+import { Hotel, HotelRoom, HotelImage, HotelStep1Request, HotelStep1Response, HotelStep2Request, HotelStep2Response, HotelStep3Request, HotelStep3Response, HotelStep4Request, HotelStep4Response, HotelStep5SubmitRequest, HotelStep5Response } from '../../models/hotel.model';
 import { BookingService, HotelRevenueReportResponse } from '../../services/booking.service';
 import { NotificationService } from '../../services/notification.service';
 import { User } from '../../models/user.model';
@@ -80,6 +80,249 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   step1SuccessMessage: string | null = null;
   isStep1Dirty: boolean = false;
   showCancelWizardModal: boolean = false;
+
+  // Step 2 State (Location & Address)
+  step2Data = {
+    addressLine1: '',
+    addressLine2: '',
+    country: 'India',
+    state: '',
+    city: '',
+    postalCode: '',
+    landmark: ''
+  };
+
+  step2Submitted: boolean = false;
+  step2Submitting: boolean = false;
+  step2ErrorMessage: string | null = null;
+  isStep2Dirty: boolean = false;
+
+  // Step 3 State (Property Information)
+  step3Data = {
+    // 1. Contact
+    propertyContactNumber: '',
+    alternateContactNumber: '',
+    propertyEmail: '',
+    websiteUrl: '',
+    // 2. Business Registration
+    registeredBusinessName: '',
+    businessRegistrationType: 'Private Limited Company',
+    otherBusinessRegistrationType: '',
+    businessRegistrationNumber: '',
+    registeredBusinessAddress: '',
+    // 3. GST Details
+    isGstRegistered: false,
+    gstin: '',
+    gstLegalName: '',
+    gstState: '',
+    // 4. Property Manager Details
+    propertyManagerName: '',
+    propertyManagerDesignation: 'General Manager',
+    propertyManagerContactNumber: '',
+    propertyManagerEmail: '',
+    // 5. Operating Hours
+    checkInTime: '14:00',
+    checkOutTime: '11:00',
+    receptionAvailability: '24-hour Reception',
+    receptionOpeningTime: '',
+    receptionClosingTime: ''
+  };
+
+  step3Submitted: boolean = false;
+  step3Submitting: boolean = false;
+  step3ErrorMessage: string | null = null;
+  isStep3Dirty: boolean = false;
+
+  // Accordion active subsection ('contact', 'business', 'gst', 'manager', 'operating')
+  expandedStep3Section: string = 'contact';
+
+  // ==================== STEP 4: FACILITIES & POLICIES ====================
+  step4Data = {
+    predefinedAmenities: [] as string[],
+    customAmenities: [] as string[],
+    childrenPolicy: 'Children Allowed',
+    petPolicy: 'Pets Not Allowed',
+    smokingPolicy: 'Smoking Prohibited',
+    extraBedPolicy: 'Extra Bed Available',
+    acceptedIdentificationTypes: ['Passport', 'Aadhaar Card'] as string[],
+    customIdentificationType: '',
+    additionalRules: ''
+  };
+
+  expandedStep4Section: 'amenities' | 'policies' | 'rules' | null = 'amenities';
+  step4Submitted: boolean = false;
+  step4Submitting: boolean = false;
+  step4ErrorMessage: string | null = null;
+  isStep4Dirty: boolean = false;
+
+  showCustomAmenityInput: boolean = false;
+  newCustomAmenityName: string = '';
+  customAmenityError: string = '';
+
+  predefinedAmenityCategories = [
+    {
+      category: 'Connectivity',
+      icon: 'fa-solid fa-wifi',
+      amenities: ['Wi-Fi', 'Business Centre'],
+      fullWidth: false
+    },
+    {
+      category: 'Dining',
+      icon: 'fa-solid fa-utensils',
+      amenities: ['Restaurant', 'Room Service', 'Complimentary Breakfast'],
+      fullWidth: false
+    },
+    {
+      category: 'Transport',
+      icon: 'fa-solid fa-car',
+      amenities: ['Parking', 'Airport Shuttle'],
+      fullWidth: false
+    },
+    {
+      category: 'Recreation',
+      icon: 'fa-solid fa-water',
+      amenities: ['Swimming Pool', 'Gym', 'Spa'],
+      fullWidth: false
+    },
+    {
+      category: 'Safety',
+      icon: 'fa-solid fa-shield-halved',
+      amenities: ['CCTV', '24-hour Security', 'Fire Safety'],
+      fullWidth: false
+    },
+    {
+      category: 'Accessibility',
+      icon: 'fa-solid fa-wheelchair',
+      amenities: ['Accessible Entrance', 'Elevator'],
+      fullWidth: false
+    },
+    {
+      category: 'General',
+      icon: 'fa-solid fa-layer-group',
+      amenities: ['Laundry', 'Reception', 'Luggage Storage'],
+      fullWidth: true
+    }
+  ];
+
+  childrenPolicyOptions: string[] = ['Children Allowed', 'Children Not Allowed'];
+  petPolicyOptions: string[] = ['Pets Allowed', 'Pets Not Allowed'];
+  smokingPolicyOptions: string[] = ['Smoking Prohibited', 'Designated Smoking Areas', 'Smoking Allowed'];
+  extraBedPolicyOptions: string[] = ['Extra Bed Available', 'Extra Bed Not Available'];
+  identificationTypeOptions: string[] = [
+    'Passport',
+    'Driving Licence',
+    'Voter ID',
+    'Government-issued Photo ID',
+    'Aadhaar Card',
+    'Other'
+  ];
+
+  // ==================== WP-05 STEP 5: REVIEW & SUBMIT STATE ====================
+  reviewSectionsExpanded = {
+    basic: true,
+    address: false,
+    propertyInfo: false,
+    facilities: false
+  };
+
+  editingFromReview: boolean = false;
+  accuracyConfirmed: boolean = false;
+  step5Submitted: boolean = false;
+  step5Submitting: boolean = false;
+  step5ErrorMessage: string | null = null;
+  registrationSuccess: boolean = false;
+  activatedPropertyDetails: HotelStep5Response | null = null;
+  showTermsModal: boolean = false;
+
+
+  businessRegistrationTypes: string[] = [
+    'Private Limited Company',
+    'Public Limited Company',
+    'Partnership',
+    'Limited Liability Partnership (LLP)',
+    'Sole Proprietorship',
+    'Other'
+  ];
+
+  managerDesignations: string[] = [
+    'General Manager',
+    'Property Manager',
+    'Operations Manager',
+    'Hotel Administrator',
+    'Owner / Proprietor',
+    'Other'
+  ];
+
+  receptionAvailabilityOptions: string[] = [
+    '24-hour Reception',
+    'Limited Operating Hours'
+  ];
+
+  countries: string[] = [
+    'India',
+    'United States',
+    'United Kingdom',
+    'United Arab Emirates',
+    'Australia',
+    'Canada',
+    'Singapore',
+    'Germany',
+    'France',
+    'Japan',
+    'Malaysia',
+    'Thailand',
+    'Saudi Arabia',
+    'South Africa',
+    'Italy',
+    'Spain',
+    'Netherlands',
+    'Switzerland',
+    'New Zealand'
+  ];
+
+  availableStates: string[] = [];
+
+  countryStatesMap: { [country: string]: string[] } = {
+    'India': [
+      'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+      'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
+      'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+      'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+      'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
+      'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+      'Andaman and Nicobar Islands', 'Chandigarh',
+      'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
+      'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
+    ],
+    'United States': [
+      'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut',
+      'Delaware', 'District of Columbia', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois',
+      'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts',
+      'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada',
+      'New Hampshire', 'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota',
+      'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina',
+      'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington',
+      'West Virginia', 'Wisconsin', 'Wyoming'
+    ],
+    'United Kingdom': [
+      'England', 'Scotland', 'Wales', 'Northern Ireland'
+    ],
+    'United Arab Emirates': [
+      'Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah'
+    ],
+    'Australia': [
+      'New South Wales', 'Victoria', 'Queensland', 'Western Australia',
+      'South Australia', 'Tasmania', 'Australian Capital Territory', 'Northern Territory'
+    ],
+    'Canada': [
+      'Ontario', 'Quebec', 'British Columbia', 'Alberta', 'Manitoba', 'Saskatchewan',
+      'Nova Scotia', 'New Brunswick', 'Newfoundland and Labrador', 'Prince Edward Island',
+      'Northwest Territories', 'Yukon', 'Nunavut'
+    ],
+    'Singapore': [
+      'Central Region', 'East Region', 'North Region', 'North-East Region', 'West Region'
+    ]
+  };
 
   // Data State
   myHotels: any[] = [];
@@ -218,6 +461,7 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
 
     this.initNotifications();
     this.initDefaultReportingPeriod();
+    this.updateAvailableStates();
     this.loadInitialData();
   }
 
@@ -1341,8 +1585,26 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
     this.step1ErrorMessage = null;
     this.step1SuccessMessage = null;
     this.isStep1Dirty = false;
+    this.isStep2Dirty = false;
+    this.step2Submitted = false;
+    this.step2Submitting = false;
+    this.step2ErrorMessage = null;
     this.imageUploadErrors = ['', '', '', ''];
     this.imageUploading = [false, false, false, false];
+    this.editingFromReview = false;
+    this.accuracyConfirmed = false;
+    this.step5Submitted = false;
+    this.step5Submitting = false;
+    this.step5ErrorMessage = null;
+    this.registrationSuccess = false;
+    this.activatedPropertyDetails = null;
+    this.showTermsModal = false;
+    this.reviewSectionsExpanded = {
+      basic: true,
+      address: false,
+      propertyInfo: false,
+      facilities: false
+    };
 
     if (draft) {
       let segment = draft.propertySegment || '';
@@ -1375,6 +1637,69 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
         brandName: draft.brandName || '',
         description: draft.description || ''
       };
+      this.step2Data = {
+        addressLine1: draft.addressLine1 || '',
+        addressLine2: draft.addressLine2 || '',
+        country: draft.country || 'India',
+        state: draft.state || '',
+        city: draft.city || '',
+        postalCode: draft.postalCode || '',
+        landmark: draft.landmark || ''
+      };
+      this.updateAvailableStates();
+
+      this.step3Data = {
+        propertyContactNumber: draft.propertyContactNumber || '',
+        alternateContactNumber: draft.alternateContactNumber || '',
+        propertyEmail: draft.propertyEmail || '',
+        websiteUrl: draft.websiteUrl || '',
+        registeredBusinessName: draft.registeredBusinessName || '',
+        businessRegistrationType: draft.businessRegistrationType || 'Private Limited Company',
+        otherBusinessRegistrationType: draft.otherBusinessRegistrationType || '',
+        businessRegistrationNumber: draft.businessRegistrationNumber || '',
+        registeredBusinessAddress: draft.registeredBusinessAddress || '',
+        isGstRegistered: draft.isGstRegistered !== undefined ? !!draft.isGstRegistered : false,
+        gstin: draft.gstin || '',
+        gstLegalName: draft.gstLegalName || '',
+        gstState: draft.gstState || '',
+        propertyManagerName: draft.propertyManagerName || '',
+        propertyManagerDesignation: draft.propertyManagerDesignation || 'General Manager',
+        propertyManagerContactNumber: draft.propertyManagerContactNumber || '',
+        propertyManagerEmail: draft.propertyManagerEmail || '',
+        checkInTime: draft.checkInTime || '14:00',
+        checkOutTime: draft.checkOutTime || '11:00',
+        receptionAvailability: (draft.receptionAvailability && draft.receptionAvailability.toUpperCase().includes('LIMITED')) ? 'Limited Operating Hours' : '24-hour Reception',
+        receptionOpeningTime: draft.receptionOpeningTime || '',
+        receptionClosingTime: draft.receptionClosingTime || ''
+      };
+
+
+      this.step4Data = {
+        predefinedAmenities: draft.predefinedAmenities && Array.isArray(draft.predefinedAmenities) ? [...draft.predefinedAmenities] : [],
+        customAmenities: draft.customAmenities && Array.isArray(draft.customAmenities) ? [...draft.customAmenities] : [],
+        childrenPolicy: draft.childrenPolicy || 'Children Allowed',
+        petPolicy: draft.petPolicy || 'Pets Not Allowed',
+        smokingPolicy: draft.smokingPolicy || 'Smoking Prohibited',
+        extraBedPolicy: draft.extraBedPolicy || 'Extra Bed Available',
+        acceptedIdentificationTypes: draft.acceptedIdentificationTypes && Array.isArray(draft.acceptedIdentificationTypes) && draft.acceptedIdentificationTypes.length
+          ? [...draft.acceptedIdentificationTypes]
+          : ['Passport', 'Aadhaar Card'],
+        customIdentificationType: draft.customIdentificationType || '',
+        additionalRules: draft.additionalRules || ''
+      };
+
+      if (draft.registrationStep && draft.registrationStep >= 5) {
+        this.currentWizardStep = 5;
+      } else if (draft.registrationStep && draft.registrationStep >= 4) {
+        this.currentWizardStep = 4;
+      } else if (draft.registrationStep && draft.registrationStep >= 3) {
+        this.currentWizardStep = 3;
+
+      } else if (draft.registrationStep && draft.registrationStep >= 2) {
+        this.currentWizardStep = 2;
+      } else {
+        this.currentWizardStep = 1;
+      }
       this.wizardImages = [null, null, null, null];
       if (draft.images && Array.isArray(draft.images)) {
         draft.images.forEach((img: any, idx: number) => {
@@ -1401,6 +1726,47 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
         brandName: '',
         description: ''
       };
+      this.step2Data = {
+        addressLine1: '',
+        addressLine2: '',
+        country: 'India',
+        state: '',
+        city: '',
+        postalCode: '',
+        landmark: ''
+      };
+      this.updateAvailableStates();
+
+      this.step3Data = {
+        propertyContactNumber: '',
+        alternateContactNumber: '',
+        propertyEmail: '',
+        websiteUrl: '',
+        registeredBusinessName: '',
+        businessRegistrationType: 'Private Limited Company',
+        otherBusinessRegistrationType: '',
+        businessRegistrationNumber: '',
+        registeredBusinessAddress: '',
+        isGstRegistered: false,
+        gstin: '',
+        gstLegalName: '',
+        gstState: '',
+        propertyManagerName: '',
+        propertyManagerDesignation: 'General Manager',
+        propertyManagerContactNumber: '',
+        propertyManagerEmail: '',
+        checkInTime: '14:00',
+        checkOutTime: '11:00',
+        receptionAvailability: '24-hour Reception',
+        receptionOpeningTime: '',
+        receptionClosingTime: ''
+      };
+      this.expandedStep3Section = 'contact';
+      this.isStep3Dirty = false;
+      this.step3Submitted = false;
+      this.step3Submitting = false;
+      this.step3ErrorMessage = null;
+      this.currentWizardStep = 1;
       this.wizardImages = [null, null, null, null];
     }
   }
@@ -1625,7 +1991,12 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
         this.step1Submitting = false;
         this.step1Data.id = res.id;
         this.isStep1Dirty = false;
-        this.currentWizardStep = 2; // Advance to Step 2 placeholder
+        if (this.editingFromReview) {
+          this.editingFromReview = false;
+          this.currentWizardStep = 5;
+        } else {
+          this.currentWizardStep = 2;
+        }
       },
       error: (err) => {
         this.step1Submitting = false;
@@ -1640,7 +2011,7 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   }
 
   confirmCancelWizard(): void {
-    if (this.isStep1Dirty) {
+    if (this.isStep1Dirty || this.isStep2Dirty || this.isStep3Dirty) {
       this.showCancelWizardModal = true;
     } else {
       this.propertyViewMode = 'list';
@@ -1663,6 +2034,759 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
       this.showCancelWizardModal = false;
       this.propertyViewMode = 'list';
     }
+  }
+
+
+  onCountryChange(): void {
+    this.isStep2Dirty = true;
+    this.step2ErrorMessage = null;
+    this.updateAvailableStates();
+    if (this.availableStates.length > 0 && !this.availableStates.includes(this.step2Data.state)) {
+      this.step2Data.state = '';
+    }
+  }
+
+  updateAvailableStates(): void {
+    this.availableStates = this.countryStatesMap[this.step2Data.country] || [];
+  }
+
+  onStep2FieldChange(): void {
+    this.isStep2Dirty = true;
+    this.step2ErrorMessage = null;
+  }
+
+  isAddressLine1Valid(): boolean {
+    return !!this.step2Data.addressLine1 && this.step2Data.addressLine1.trim().length > 0 && this.step2Data.addressLine1.trim().length <= 255;
+  }
+
+  isCountryValid(): boolean {
+    return !!this.step2Data.country && this.step2Data.country.trim().length > 0;
+  }
+
+  isStateValid(): boolean {
+    if (!this.step2Data.state || !this.step2Data.state.trim()) return false;
+    if (this.availableStates.length > 0) {
+      return this.availableStates.includes(this.step2Data.state.trim());
+    }
+    return this.step2Data.state.trim().length <= 100;
+  }
+
+  isCityValid(): boolean {
+    return !!this.step2Data.city && this.step2Data.city.trim().length > 0 && this.step2Data.city.trim().length <= 255;
+  }
+
+  isPostalCodeValid(): boolean {
+    if (!this.step2Data.postalCode || !this.step2Data.postalCode.trim()) return false;
+    const code = this.step2Data.postalCode.trim();
+    if (this.step2Data.country === 'India') {
+      return /^[1-9][0-9]{5}$/.test(code);
+    }
+    return /^[a-zA-Z0-9\s-]{3,10}$/.test(code);
+  }
+
+  isStep2FormValid(): boolean {
+    return this.isAddressLine1Valid() &&
+           this.isCountryValid() &&
+           this.isStateValid() &&
+           this.isCityValid() &&
+           this.isPostalCodeValid();
+  }
+
+  proceedToStep3(): void {
+    this.step2Submitted = true;
+    this.step2ErrorMessage = null;
+
+    if (!this.isStep2FormValid()) {
+      if (!this.isPostalCodeValid() && this.step2Data.country === 'India' && !!this.step2Data.postalCode) {
+        this.step2ErrorMessage = 'Please enter a valid 6-digit PIN code for India (e.g., 520010).';
+      } else {
+        this.step2ErrorMessage = 'Please complete all required fields correctly.';
+      }
+      return;
+    }
+
+    if (!this.step1Data.id) {
+      this.step2ErrorMessage = 'Draft ID missing. Please return to Step 1 and save basic details first.';
+      return;
+    }
+
+    this.step2Submitting = true;
+    const payload: HotelStep2Request = {
+      draftId: this.step1Data.id,
+      addressLine1: this.step2Data.addressLine1.trim(),
+      addressLine2: this.step2Data.addressLine2 ? this.step2Data.addressLine2.trim() : null,
+      country: this.step2Data.country.trim(),
+      state: this.step2Data.state.trim(),
+      city: this.step2Data.city.trim(),
+      postalCode: this.step2Data.postalCode.trim(),
+      landmark: this.step2Data.landmark ? this.step2Data.landmark.trim() : null
+    };
+
+    this.hotelService.saveStep2Draft(this.step1Data.id, payload).subscribe({
+      next: (res) => {
+        this.step2Submitting = false;
+        this.isStep2Dirty = false;
+        if (this.editingFromReview) {
+          this.editingFromReview = false;
+          this.currentWizardStep = 5;
+        } else {
+          this.currentWizardStep = 3;
+        }
+      },
+      error: (err) => {
+        this.step2Submitting = false;
+        console.error('Save Step 2 draft error:', err);
+        this.step2ErrorMessage = err.error?.message || 'Failed to save location & address details. Please check your entries and try again.';
+      }
+    });
+  }
+
+  backToStep2(): void {
+    this.currentWizardStep = 2;
+  }
+
+  // =========================================================================
+  // WP-05 STEP 3: PROPERTY INFORMATION METHODS
+  // =========================================================================
+
+  toggleStep3Section(section: string): void {
+    if (this.expandedStep3Section === section) {
+      this.expandedStep3Section = ''; // collapse currently expanded
+    } else {
+      this.expandedStep3Section = section; // expand chosen subsection
+    }
+  }
+
+  isStep3SectionExpanded(section: string): boolean {
+    return this.expandedStep3Section === section;
+  }
+
+  onStep3FieldChange(): void {
+    this.isStep3Dirty = true;
+    this.step3ErrorMessage = null;
+  }
+
+  onGstToggle(registered: boolean): void {
+    this.step3Data.isGstRegistered = registered;
+    this.isStep3Dirty = true;
+    this.step3ErrorMessage = null;
+    if (!registered) {
+      this.step3Data.gstin = '';
+      this.step3Data.gstLegalName = '';
+      this.step3Data.gstState = '';
+    }
+  }
+
+  // --- Subsection 1: Property Contact Details Validation ---
+
+  isPropertyContactNumberValid(): boolean {
+    if (!this.step3Data.propertyContactNumber || !this.step3Data.propertyContactNumber.trim()) return false;
+    const phone = this.step3Data.propertyContactNumber.trim();
+    return /^[+]?[0-9\s\-()]{7,20}$/.test(phone);
+  }
+
+  isAlternateContactNumberValid(): boolean {
+    if (!this.step3Data.alternateContactNumber || !this.step3Data.alternateContactNumber.trim()) return true;
+    const phone = this.step3Data.alternateContactNumber.trim();
+    return /^[+]?[0-9\s\-()]{7,20}$/.test(phone);
+  }
+
+  isPropertyEmailValid(): boolean {
+    if (!this.step3Data.propertyEmail || !this.step3Data.propertyEmail.trim()) return false;
+    const email = this.step3Data.propertyEmail.trim();
+    return /^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(email);
+  }
+
+  isWebsiteUrlValid(): boolean {
+    if (!this.step3Data.websiteUrl || !this.step3Data.websiteUrl.trim()) return true;
+    const url = this.step3Data.websiteUrl.trim().toLowerCase();
+    return url.startsWith('http://') || url.startsWith('https://');
+  }
+
+  isContactSectionValid(): boolean {
+    return this.isPropertyContactNumberValid() &&
+           this.isAlternateContactNumberValid() &&
+           this.isPropertyEmailValid() &&
+           this.isWebsiteUrlValid();
+  }
+
+  // --- Subsection 2: Business Registration Details Validation ---
+
+  isRegisteredBusinessNameValid(): boolean {
+    return !!this.step3Data.registeredBusinessName &&
+           this.step3Data.registeredBusinessName.trim().length > 0 &&
+           this.step3Data.registeredBusinessName.trim().length <= 255;
+  }
+
+  isBusinessRegistrationTypeValid(): boolean {
+    return !!this.step3Data.businessRegistrationType && this.step3Data.businessRegistrationType.trim().length > 0;
+  }
+
+  isOtherBusinessRegistrationTypeValid(): boolean {
+    if (this.step3Data.businessRegistrationType === 'Other') {
+      return !!this.step3Data.otherBusinessRegistrationType && this.step3Data.otherBusinessRegistrationType.trim().length > 0;
+    }
+    return true;
+  }
+
+  isBusinessRegistrationNumberValid(): boolean {
+    return !!this.step3Data.businessRegistrationNumber &&
+           this.step3Data.businessRegistrationNumber.trim().length > 0 &&
+           this.step3Data.businessRegistrationNumber.trim().length <= 100;
+  }
+
+  isBusinessSectionValid(): boolean {
+    return this.isRegisteredBusinessNameValid() &&
+           this.isBusinessRegistrationTypeValid() &&
+           this.isOtherBusinessRegistrationTypeValid() &&
+           this.isBusinessRegistrationNumberValid();
+  }
+
+  // --- Subsection 3: GST Details Validation ---
+
+  isGstinValid(): boolean {
+    if (!this.step3Data.isGstRegistered) return true;
+    if (!this.step3Data.gstin || !this.step3Data.gstin.trim()) return false;
+    const gstin = this.step3Data.gstin.trim().toUpperCase();
+    return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstin);
+  }
+
+  isGstLegalNameValid(): boolean {
+    if (!this.step3Data.isGstRegistered) return true;
+    return !!this.step3Data.gstLegalName && this.step3Data.gstLegalName.trim().length > 0;
+  }
+
+  isGstStateValid(): boolean {
+    if (!this.step3Data.isGstRegistered) return true;
+    return !!this.step3Data.gstState && this.step3Data.gstState.trim().length > 0;
+  }
+
+  isGstSectionValid(): boolean {
+    if (!this.step3Data.isGstRegistered) return true;
+    return this.isGstinValid() && this.isGstLegalNameValid() && this.isGstStateValid();
+  }
+
+  // --- Subsection 4: Property Manager Details Validation ---
+
+  isPropertyManagerNameValid(): boolean {
+    return !!this.step3Data.propertyManagerName &&
+           this.step3Data.propertyManagerName.trim().length > 0 &&
+           this.step3Data.propertyManagerName.trim().length <= 255;
+  }
+
+  isPropertyManagerDesignationValid(): boolean {
+    return !!this.step3Data.propertyManagerDesignation && this.step3Data.propertyManagerDesignation.trim().length > 0;
+  }
+
+  isPropertyManagerContactNumberValid(): boolean {
+    if (!this.step3Data.propertyManagerContactNumber || !this.step3Data.propertyManagerContactNumber.trim()) return false;
+    const phone = this.step3Data.propertyManagerContactNumber.trim();
+    return /^[+]?[0-9\s\-()]{7,20}$/.test(phone);
+  }
+
+  isPropertyManagerEmailValid(): boolean {
+    if (!this.step3Data.propertyManagerEmail || !this.step3Data.propertyManagerEmail.trim()) return false;
+    const email = this.step3Data.propertyManagerEmail.trim();
+    return /^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(email);
+  }
+
+  isManagerSectionValid(): boolean {
+    return this.isPropertyManagerNameValid() &&
+           this.isPropertyManagerDesignationValid() &&
+           this.isPropertyManagerContactNumberValid() &&
+           this.isPropertyManagerEmailValid();
+  }
+
+  // --- Subsection 5: Operating Hours Validation ---
+
+  isCheckInTimeValid(): boolean {
+    return !!this.step3Data.checkInTime && this.step3Data.checkInTime.trim().length > 0;
+  }
+
+  isCheckOutTimeValid(): boolean {
+    return !!this.step3Data.checkOutTime && this.step3Data.checkOutTime.trim().length > 0;
+  }
+
+  isOperatingHoursSectionValid(): boolean {
+    if (!this.isCheckInTimeValid() || !this.isCheckOutTimeValid()) return false;
+    if (this.step3Data.receptionAvailability === 'Limited Operating Hours') {
+      return !!this.step3Data.receptionOpeningTime && this.step3Data.receptionOpeningTime.trim().length > 0 &&
+             !!this.step3Data.receptionClosingTime && this.step3Data.receptionClosingTime.trim().length > 0;
+    }
+    return true;
+  }
+
+  isStep3FormValid(): boolean {
+    return this.isContactSectionValid() &&
+           this.isBusinessSectionValid() &&
+           this.isGstSectionValid() &&
+           this.isManagerSectionValid() &&
+           this.isOperatingHoursSectionValid();
+  }
+
+  proceedToStep4(): void {
+    this.step3Submitted = true;
+    this.step3ErrorMessage = null;
+
+    if (!this.isStep3FormValid()) {
+      // Auto-expand the first invalid section and display clear error
+      if (!this.isContactSectionValid()) {
+        this.expandedStep3Section = 'contact';
+        this.step3ErrorMessage = 'Please complete all required fields in Property Contact Details correctly.';
+      } else if (!this.isBusinessSectionValid()) {
+        this.expandedStep3Section = 'business';
+        this.step3ErrorMessage = 'Please complete all required fields in Business Registration Details correctly.';
+      } else if (!this.isGstSectionValid()) {
+        this.expandedStep3Section = 'gst';
+        this.step3ErrorMessage = 'Please provide a valid 15-character GSTIN, legal name, and state for GST registration.';
+      } else if (!this.isManagerSectionValid()) {
+        this.expandedStep3Section = 'manager';
+        this.step3ErrorMessage = 'Please complete all required fields in Property Manager Details correctly.';
+      } else if (!this.isOperatingHoursSectionValid()) {
+        this.expandedStep3Section = 'operating';
+        this.step3ErrorMessage = 'Please provide valid check-in, check-out and reception operating hours.';
+      }
+      return;
+    }
+
+    if (!this.step1Data.id) {
+      this.step3ErrorMessage = 'Draft ID missing. Please return to Step 1 and save basic details first.';
+      return;
+    }
+
+    this.step3Submitting = true;
+    const payload: HotelStep3Request = {
+      draftId: this.step1Data.id,
+      propertyContactNumber: this.step3Data.propertyContactNumber.trim(),
+      alternateContactNumber: this.step3Data.alternateContactNumber ? this.step3Data.alternateContactNumber.trim() : null,
+      propertyEmail: this.step3Data.propertyEmail.trim(),
+      websiteUrl: this.step3Data.websiteUrl ? this.step3Data.websiteUrl.trim() : null,
+      registeredBusinessName: this.step3Data.registeredBusinessName.trim(),
+      businessRegistrationType: this.step3Data.businessRegistrationType.trim(),
+      otherBusinessRegistrationType: this.step3Data.businessRegistrationType === 'Other' && this.step3Data.otherBusinessRegistrationType ? this.step3Data.otherBusinessRegistrationType.trim() : null,
+      businessRegistrationNumber: this.step3Data.businessRegistrationNumber.trim(),
+      registeredBusinessAddress: this.step3Data.registeredBusinessAddress ? this.step3Data.registeredBusinessAddress.trim() : null,
+      isGstRegistered: !!this.step3Data.isGstRegistered,
+      gstin: this.step3Data.isGstRegistered && this.step3Data.gstin ? this.step3Data.gstin.trim().toUpperCase() : null,
+      gstLegalName: this.step3Data.isGstRegistered && this.step3Data.gstLegalName ? this.step3Data.gstLegalName.trim() : null,
+      gstState: this.step3Data.isGstRegistered && this.step3Data.gstState ? this.step3Data.gstState.trim() : null,
+      propertyManagerName: this.step3Data.propertyManagerName.trim(),
+      propertyManagerDesignation: this.step3Data.propertyManagerDesignation.trim(),
+      propertyManagerContactNumber: this.step3Data.propertyManagerContactNumber.trim(),
+      propertyManagerEmail: this.step3Data.propertyManagerEmail.trim(),
+      checkInTime: this.step3Data.checkInTime.trim(),
+      checkOutTime: this.step3Data.checkOutTime.trim(),
+      receptionAvailability: this.step3Data.receptionAvailability.trim(),
+      receptionOpeningTime: this.step3Data.receptionAvailability === 'Limited Operating Hours' && this.step3Data.receptionOpeningTime ? this.step3Data.receptionOpeningTime.trim() : null,
+      receptionClosingTime: this.step3Data.receptionAvailability === 'Limited Operating Hours' && this.step3Data.receptionClosingTime ? this.step3Data.receptionClosingTime.trim() : null
+    };
+
+    this.hotelService.saveStep3Draft(this.step1Data.id, payload).subscribe({
+      next: (res) => {
+        this.step3Submitting = false;
+        this.isStep3Dirty = false;
+        if (this.editingFromReview) {
+          this.editingFromReview = false;
+          this.currentWizardStep = 5;
+        } else {
+          this.currentWizardStep = 4;
+        }
+      },
+      error: (err) => {
+        this.step3Submitting = false;
+        console.error('Save Step 3 draft error:', err);
+        this.step3ErrorMessage = err.error?.message || 'Failed to save property information. Please check your entries and try again.';
+      }
+    });
+  }
+
+  backToStep3(): void {
+    this.currentWizardStep = 3;
+  }
+
+  // ==================== STEP 4 METHODS ====================
+  toggleStep4Section(section: 'amenities' | 'policies' | 'rules'): void {
+    if (this.expandedStep4Section === section) {
+      this.expandedStep4Section = null;
+    } else {
+      this.expandedStep4Section = section;
+    }
+  }
+
+  isStep4SectionExpanded(section: 'amenities' | 'policies' | 'rules'): boolean {
+    return this.expandedStep4Section === section;
+  }
+
+  togglePredefinedAmenity(name: string): void {
+    const idx = this.step4Data.predefinedAmenities.indexOf(name);
+    if (idx >= 0) {
+      this.step4Data.predefinedAmenities.splice(idx, 1);
+    } else {
+      this.step4Data.predefinedAmenities.push(name);
+    }
+    this.isStep4Dirty = true;
+  }
+
+  isPredefinedAmenitySelected(name: string): boolean {
+    return this.step4Data.predefinedAmenities.includes(name);
+  }
+
+  openAddCustomAmenity(): void {
+    this.showCustomAmenityInput = true;
+    this.newCustomAmenityName = '';
+    this.customAmenityError = '';
+  }
+
+  cancelAddCustomAmenity(): void {
+    this.showCustomAmenityInput = false;
+    this.newCustomAmenityName = '';
+    this.customAmenityError = '';
+  }
+
+  submitAddCustomAmenity(): void {
+    const trimmed = (this.newCustomAmenityName || '').trim();
+    if (!trimmed) {
+      this.customAmenityError = 'Please enter a valid amenity name.';
+      return;
+    }
+    if (trimmed.length > 50) {
+      this.customAmenityError = 'Amenity name must not exceed 50 characters.';
+      return;
+    }
+    const isPredefined = this.predefinedAmenityCategories.some(cat =>
+      cat.amenities.some(a => a.toLowerCase() === trimmed.toLowerCase())
+    );
+    if (isPredefined) {
+      this.customAmenityError = 'This facility already exists in the standard categories above.';
+      return;
+    }
+    const isCustomDup = this.step4Data.customAmenities.some(a => a.toLowerCase() === trimmed.toLowerCase());
+    if (isCustomDup) {
+      this.customAmenityError = 'This custom amenity has already been added.';
+      return;
+    }
+
+    this.step4Data.customAmenities.push(trimmed);
+    this.isStep4Dirty = true;
+    this.cancelAddCustomAmenity();
+  }
+
+  removeCustomAmenity(name: string): void {
+    this.step4Data.customAmenities = this.step4Data.customAmenities.filter(a => a !== name);
+    this.isStep4Dirty = true;
+  }
+
+  toggleIdType(type: string): void {
+    const idx = this.step4Data.acceptedIdentificationTypes.indexOf(type);
+    if (idx >= 0) {
+      this.step4Data.acceptedIdentificationTypes.splice(idx, 1);
+      if (type === 'Other') {
+        this.step4Data.customIdentificationType = '';
+      }
+    } else {
+      this.step4Data.acceptedIdentificationTypes.push(type);
+    }
+    this.isStep4Dirty = true;
+  }
+
+  isIdTypeSelected(type: string): boolean {
+    return this.step4Data.acceptedIdentificationTypes.includes(type);
+  }
+
+  isPoliciesSectionValid(): boolean {
+    if (!this.step4Data.childrenPolicy || !this.step4Data.childrenPolicy.trim()) return false;
+    if (!this.step4Data.petPolicy || !this.step4Data.petPolicy.trim()) return false;
+    if (!this.step4Data.smokingPolicy || !this.step4Data.smokingPolicy.trim()) return false;
+    if (!this.step4Data.extraBedPolicy || !this.step4Data.extraBedPolicy.trim()) return false;
+    if (!this.step4Data.acceptedIdentificationTypes || this.step4Data.acceptedIdentificationTypes.length === 0) return false;
+    if (this.step4Data.acceptedIdentificationTypes.includes('Other')) {
+      if (!this.step4Data.customIdentificationType || !this.step4Data.customIdentificationType.trim()) return false;
+      if (this.step4Data.customIdentificationType.trim().length > 150) return false;
+    }
+    return true;
+  }
+
+  isRulesSectionValid(): boolean {
+    if (this.step4Data.additionalRules && this.step4Data.additionalRules.length > 1000) {
+      return false;
+    }
+    return true;
+  }
+
+  isStep4FormValid(): boolean {
+    return this.isPoliciesSectionValid() && this.isRulesSectionValid();
+  }
+
+  proceedToStep5(): void {
+    this.step4Submitted = true;
+    this.step4ErrorMessage = null;
+
+    if (!this.isPoliciesSectionValid()) {
+      this.expandedStep4Section = 'policies';
+      if (!this.step4Data.acceptedIdentificationTypes || this.step4Data.acceptedIdentificationTypes.length === 0) {
+        this.step4ErrorMessage = 'Please select at least one accepted identification document.';
+      } else if (this.step4Data.acceptedIdentificationTypes.includes('Other') && (!this.step4Data.customIdentificationType || !this.step4Data.customIdentificationType.trim())) {
+        this.step4ErrorMessage = 'Please specify the custom identification type when "Other" is selected.';
+      } else {
+        this.step4ErrorMessage = 'Please select a valid option for all required guest policies.';
+      }
+      return;
+    }
+
+    if (!this.isRulesSectionValid()) {
+      this.expandedStep4Section = 'rules';
+      this.step4ErrorMessage = 'Additional property rules must not exceed 1000 characters.';
+      return;
+    }
+
+    if (!this.step1Data.id) {
+      this.step4ErrorMessage = 'Draft ID missing. Please return to Step 1 and save basic details first.';
+      return;
+    }
+
+    this.step4Submitting = true;
+    const payload: HotelStep4Request = {
+      draftId: this.step1Data.id,
+      predefinedAmenities: [...this.step4Data.predefinedAmenities],
+      customAmenities: [...this.step4Data.customAmenities],
+      childrenPolicy: this.step4Data.childrenPolicy,
+      petPolicy: this.step4Data.petPolicy,
+      smokingPolicy: this.step4Data.smokingPolicy,
+      extraBedPolicy: this.step4Data.extraBedPolicy,
+      acceptedIdentificationTypes: [...this.step4Data.acceptedIdentificationTypes],
+      customIdentificationType: this.step4Data.acceptedIdentificationTypes.includes('Other') && this.step4Data.customIdentificationType
+        ? this.step4Data.customIdentificationType.trim() : null,
+      additionalRules: this.step4Data.additionalRules && this.step4Data.additionalRules.trim() ? this.step4Data.additionalRules.trim() : null
+    };
+
+    this.hotelService.saveStep4Draft(this.step1Data.id, payload).subscribe({
+      next: (res) => {
+        this.step4Submitting = false;
+        this.isStep4Dirty = false;
+        this.editingFromReview = false;
+        this.currentWizardStep = 5;
+      },
+      error: (err) => {
+        this.step4Submitting = false;
+        console.error('Save Step 4 draft error:', err);
+        this.step4ErrorMessage = err.error?.message || 'Failed to save facilities and policies. Please check your entries and try again.';
+      }
+    });
+  }
+
+  backToStep4(): void {
+    this.currentWizardStep = 4;
+  }
+
+
+  // =========================================================================
+  // WP-05 STEP 5: REVIEW & SUBMIT METHODS
+  // =========================================================================
+
+  toggleReviewSection(section: 'basic' | 'address' | 'propertyInfo' | 'facilities', event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.reviewSectionsExpanded[section] = !this.reviewSectionsExpanded[section];
+  }
+
+  isReviewSectionExpanded(section: 'basic' | 'address' | 'propertyInfo' | 'facilities'): boolean {
+    return !!this.reviewSectionsExpanded[section];
+  }
+
+  editReviewStep(step: number, event?: Event): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.editingFromReview = true;
+    this.currentWizardStep = step;
+  }
+
+  saveAndReturnToReview(step: number): void {
+    this.editingFromReview = true;
+    if (step === 1) {
+      this.proceedToStep2();
+    } else if (step === 2) {
+      this.proceedToStep3();
+    } else if (step === 3) {
+      this.proceedToStep4();
+    } else if (step === 4) {
+      this.proceedToStep5();
+    }
+  }
+
+  openTermsModal(event?: Event): void {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    this.showTermsModal = true;
+  }
+
+  closeTermsModal(): void {
+    this.showTermsModal = false;
+  }
+
+  submitFinalRegistration(): void {
+    this.step5Submitted = true;
+    this.step5ErrorMessage = null;
+
+    if (!this.accuracyConfirmed) {
+      this.step5ErrorMessage = 'You must confirm that the information provided is accurate and complete and agree to comply with TravelEasy\'s Partner Terms & Conditions.';
+      return;
+    }
+
+    if (!this.step1Data.id) {
+      this.step5ErrorMessage = 'Draft ID missing. Please return to Step 1 and complete required property details.';
+      return;
+    }
+
+    this.step5Submitting = true;
+    const submitPayload: HotelStep5SubmitRequest = {
+      draftId: this.step1Data.id,
+      confirmationAccepted: true
+    };
+
+    this.hotelService.submitPropertyRegistration(this.step1Data.id, submitPayload).subscribe({
+      next: (res: HotelStep5Response) => {
+        this.step5Submitting = false;
+        this.registrationSuccess = true;
+        this.activatedPropertyDetails = res;
+      },
+      error: (err) => {
+        this.step5Submitting = false;
+        console.error('Final property submission error:', err);
+        this.step5ErrorMessage = err.error?.message || 'Failed to submit property registration. Please verify all steps and try again.';
+      }
+    });
+  }
+
+  viewActivatedProperty(): void {
+    this.propertyViewMode = 'list';
+    this.registrationSuccess = false;
+    this.activatedPropertyDetails = null;
+    this.loadInitialData();
+  }
+
+  getReviewClassification(): string {
+    const classification = this.step1Data.propertyClassification;
+    if (classification === 'ONE_STAR') return '1 Star';
+    if (classification === 'TWO_STAR') return '2 Star';
+    if (classification === 'THREE_STAR') return '3 Star';
+    if (classification === 'FOUR_STAR') return '4 Star';
+    if (classification === 'FIVE_STAR') return '5 Star';
+    if (classification === 'FIVE_STAR_DELUXE') return '5 Star Deluxe';
+    if (classification === 'OTHER') {
+      return this.step1Data.customClassification && this.step1Data.customClassification.trim()
+        ? this.step1Data.customClassification.trim()
+        : 'Other recognized classification';
+    }
+    if (classification === 'NOT_CLASSIFIED' || classification === 'NOT_OFFICIALLY_CLASSIFIED') {
+      return 'Not officially classified';
+    }
+    return this.step1Data.propertyClassification || 'Not officially classified';
+  }
+
+  getReviewStarRating(): string {
+    return this.getReviewClassification();
+  }
+
+  getReviewPropertySegment(): string {
+    return this.step1Data.propertySegment || 'Standard';
+  }
+
+  getReviewCoverImageUrl(): string {
+    const cover = this.wizardImages.find(img => img !== null && img.isCover && (img.previewUrl || img.imageUrl));
+    if (cover) {
+      return cover.previewUrl || cover.imageUrl || 'https://images.unsplash.com/photo-1566073771259-6a8506099945';
+    }
+    const anyImg = this.wizardImages.find(img => img !== null && (img.previewUrl || img.imageUrl));
+    if (anyImg) {
+      return anyImg.previewUrl || anyImg.imageUrl || 'https://images.unsplash.com/photo-1566073771259-6a8506099945';
+    }
+    return 'https://images.unsplash.com/photo-1566073771259-6a8506099945';
+  }
+
+  getFormattedFullAddress(): string {
+    const parts = [];
+    if (this.step2Data.addressLine1) parts.push(this.step2Data.addressLine1.trim());
+    if (this.step2Data.addressLine2) parts.push(this.step2Data.addressLine2.trim());
+    if (this.step2Data.landmark) parts.push(`Near ${this.step2Data.landmark.trim()}`);
+    if (this.step2Data.city) parts.push(this.step2Data.city.trim());
+    let statePin = '';
+    if (this.step2Data.state) statePin += this.step2Data.state.trim();
+    if (this.step2Data.postalCode) statePin += ` - ${this.step2Data.postalCode.trim()}`;
+    if (statePin) parts.push(statePin);
+    if (this.step2Data.country) parts.push(this.step2Data.country.trim());
+    return parts.join(', ');
+  }
+
+  formatTime12Hour(timeStr?: string): string {
+    if (!timeStr) return '--:--';
+    const parts = timeStr.split(':');
+    if (parts.length < 2) return timeStr;
+    let hour = parseInt(parts[0], 10);
+    const min = parts[1];
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12;
+    if (hour === 0) hour = 12;
+    const hourStr = hour < 10 ? `0${hour}` : `${hour}`;
+    return `${hourStr}:${min} ${ampm}`;
+  }
+
+  getAllSelectedAmenities(): string[] {
+    return [...this.step4Data.predefinedAmenities, ...this.step4Data.customAmenities];
+  }
+
+  getAmenityIcon(amenity: string): string {
+    const lower = amenity.toLowerCase();
+    if (lower.includes('wifi') || lower.includes('wi-fi')) return 'fa-solid fa-wifi';
+    if (lower.includes('restaurant')) return 'fa-solid fa-utensils';
+    if (lower.includes('room service')) return 'fa-solid fa-bell-concierge';
+    if (lower.includes('breakfast')) return 'fa-solid fa-mug-saucer';
+    if (lower.includes('parking')) return 'fa-solid fa-square-parking';
+    if (lower.includes('shuttle')) return 'fa-solid fa-van-shuttle';
+    if (lower.includes('pool')) return 'fa-solid fa-person-swimming';
+    if (lower.includes('gym')) return 'fa-solid fa-dumbbell';
+    if (lower.includes('spa')) return 'fa-solid fa-spa';
+    if (lower.includes('cctv')) return 'fa-solid fa-video';
+    if (lower.includes('security')) return 'fa-solid fa-shield-halved';
+    if (lower.includes('fire')) return 'fa-solid fa-fire-extinguisher';
+    if (lower.includes('accessible') || lower.includes('entrance')) return 'fa-solid fa-wheelchair';
+    if (lower.includes('elevator') || lower.includes('lift')) return 'fa-solid fa-elevator';
+    if (lower.includes('laundry')) return 'fa-solid fa-soap';
+    if (lower.includes('reception')) return 'fa-solid fa-bell-concierge';
+    if (lower.includes('luggage')) return 'fa-solid fa-suitcase';
+    if (lower.includes('business')) return 'fa-solid fa-briefcase';
+    return 'fa-solid fa-check';
+  }
+
+  getFormattedRulesList(): string[] {
+    if (!this.step4Data.additionalRules || !this.step4Data.additionalRules.trim()) {
+      return [
+        'Outside food and beverages are not allowed.',
+        'Maintain quiet hours from 10:00 PM to 6:00 AM.',
+        'Valid government-issued ID is required for all guests.',
+        'Visitors are allowed only till 9:00 PM.'
+      ];
+    }
+    return this.step4Data.additionalRules
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map(line => line.startsWith('-') || line.startsWith('•') ? line.replace(/^[-•]\s*/, '') : line);
+  }
+
+  getFormattedIdentification(): string {
+    const types = [...this.step4Data.acceptedIdentificationTypes];
+    const otherIdx = types.indexOf('Other');
+    if (otherIdx !== -1) {
+      types.splice(otherIdx, 1);
+      if (this.step4Data.customIdentificationType && this.step4Data.customIdentificationType.trim()) {
+        types.push(this.step4Data.customIdentificationType.trim());
+      }
+    }
+    return types.length > 0 ? types.join(', ') : 'None specified';
   }
 
 }

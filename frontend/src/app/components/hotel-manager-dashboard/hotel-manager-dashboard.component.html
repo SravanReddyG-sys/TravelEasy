@@ -888,9 +888,12 @@
               <div class="stepper-connector" [class.active]="currentWizardStep > 4"></div>
 
               <!-- Step 5 Node -->
-              <div class="stepper-node" [class.active]="currentWizardStep === 5">
-                <div class="stepper-circle">5</div>
-                <div class="stepper-label">Review & Submit</div>
+              <div class="stepper-node" [class.active]="currentWizardStep === 5" [class.completed]="registrationSuccess">
+                <div class="stepper-circle">
+                  <span *ngIf="!registrationSuccess">5</span>
+                  <i *ngIf="registrationSuccess" class="fa-solid fa-check"></i>
+                </div>
+                <div class="stepper-label">Review &amp; Submit</div>
               </div>
             </div>
           </div>
@@ -1280,6 +1283,8 @@
                         (click)="confirmCancelWizard()">
                   Cancel
                 </button>
+                <button *ngIf="editingFromReview" type="button" class="btn btn-outline-teal rounded-3 px-3 fw-bold me-2" [disabled]="step1Submitting" (click)="saveAndReturnToReview(1)">Save &amp; Return to Review &rarr;</button>
+                <button *ngIf="editingFromReview" type="button" class="btn btn-outline-teal rounded-3 px-3 fw-bold me-2" [disabled]="step1Submitting" (click)="saveAndReturnToReview(1)">Save &amp; Return to Review &rarr;</button>
                 <button type="button" 
                         class="btn btn-wizard-next" 
                         [disabled]="step1Submitting"
@@ -1294,26 +1299,1589 @@
             </form>
           </div>
 
-          <!-- ==================== STEP 2 PLACEHOLDER ==================== -->
-          <div *ngIf="currentWizardStep === 2" class="wizard-step-card bg-white rounded-4 border-0 shadow-sm p-4 p-md-5 text-center">
-            <div class="my-4">
-              <div class="step2-placeholder-icon mx-auto mb-3">
-                <i class="fa-solid fa-map-location-dot text-teal" style="font-size: 40px;"></i>
+          <!-- ==================== STEP 2: LOCATION & ADDRESS ==================== -->
+          <div *ngIf="currentWizardStep === 2" class="wizard-step-card bg-white rounded-4 border-0 shadow-sm p-4 p-md-5">
+
+            <!-- Step Header with Icon -->
+            <div class="d-flex align-items-center gap-3 mb-4 pb-1">
+              <div class="step-icon-box">
+                <i class="fa-solid fa-location-dot"></i>
               </div>
-              <h4 class="fw-bold text-dark mb-2">Step 2: Location & Address</h4>
-              <div class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-2 px-3 rounded-pill mb-3">
-                <i class="fa-solid fa-circle-check me-1"></i> Draft Saved Successfully (Draft ID: #{{ step1Data.id }})
+              <div>
+                <h4 class="fw-bold text-dark mb-1">Step 2 of 5: Location & Address</h4>
+                <p class="text-muted small mb-0">Provide the complete address of your property for accurate listing and communication.</p>
               </div>
-              <p class="text-muted small mx-auto mb-4" style="max-width: 540px;">
-                Your basic property details and uploaded images have been saved securely as a <strong>DRAFT</strong>.
-                In accordance with WP-05 boundaries, Step 1 is complete. Steps 2 through 5 will be fully implemented in subsequent assignments.
-              </p>
-              <div class="d-flex justify-content-center gap-3">
-                <button type="button" class="btn btn-outline-secondary rounded-3 px-4 fw-bold" (click)="backToStep1()">
-                  &larr; Back to Basic Details
+            </div>
+
+            <!-- Error Banner -->
+            <div *ngIf="step2ErrorMessage" class="alert alert-danger d-flex align-items-center gap-2 rounded-3 py-2 px-3 mb-4" role="alert">
+              <i class="fa-solid fa-circle-exclamation flex-shrink-0"></i>
+              <div class="small fw-semibold">{{ step2ErrorMessage }}</div>
+            </div>
+
+            <!-- Form Content -->
+            <form (ngSubmit)="proceedToStep3()" novalidate>
+              <!-- Row 1: Address Line 1 & Address Line 2 -->
+              <div class="row g-4 mb-4">
+                <!-- Address Line 1 -->
+                <div class="col-md-6">
+                  <label class="form-label-custom">
+                    Address Line 1 <span class="required-asterisk">*</span>
+                  </label>
+                  <div class="custom-input-group" [class.has-error]="step2Submitted && !isAddressLine1Valid()">
+                    <span class="input-icon-box">
+                      <i class="fa-regular fa-building text-secondary"></i>
+                    </span>
+                    <input type="text"
+                           class="custom-form-input"
+                           placeholder="e.g., Sunrise Grand Hotel, 24 MG Road"
+                           [(ngModel)]="step2Data.addressLine1"
+                           name="addressLine1"
+                           (input)="onStep2FieldChange()"
+                           required>
+                  </div>
+                  <div *ngIf="step2Submitted && !isAddressLine1Valid()" class="field-error-text">
+                    Address Line 1 is required.
+                  </div>
+                </div>
+
+                <!-- Address Line 2 (Optional) -->
+                <div class="col-md-6">
+                  <label class="form-label-custom">
+                    Address Line 2 (Optional)
+                  </label>
+                  <div class="custom-input-group">
+                    <span class="input-icon-box">
+                      <i class="fa-regular fa-building text-secondary"></i>
+                    </span>
+                    <input type="text"
+                           class="custom-form-input"
+                           placeholder="e.g., Ashok Nagar, Benz Circle Area"
+                           [(ngModel)]="step2Data.addressLine2"
+                           name="addressLine2"
+                           (input)="onStep2FieldChange()">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Row 2: Country & State -->
+              <div class="row g-4 mb-4">
+                <!-- Country -->
+                <div class="col-md-6">
+                  <label class="form-label-custom">
+                    Country <span class="required-asterisk">*</span>
+                  </label>
+                  <div class="custom-input-group" [class.has-error]="step2Submitted && !isCountryValid()">
+                    <span class="input-icon-box">
+                      <i class="fa-solid fa-globe text-secondary"></i>
+                    </span>
+                    <select class="custom-form-select"
+                            [(ngModel)]="step2Data.country"
+                            name="country"
+                            (change)="onCountryChange()"
+                            required>
+                      <option *ngFor="let c of countries" [value]="c">{{ c }}</option>
+                    </select>
+                  </div>
+                  <div *ngIf="step2Submitted && !isCountryValid()" class="field-error-text">
+                    Please select a country.
+                  </div>
+                </div>
+
+                <!-- State -->
+                <div class="col-md-6">
+                  <label class="form-label-custom">
+                    State <span class="required-asterisk">*</span>
+                  </label>
+                  <div class="custom-input-group" [class.has-error]="step2Submitted && !isStateValid()">
+                    <span class="input-icon-box">
+                      <i class="fa-regular fa-compass text-secondary"></i>
+                    </span>
+                    <select *ngIf="availableStates.length > 0"
+                            class="custom-form-select"
+                            [(ngModel)]="step2Data.state"
+                            name="state"
+                            (change)="onStep2FieldChange()"
+                            required>
+                      <option value="" disabled selected>Select state / province</option>
+                      <option *ngFor="let s of availableStates" [value]="s">{{ s }}</option>
+                    </select>
+                    <input *ngIf="availableStates.length === 0"
+                           type="text"
+                           class="custom-form-input"
+                           placeholder="Enter state / province"
+                           [(ngModel)]="step2Data.state"
+                           name="state"
+                           (input)="onStep2FieldChange()"
+                           required>
+                  </div>
+                  <div *ngIf="step2Submitted && !isStateValid()" class="field-error-text">
+                    Please select or enter a state.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Row 3: City & Postal Code -->
+              <div class="row g-4 mb-4">
+                <!-- City -->
+                <div class="col-md-6">
+                  <label class="form-label-custom">
+                    City <span class="required-asterisk">*</span>
+                  </label>
+                  <div class="custom-input-group" [class.has-error]="step2Submitted && !isCityValid()">
+                    <span class="input-icon-box">
+                      <i class="fa-solid fa-city text-secondary"></i>
+                    </span>
+                    <input type="text"
+                           class="custom-form-input"
+                           placeholder="e.g., Vijayawada"
+                           [(ngModel)]="step2Data.city"
+                           name="city"
+                           (input)="onStep2FieldChange()"
+                           required>
+                  </div>
+                  <div *ngIf="step2Submitted && !isCityValid()" class="field-error-text">
+                    City is required.
+                  </div>
+                </div>
+
+                <!-- Postal Code -->
+                <div class="col-md-6">
+                  <label class="form-label-custom">
+                    Postal Code <span class="required-asterisk">*</span>
+                  </label>
+                  <div class="custom-input-group" [class.has-error]="step2Submitted && !isPostalCodeValid()">
+                    <span class="input-icon-box">
+                      <i class="fa-regular fa-envelope text-secondary"></i>
+                    </span>
+                    <input type="text"
+                           class="custom-form-input"
+                           placeholder="e.g., 520010"
+                           [(ngModel)]="step2Data.postalCode"
+                           name="postalCode"
+                           (input)="onStep2FieldChange()"
+                           required>
+                  </div>
+                  <div *ngIf="step2Submitted && !isPostalCodeValid()" class="field-error-text">
+                    <span *ngIf="step2Data.country === 'India'">Please enter a valid 6-digit PIN code (e.g., 520010).</span>
+                    <span *ngIf="step2Data.country !== 'India'">Please enter a valid postal code.</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Row 4: Landmark (Optional) -->
+              <div class="row g-4 mb-4">
+                <div class="col-12">
+                  <label class="form-label-custom">
+                    Landmark (Optional)
+                  </label>
+                  <div class="custom-input-group">
+                    <span class="input-icon-box">
+                      <i class="fa-solid fa-location-dot text-secondary"></i>
+                    </span>
+                    <input type="text"
+                           class="custom-form-input"
+                           placeholder="e.g., Near Benz Circle, Opposite PVR Mall"
+                           [(ngModel)]="step2Data.landmark"
+                           name="landmark"
+                           (input)="onStep2FieldChange()">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="d-flex justify-content-between align-items-center pt-4 border-top">
+                <button type="button"
+                        class="btn btn-wizard-prev"
+                        (click)="backToStep1()">
+                  &larr; Previous: Basic Details
                 </button>
-                <button type="button" class="btn btn-teal-primary text-white rounded-3 px-4 fw-bold" (click)="propertyViewMode = 'list'; loadInitialData()">
-                  Done for Now (Return to Properties)
+                <div class="d-flex align-items-center gap-3">
+                  <button type="button"
+                          class="btn btn-wizard-cancel"
+                          (click)="confirmCancelWizard()">
+                    Cancel
+                  </button>
+                  <button *ngIf="editingFromReview" type="button" class="btn btn-outline-teal rounded-3 px-3 fw-bold me-2" [disabled]="step2Submitting" (click)="saveAndReturnToReview(2)">Save &amp; Return to Review &rarr;</button>
+                  <button type="button"
+                          class="btn btn-wizard-next"
+                          [disabled]="step2Submitting"
+                          (click)="proceedToStep3()">
+                    <span *ngIf="!step2Submitting">Next: Property Information &rarr;</span>
+                    <span *ngIf="step2Submitting">
+                      <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                      Saving Draft...
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <!-- ==================== STEP 3: PROPERTY INFORMATION ==================== -->
+          <div *ngIf="currentWizardStep === 3" class="wizard-step-card bg-white rounded-4 border-0 shadow-sm p-4 p-md-5">
+            <div class="d-flex align-items-center gap-3 mb-4">
+              <div class="step-icon-box rounded-3 d-flex align-items-center justify-content-center bg-teal-light text-teal" style="width: 48px; height: 48px;">
+                <i class="fa-solid fa-file-lines" style="font-size: 22px;"></i>
+              </div>
+              <div>
+                <h4 class="fw-bold text-dark mb-1">Step 3 of 5: Property Information</h4>
+                <p class="text-muted small mb-0">Provide the business, contact and operational details of your property.</p>
+              </div>
+            </div>
+
+            <!-- Error Banner -->
+            <div *ngIf="step3ErrorMessage" class="alert alert-danger rounded-3 py-2 px-3 small d-flex align-items-center gap-2 mb-4">
+              <i class="fa-solid fa-circle-exclamation flex-shrink-0"></i>
+              <span>{{ step3ErrorMessage }}</span>
+            </div>
+
+            <!-- Accordion Subsections Container -->
+            <div class="step3-accordion d-flex flex-column gap-3 mb-5">
+
+              <!-- Subsection 1: Property Contact Details -->
+              <div class="accordion-item-custom border rounded-3 overflow-hidden bg-white" [class.active-border]="isStep3SectionExpanded('contact')">
+                <div class="accordion-header-custom p-3 d-flex align-items-center justify-content-between cursor-pointer"
+                     [class.active-bg]="isStep3SectionExpanded('contact')"
+                     (click)="toggleStep3Section('contact')">
+                  <div class="d-flex align-items-center flex-wrap gap-2">
+                    <span class="text-teal fs-5 me-1"><i class="fa-solid fa-phone"></i></span>
+                    <span class="fw-bold text-dark">Property Contact Details</span>
+                    <span class="text-muted opacity-50 d-none d-sm-inline">|</span>
+                    <span class="text-muted small">Public contact information for your property.</span>
+                  </div>
+                  <div>
+                    <i class="fa-solid" [ngClass]="isStep3SectionExpanded('contact') ? 'fa-chevron-up text-dark' : 'fa-chevron-down text-muted'"></i>
+                  </div>
+                </div>
+
+                <!-- Expanded Content 1 -->
+                <div *ngIf="isStep3SectionExpanded('contact')" class="p-3 p-md-4 border-top">
+                  <div class="row g-3">
+                    <!-- Property Contact Number -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Property Contact Number <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-phone"></i></span>
+                        <input type="tel"
+                               class="form-control border-start-0 ps-0"
+                               [class.is-invalid]="step3Submitted && !isPropertyContactNumberValid()"
+                               placeholder="e.g., +91 98765 43210"
+                               [(ngModel)]="step3Data.propertyContactNumber"
+                               (input)="onStep3FieldChange()">
+                      </div>
+                      <div *ngIf="step3Submitted && !isPropertyContactNumberValid()" class="invalid-feedback d-block small">
+                        Please enter a valid contact number (7-20 digits with optional country code).
+                      </div>
+                    </div>
+
+                    <!-- Alternate Contact Number -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Alternate Contact Number <span class="text-muted fw-normal">(Optional)</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-phone"></i></span>
+                        <input type="tel"
+                               class="form-control border-start-0 ps-0"
+                               [class.is-invalid]="step3Submitted && !isAlternateContactNumberValid()"
+                               placeholder="e.g., +91 91234 56789"
+                               [(ngModel)]="step3Data.alternateContactNumber"
+                               (input)="onStep3FieldChange()">
+                      </div>
+                      <div *ngIf="step3Submitted && !isAlternateContactNumberValid()" class="invalid-feedback d-block small">
+                        Please enter a valid alternate number (7-20 digits).
+                      </div>
+                    </div>
+
+                    <!-- Property Email Address -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Property Email Address <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-envelope"></i></span>
+                        <input type="email"
+                               class="form-control border-start-0 ps-0"
+                               [class.is-invalid]="step3Submitted && !isPropertyEmailValid()"
+                               placeholder="e.g., bookings@sunrisegrand.com"
+                               [(ngModel)]="step3Data.propertyEmail"
+                               (input)="onStep3FieldChange()">
+                      </div>
+                      <div *ngIf="step3Submitted && !isPropertyEmailValid()" class="invalid-feedback d-block small">
+                        Please enter a valid property email address.
+                      </div>
+                    </div>
+
+                    <!-- Website URL -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Website URL <span class="text-muted fw-normal">(Optional)</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-link"></i></span>
+                        <input type="url"
+                               class="form-control border-start-0 ps-0"
+                               [class.is-invalid]="step3Submitted && !isWebsiteUrlValid()"
+                               placeholder="e.g., https://www.sunrisegrand.com"
+                               [(ngModel)]="step3Data.websiteUrl"
+                               (input)="onStep3FieldChange()">
+                      </div>
+                      <div *ngIf="step3Submitted && !isWebsiteUrlValid()" class="invalid-feedback d-block small">
+                        Please enter a valid website URL starting with http:// or https://.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Subsection 2: Business Registration Details -->
+              <div class="accordion-item-custom border rounded-3 overflow-hidden bg-white" [class.active-border]="isStep3SectionExpanded('business')">
+                <div class="accordion-header-custom p-3 d-flex align-items-center justify-content-between cursor-pointer"
+                     [class.active-bg]="isStep3SectionExpanded('business')"
+                     (click)="toggleStep3Section('business')">
+                  <div class="d-flex align-items-center flex-wrap gap-2">
+                    <span class="text-teal fs-5 me-1"><i class="fa-solid fa-briefcase"></i></span>
+                    <span class="fw-bold text-dark">Business Registration Details</span>
+                    <span class="text-muted opacity-50 d-none d-sm-inline">|</span>
+                    <span class="text-muted small">Legal registration details of your business.</span>
+                  </div>
+                  <div>
+                    <i class="fa-solid" [ngClass]="isStep3SectionExpanded('business') ? 'fa-chevron-up text-dark' : 'fa-chevron-down text-muted'"></i>
+                  </div>
+                </div>
+
+                <!-- Expanded Content 2 -->
+                <div *ngIf="isStep3SectionExpanded('business')" class="p-3 p-md-4 border-top">
+                  <div class="row g-3">
+                    <!-- Registered Business Name -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Registered Business Name <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-building"></i></span>
+                        <input type="text"
+                               class="form-control border-start-0 ps-0"
+                               [class.is-invalid]="step3Submitted && !isRegisteredBusinessNameValid()"
+                               placeholder="e.g., Sunrise Hospitality Private Limited"
+                               [(ngModel)]="step3Data.registeredBusinessName"
+                               (input)="onStep3FieldChange()">
+                      </div>
+                      <div *ngIf="step3Submitted && !isRegisteredBusinessNameValid()" class="invalid-feedback d-block small">
+                        Registered business name is required.
+                      </div>
+                    </div>
+
+                    <!-- Business Registration Type -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Business Registration Type <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-landmark"></i></span>
+                        <select class="form-select border-start-0 ps-0"
+                                [class.is-invalid]="step3Submitted && !isBusinessRegistrationTypeValid()"
+                                [(ngModel)]="step3Data.businessRegistrationType"
+                                (change)="onStep3FieldChange()">
+                          <option *ngFor="let opt of businessRegistrationTypes" [value]="opt">{{ opt }}</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <!-- Conditional Other Registration Type -->
+                    <div *ngIf="step3Data.businessRegistrationType === 'Other'" class="col-12">
+                      <label class="form-label small fw-semibold text-dark">
+                        Specify Registration Type <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-pen"></i></span>
+                        <input type="text"
+                               class="form-control border-start-0 ps-0"
+                               [class.is-invalid]="step3Submitted && !isOtherBusinessRegistrationTypeValid()"
+                               placeholder="e.g., Cooperative Society, Charitable Trust"
+                               [(ngModel)]="step3Data.otherBusinessRegistrationType"
+                               (input)="onStep3FieldChange()">
+                      </div>
+                      <div *ngIf="step3Submitted && !isOtherBusinessRegistrationTypeValid()" class="invalid-feedback d-block small">
+                        Please specify the custom business registration type.
+                      </div>
+                    </div>
+
+                    <!-- Registration Number -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Registration Number <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-hashtag"></i></span>
+                        <input type="text"
+                               class="form-control border-start-0 ps-0"
+                               [class.is-invalid]="step3Submitted && !isBusinessRegistrationNumberValid()"
+                               placeholder="e.g., U55101TG2020PTC123456 or CIN/LLPIN"
+                               [(ngModel)]="step3Data.businessRegistrationNumber"
+                               (input)="onStep3FieldChange()">
+                      </div>
+                      <div *ngIf="step3Submitted && !isBusinessRegistrationNumberValid()" class="invalid-feedback d-block small">
+                        Registration number is required.
+                      </div>
+                    </div>
+
+                    <!-- Registered Business Address -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Registered Business Address <span class="text-muted fw-normal">(Optional)</span>
+                      </label>
+                      <textarea class="form-control"
+                                rows="2"
+                                placeholder="e.g., Flat 401, Tech Park Towers, Madhapur, Hyderabad, 500081"
+                                [(ngModel)]="step3Data.registeredBusinessAddress"
+                                (input)="onStep3FieldChange()"></textarea>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Subsection 3: GST Details -->
+              <div class="accordion-item-custom border rounded-3 overflow-hidden bg-white" [class.active-border]="isStep3SectionExpanded('gst')">
+                <div class="accordion-header-custom p-3 d-flex align-items-center justify-content-between cursor-pointer"
+                     [class.active-bg]="isStep3SectionExpanded('gst')"
+                     (click)="toggleStep3Section('gst')">
+                  <div class="d-flex align-items-center flex-wrap gap-2">
+                    <span class="text-teal fs-5 me-1"><i class="fa-solid fa-file-invoice-dollar"></i></span>
+                    <span class="fw-bold text-dark">GST Details</span>
+                    <span class="text-muted opacity-50 d-none d-sm-inline">|</span>
+                    <span class="text-muted small">Provide GST information if your property is GST registered. (Optional)</span>
+                  </div>
+                  <div>
+                    <i class="fa-solid" [ngClass]="isStep3SectionExpanded('gst') ? 'fa-chevron-up text-dark' : 'fa-chevron-down text-muted'"></i>
+                  </div>
+                </div>
+
+                <!-- Expanded Content 3 -->
+                <div *ngIf="isStep3SectionExpanded('gst')" class="p-3 p-md-4 border-top">
+                  <div class="mb-4">
+                    <label class="form-label small fw-semibold text-dark d-block mb-2">
+                      Is the business GST registered?
+                    </label>
+                    <div class="d-flex align-items-center gap-4">
+                      <div class="form-check">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="isGstRegisteredRadio"
+                               id="gstNo"
+                               [checked]="!step3Data.isGstRegistered"
+                               (change)="onGstToggle(false)">
+                        <label class="form-check-label small" for="gstNo">No</label>
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input"
+                               type="radio"
+                               name="isGstRegisteredRadio"
+                               id="gstYes"
+                               [checked]="step3Data.isGstRegistered"
+                               (change)="onGstToggle(true)">
+                        <label class="form-check-label small fw-semibold text-teal" for="gstYes">Yes</label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Conditional GST Inputs -->
+                  <div *ngIf="step3Data.isGstRegistered" class="row g-3 p-3 bg-light rounded-3 border">
+                    <!-- GSTIN -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        GSTIN (15-character ID) <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-barcode"></i></span>
+                        <input type="text"
+                               class="form-control border-start-0 ps-0 text-uppercase"
+                               [class.is-invalid]="step3Submitted && !isGstinValid()"
+                               placeholder="e.g., 36AAAAA0000A1Z5"
+                               maxlength="15"
+                               [(ngModel)]="step3Data.gstin"
+                               (input)="onStep3FieldChange()">
+                      </div>
+                      <div *ngIf="step3Submitted && !isGstinValid()" class="invalid-feedback d-block small">
+                        Please enter a valid 15-character GSTIN (e.g., 36AAAAA0000A1Z5).
+                      </div>
+                    </div>
+
+                    <!-- GST Legal Name -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        GST Legal Name <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-building"></i></span>
+                        <input type="text"
+                               class="form-control border-start-0 ps-0"
+                               [class.is-invalid]="step3Submitted && !isGstLegalNameValid()"
+                               placeholder="e.g., Sunrise Hospitality Private Limited"
+                               [(ngModel)]="step3Data.gstLegalName"
+                               (input)="onStep3FieldChange()">
+                      </div>
+                      <div *ngIf="step3Submitted && !isGstLegalNameValid()" class="invalid-feedback d-block small">
+                        GST legal name is required when GST registered.
+                      </div>
+                    </div>
+
+                    <!-- GST State -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        GST State <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-location-dot"></i></span>
+                        <select class="form-select border-start-0 ps-0"
+                                [class.is-invalid]="step3Submitted && !isGstStateValid()"
+                                [(ngModel)]="step3Data.gstState"
+                                (change)="onStep3FieldChange()">
+                          <option value="">Select GST State</option>
+                          <option *ngFor="let st of countryStatesMap['India']" [value]="st">{{ st }}</option>
+                        </select>
+                      </div>
+                      <div *ngIf="step3Submitted && !isGstStateValid()" class="invalid-feedback d-block small">
+                        Please select a valid Indian state for GST.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Subsection 4: Property Manager Details -->
+              <div class="accordion-item-custom border rounded-3 overflow-hidden bg-white" [class.active-border]="isStep3SectionExpanded('manager')">
+                <div class="accordion-header-custom p-3 d-flex align-items-center justify-content-between cursor-pointer"
+                     [class.active-bg]="isStep3SectionExpanded('manager')"
+                     (click)="toggleStep3Section('manager')">
+                  <div class="d-flex align-items-center flex-wrap gap-2">
+                    <span class="text-teal fs-5 me-1"><i class="fa-solid fa-user-tie"></i></span>
+                    <span class="fw-bold text-dark">Property Manager Details</span>
+                    <span class="text-muted opacity-50 d-none d-sm-inline">|</span>
+                    <span class="text-muted small">Designated operational contact for this property.</span>
+                  </div>
+                  <div>
+                    <i class="fa-solid" [ngClass]="isStep3SectionExpanded('manager') ? 'fa-chevron-up text-dark' : 'fa-chevron-down text-muted'"></i>
+                  </div>
+                </div>
+
+                <!-- Expanded Content 4 -->
+                <div *ngIf="isStep3SectionExpanded('manager')" class="p-3 p-md-4 border-top">
+                  <p class="text-muted small mb-3">
+                    <i class="fa-solid fa-info-circle me-1 text-teal"></i>
+                    These are operational contact details for day-to-day property communications. They do not alter your personal account credentials.
+                  </p>
+                  <div class="row g-3">
+                    <!-- Manager Full Name -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Manager Full Name <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-user"></i></span>
+                        <input type="text"
+                               class="form-control border-start-0 ps-0"
+                               [class.is-invalid]="step3Submitted && !isPropertyManagerNameValid()"
+                               placeholder="e.g., Rajesh Sharma"
+                               [(ngModel)]="step3Data.propertyManagerName"
+                               (input)="onStep3FieldChange()">
+                      </div>
+                      <div *ngIf="step3Submitted && !isPropertyManagerNameValid()" class="invalid-feedback d-block small">
+                        Manager full name is required.
+                      </div>
+                    </div>
+
+                    <!-- Manager Designation -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Manager Designation <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-id-badge"></i></span>
+                        <select class="form-select border-start-0 ps-0"
+                                [class.is-invalid]="step3Submitted && !isPropertyManagerDesignationValid()"
+                                [(ngModel)]="step3Data.propertyManagerDesignation"
+                                (change)="onStep3FieldChange()">
+                          <option *ngFor="let des of managerDesignations" [value]="des">{{ des }}</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <!-- Manager Contact Number -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Manager Contact Number <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-phone"></i></span>
+                        <input type="tel"
+                               class="form-control border-start-0 ps-0"
+                               [class.is-invalid]="step3Submitted && !isPropertyManagerContactNumberValid()"
+                               placeholder="e.g., +91 98480 12345"
+                               [(ngModel)]="step3Data.propertyManagerContactNumber"
+                               (input)="onStep3FieldChange()">
+                      </div>
+                      <div *ngIf="step3Submitted && !isPropertyManagerContactNumberValid()" class="invalid-feedback d-block small">
+                        Please enter a valid telephone number (7-20 digits).
+                      </div>
+                    </div>
+
+                    <!-- Manager Email Address -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Manager Email Address <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-envelope"></i></span>
+                        <input type="email"
+                               class="form-control border-start-0 ps-0"
+                               [class.is-invalid]="step3Submitted && !isPropertyManagerEmailValid()"
+                               placeholder="e.g., rajesh.sharma@sunrisegrand.com"
+                               [(ngModel)]="step3Data.propertyManagerEmail"
+                               (input)="onStep3FieldChange()">
+                      </div>
+                      <div *ngIf="step3Submitted && !isPropertyManagerEmailValid()" class="invalid-feedback d-block small">
+                        Please enter a valid email address.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Subsection 5: Operating Hours -->
+              <div class="accordion-item-custom border rounded-3 overflow-hidden bg-white" [class.active-border]="isStep3SectionExpanded('operating')">
+                <div class="accordion-header-custom p-3 d-flex align-items-center justify-content-between cursor-pointer"
+                     [class.active-bg]="isStep3SectionExpanded('operating')"
+                     (click)="toggleStep3Section('operating')">
+                  <div class="d-flex align-items-center flex-wrap gap-2">
+                    <span class="text-teal fs-5 me-1"><i class="fa-solid fa-clock"></i></span>
+                    <span class="fw-bold text-dark">Operating Hours</span>
+                    <span class="text-muted opacity-50 d-none d-sm-inline">|</span>
+                    <span class="text-muted small">Guest check-in, check-out and reception availability.</span>
+                  </div>
+                  <div>
+                    <i class="fa-solid" [ngClass]="isStep3SectionExpanded('operating') ? 'fa-chevron-up text-dark' : 'fa-chevron-down text-muted'"></i>
+                  </div>
+                </div>
+
+                <!-- Expanded Content 5 -->
+                <div *ngIf="isStep3SectionExpanded('operating')" class="p-3 p-md-4 border-top">
+                  <div class="row g-3">
+                    <!-- Check-in Time -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Check-in Time <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-arrow-right-to-bracket"></i></span>
+                        <input type="time"
+                               class="form-control border-start-0 ps-0"
+                               [class.is-invalid]="step3Submitted && !isCheckInTimeValid()"
+                               [(ngModel)]="step3Data.checkInTime"
+                               (input)="onStep3FieldChange()">
+                      </div>
+                      <div *ngIf="step3Submitted && !isCheckInTimeValid()" class="invalid-feedback d-block small">
+                        Check-in time is required.
+                      </div>
+                    </div>
+
+                    <!-- Check-out Time -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Check-out Time <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-arrow-right-from-bracket"></i></span>
+                        <input type="time"
+                               class="form-control border-start-0 ps-0"
+                               [class.is-invalid]="step3Submitted && !isCheckOutTimeValid()"
+                               [(ngModel)]="step3Data.checkOutTime"
+                               (input)="onStep3FieldChange()">
+                      </div>
+                      <div *ngIf="step3Submitted && !isCheckOutTimeValid()" class="invalid-feedback d-block small">
+                        Check-out time is required.
+                      </div>
+                    </div>
+
+                    <!-- Reception Availability -->
+                    <div class="col-md-6">
+                      <label class="form-label small fw-semibold text-dark">
+                        Reception Availability <span class="text-danger">*</span>
+                      </label>
+                      <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-clock"></i></span>
+                        <select class="form-select border-start-0 ps-0"
+                                [(ngModel)]="step3Data.receptionAvailability"
+                                (change)="onStep3FieldChange()">
+                          <option *ngFor="let opt of receptionAvailabilityOptions" [value]="opt">{{ opt }}</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <!-- Conditional Limited Reception Hours -->
+                    <div *ngIf="step3Data.receptionAvailability === 'Limited Operating Hours'" class="col-12">
+                      <div class="row g-3 p-3 bg-light rounded-3 border">
+                        <div class="col-md-6">
+                          <label class="form-label small fw-semibold text-dark">
+                            Reception Opening Time <span class="text-danger">*</span>
+                          </label>
+                          <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-clock"></i></span>
+                            <input type="time"
+                                   class="form-control border-start-0 ps-0"
+                                   [class.is-invalid]="step3Submitted && !step3Data.receptionOpeningTime"
+                                   [(ngModel)]="step3Data.receptionOpeningTime"
+                                   (input)="onStep3FieldChange()">
+                          </div>
+                          <div *ngIf="step3Submitted && !step3Data.receptionOpeningTime" class="invalid-feedback d-block small">
+                            Reception opening time is required for limited hours.
+                          </div>
+                        </div>
+
+                        <div class="col-md-6">
+                          <label class="form-label small fw-semibold text-dark">
+                            Reception Closing Time <span class="text-danger">*</span>
+                          </label>
+                          <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-clock"></i></span>
+                            <input type="time"
+                                   class="form-control border-start-0 ps-0"
+                                   [class.is-invalid]="step3Submitted && !step3Data.receptionClosingTime"
+                                   [(ngModel)]="step3Data.receptionClosingTime"
+                                   (input)="onStep3FieldChange()">
+                          </div>
+                          <div *ngIf="step3Submitted && !step3Data.receptionClosingTime" class="invalid-feedback d-block small">
+                            Reception closing time is required for limited hours.
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Bottom Navigation Actions -->
+            <div class="d-flex align-items-center justify-content-end gap-3 pt-3 border-top">
+              <button type="button" class="btn btn-wizard-prev text-dark fw-semibold px-4 rounded-3" (click)="backToStep2()">
+                &larr; Previous: Location & Address
+              </button>
+              <button type="button" class="btn btn-outline-secondary fw-semibold px-4 rounded-3" (click)="confirmCancelWizard()">
+                Cancel
+              </button>
+              <button *ngIf="editingFromReview" type="button" class="btn btn-outline-teal fw-semibold px-3 rounded-3 me-2" [disabled]="step3Submitting" (click)="saveAndReturnToReview(3)">Save &amp; Return to Review &rarr;</button>
+              <button type="button"
+                      class="btn btn-teal-primary text-white fw-semibold px-4 rounded-3 d-flex align-items-center gap-2"
+                      [disabled]="step3Submitting"
+                      (click)="proceedToStep4()">
+                <span *ngIf="step3Submitting" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                <span>Next: Facilities & Policies &rarr;</span>
+              </button>
+            </div>
+          </div>
+
+                    <!-- ==================== STEP 4: FACILITIES & POLICIES ==================== -->
+          <div *ngIf="currentWizardStep === 4" class="wizard-step-card bg-white rounded-4 border-0 shadow-sm p-4 p-md-5">
+            <!-- Header -->
+            <div class="d-flex align-items-center gap-3 mb-4">
+              <div class="step-icon-box rounded-3 d-flex align-items-center justify-content-center bg-teal-subtle text-teal">
+                <i class="fa-solid fa-city fs-5"></i>
+              </div>
+              <div>
+                <h4 class="fw-bold mb-1 text-dark">Step 4 of 5: Facilities &amp; Policies</h4>
+                <p class="text-muted small mb-0">Add property amenities, define guest policies and share additional property rules.</p>
+              </div>
+            </div>
+
+            <!-- Error Banner -->
+            <div *ngIf="step4ErrorMessage" class="alert alert-danger py-2 px-3 rounded-3 small mb-4 d-flex align-items-center gap-2">
+              <i class="fa-solid fa-circle-exclamation flex-shrink-0"></i>
+              <span>{{ step4ErrorMessage }}</span>
+            </div>
+
+            <!-- Accordion Container -->
+            <div class="step-accordion d-flex flex-column gap-3 mb-5">
+
+              <!-- ==================== 1. PROPERTY FACILITIES & AMENITIES ==================== -->
+              <div class="accordion-item-custom rounded-3 border" [class.active-border]="isStep4SectionExpanded('amenities')">
+                <div class="accordion-header-custom p-3 d-flex align-items-center justify-content-between cursor-pointer"
+                     [class.active-bg]="isStep4SectionExpanded('amenities')"
+                     (click)="toggleStep4Section('amenities')">
+                  <div class="d-flex align-items-center gap-3">
+                    <div class="accordion-icon-box text-teal bg-teal-subtle rounded-3 d-flex align-items-center justify-content-center">
+                      <i class="fa-solid fa-bed"></i>
+                    </div>
+                    <div class="d-flex align-items-center flex-wrap">
+                      <span class="fw-bold text-dark fs-6">Property Facilities &amp; Amenities</span>
+                      <span class="d-none d-md-inline mx-2 text-muted">|</span>
+                      <span class="text-muted small">Select the amenities and facilities available at your property.</span>
+                    </div>
+                  </div>
+                  <div class="accordion-toggle-icon text-muted">
+                    <i class="fa-solid" [ngClass]="isStep4SectionExpanded('amenities') ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                  </div>
+                </div>
+
+                <div *ngIf="isStep4SectionExpanded('amenities')" class="accordion-body-custom p-4 border-top">
+                  <!-- Add Custom Amenity Action Button -->
+                  <div class="d-flex justify-content-end mb-3">
+                    <button type="button" class="btn btn-outline-teal btn-sm rounded-pill fw-semibold px-3" (click)="openAddCustomAmenity()">
+                      <i class="fa-solid fa-plus me-1"></i> Add Custom Amenity
+                    </button>
+                  </div>
+
+                  <!-- Inline Add Custom Amenity Form -->
+                  <div *ngIf="showCustomAmenityInput" class="custom-amenity-input-box p-3 mb-4 rounded-3 bg-light border border-teal-subtle">
+                    <label class="form-label fw-semibold text-dark small mb-1">Add Custom Property Amenity</label>
+                    <div class="input-group">
+                      <input type="text" class="form-control" placeholder="e.g., EV Charging Station, Rooftop Bar, Private Helipad..."
+                             [(ngModel)]="newCustomAmenityName" (keyup.enter)="submitAddCustomAmenity()" maxlength="50">
+                      <button class="btn btn-teal-primary text-white px-3" type="button" (click)="submitAddCustomAmenity()">Add</button>
+                      <button class="btn btn-outline-secondary px-3" type="button" (click)="cancelAddCustomAmenity()">Cancel</button>
+                    </div>
+                    <div *ngIf="customAmenityError" class="text-danger small mt-1">
+                      <i class="fa-solid fa-circle-exclamation me-1"></i>{{ customAmenityError }}
+                    </div>
+                  </div>
+
+                  <!-- 7 Predefined Amenity Categories -->
+                  <div class="row g-3 mb-3">
+                    <!-- Cards 1-6 (3 columns per row on md+) -->
+                    <div *ngFor="let cat of predefinedAmenityCategories" [class.col-12]="cat.fullWidth" [class.col-md-4]="!cat.fullWidth" class="col-12">
+                      <div class="amenity-category-card border rounded-3 p-3 h-100 bg-white">
+                        <div class="d-flex align-items-center gap-2 mb-3">
+                          <div class="category-icon-circle text-teal bg-teal-subtle rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; font-size: 14px;">
+                            <i [class]="cat.icon"></i>
+                          </div>
+                          <span class="fw-bold text-dark small">{{ cat.category }}</span>
+                        </div>
+                        <div class="amenities-checkbox-list d-flex flex-wrap gap-2">
+                          <div *ngFor="let amenity of cat.amenities" class="form-check me-3 mb-1">
+                            <input class="form-check-input custom-checkbox cursor-pointer" type="checkbox"
+                                   [id]="'amenity-' + amenity"
+                                   [checked]="isPredefinedAmenitySelected(amenity)"
+                                   (change)="togglePredefinedAmenity(amenity)">
+                            <label class="form-check-label text-dark small cursor-pointer" [for]="'amenity-' + amenity">
+                              {{ amenity }}
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Custom Amenities Card (if any custom amenities added) -->
+                    <div *ngIf="step4Data.customAmenities.length > 0" class="col-12">
+                      <div class="amenity-category-card border rounded-3 p-3 bg-white">
+                        <div class="d-flex align-items-center justify-content-between mb-3">
+                          <div class="d-flex align-items-center gap-2">
+                            <div class="category-icon-circle text-teal bg-teal-subtle rounded-circle d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; font-size: 14px;">
+                              <i class="fa-solid fa-star"></i>
+                            </div>
+                            <span class="fw-bold text-dark small">Custom Amenities ({{ step4Data.customAmenities.length }})</span>
+                          </div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                          <span *ngFor="let custom of step4Data.customAmenities" class="badge bg-light text-dark border py-2 px-3 rounded-pill d-inline-flex align-items-center gap-2">
+                            <i class="fa-solid fa-check text-teal"></i>
+                            <span>{{ custom }}</span>
+                            <i class="fa-solid fa-xmark text-muted cursor-pointer ms-1 hover-danger" (click)="removeCustomAmenity(custom)" title="Remove amenity"></i>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ==================== 2. GUEST POLICIES ==================== -->
+              <div class="accordion-item-custom rounded-3 border" [class.active-border]="isStep4SectionExpanded('policies')">
+                <div class="accordion-header-custom p-3 d-flex align-items-center justify-content-between cursor-pointer"
+                     [class.active-bg]="isStep4SectionExpanded('policies')"
+                     (click)="toggleStep4Section('policies')">
+                  <div class="d-flex align-items-center gap-3">
+                    <div class="accordion-icon-box text-teal bg-teal-subtle rounded-3 d-flex align-items-center justify-content-center">
+                      <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <div class="d-flex align-items-center flex-wrap">
+                      <span class="fw-bold text-dark fs-6">Guest Policies</span>
+                      <span class="d-none d-md-inline mx-2 text-muted">|</span>
+                      <span class="text-muted small">Define key policies for guest stays at your property.</span>
+                    </div>
+                  </div>
+                  <div class="accordion-toggle-icon text-muted">
+                    <i class="fa-solid" [ngClass]="isStep4SectionExpanded('policies') ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                  </div>
+                </div>
+
+                <div *ngIf="isStep4SectionExpanded('policies')" class="accordion-body-custom p-4 border-top">
+                  <!-- 4 Mandatory Single-Choice Policies Grid -->
+                  <div class="row g-4 mb-4">
+                    <!-- Children Policy -->
+                    <div class="col-12 col-md-6">
+                      <label class="form-label fw-bold text-dark small mb-2">Children Policy <span class="text-danger">*</span></label>
+                      <div class="d-flex flex-column gap-2">
+                        <div *ngFor="let opt of childrenPolicyOptions" class="form-check">
+                          <input class="form-check-input cursor-pointer" type="radio" name="childrenPolicy"
+                                 [id]="'child-' + opt" [value]="opt"
+                                 [(ngModel)]="step4Data.childrenPolicy" (change)="isStep4Dirty = true">
+                          <label class="form-check-label text-dark small cursor-pointer" [for]="'child-' + opt">
+                            {{ opt }}
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Pet Policy -->
+                    <div class="col-12 col-md-6">
+                      <label class="form-label fw-bold text-dark small mb-2">Pet Policy <span class="text-danger">*</span></label>
+                      <div class="d-flex flex-column gap-2">
+                        <div *ngFor="let opt of petPolicyOptions" class="form-check">
+                          <input class="form-check-input cursor-pointer" type="radio" name="petPolicy"
+                                 [id]="'pet-' + opt" [value]="opt"
+                                 [(ngModel)]="step4Data.petPolicy" (change)="isStep4Dirty = true">
+                          <label class="form-check-label text-dark small cursor-pointer" [for]="'pet-' + opt">
+                            {{ opt }}
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Smoking Policy -->
+                    <div class="col-12 col-md-6">
+                      <label class="form-label fw-bold text-dark small mb-2">Smoking Policy <span class="text-danger">*</span></label>
+                      <div class="d-flex flex-column gap-2">
+                        <div *ngFor="let opt of smokingPolicyOptions" class="form-check">
+                          <input class="form-check-input cursor-pointer" type="radio" name="smokingPolicy"
+                                 [id]="'smoke-' + opt" [value]="opt"
+                                 [(ngModel)]="step4Data.smokingPolicy" (change)="isStep4Dirty = true">
+                          <label class="form-check-label text-dark small cursor-pointer" [for]="'smoke-' + opt">
+                            {{ opt }}
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Extra Bed Policy -->
+                    <div class="col-12 col-md-6">
+                      <label class="form-label fw-bold text-dark small mb-2">Extra Bed Policy <span class="text-danger">*</span></label>
+                      <div class="d-flex flex-column gap-2">
+                        <div *ngFor="let opt of extraBedPolicyOptions" class="form-check">
+                          <input class="form-check-input cursor-pointer" type="radio" name="extraBedPolicy"
+                                 [id]="'bed-' + opt" [value]="opt"
+                                 [(ngModel)]="step4Data.extraBedPolicy" (change)="isStep4Dirty = true">
+                          <label class="form-check-label text-dark small cursor-pointer" [for]="'bed-' + opt">
+                            {{ opt }}
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr class="my-4 text-muted opacity-25">
+
+                  <!-- Group E: Identification Requirements -->
+                  <div class="mb-3">
+                    <label class="form-label fw-bold text-dark small mb-1">
+                      Accepted Identification Requirements <span class="text-danger">*</span>
+                    </label>
+                    <p class="text-muted small mb-3">Select all valid identity proofs accepted at guest check-in (at least one required).</p>
+                    <div class="d-flex flex-wrap gap-3">
+                      <div *ngFor="let idType of identificationTypeOptions" class="form-check me-2">
+                        <input class="form-check-input custom-checkbox cursor-pointer" type="checkbox"
+                               [id]="'idType-' + idType"
+                               [checked]="isIdTypeSelected(idType)"
+                               (change)="toggleIdType(idType)">
+                        <label class="form-check-label text-dark small cursor-pointer" [for]="'idType-' + idType">
+                          {{ idType }}
+                        </label>
+                      </div>
+                    </div>
+
+                    <!-- Conditional Custom ID Input when "Other" is checked -->
+                    <div *ngIf="isIdTypeSelected('Other')" class="mt-3 p-3 bg-light rounded-3 border border-teal-subtle" style="max-width: 520px;">
+                      <label class="form-label fw-semibold text-dark small mb-1">
+                        Specify Other Accepted Identification <span class="text-danger">*</span>
+                      </label>
+                      <input type="text" class="form-control" placeholder="e.g., PAN Card, Student ID, Consular Card..."
+                             [(ngModel)]="step4Data.customIdentificationType" (ngModelChange)="isStep4Dirty = true" maxlength="150"
+                             [class.is-invalid]="step4Submitted && isIdTypeSelected('Other') && (!step4Data.customIdentificationType || !step4Data.customIdentificationType.trim())">
+                      <div class="invalid-feedback small">
+                        Please specify the custom accepted identification document.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ==================== 3. ADDITIONAL PROPERTY RULES ==================== -->
+              <div class="accordion-item-custom rounded-3 border" [class.active-border]="isStep4SectionExpanded('rules')">
+                <div class="accordion-header-custom p-3 d-flex align-items-center justify-content-between cursor-pointer"
+                     [class.active-bg]="isStep4SectionExpanded('rules')"
+                     (click)="toggleStep4Section('rules')">
+                  <div class="d-flex align-items-center gap-3">
+                    <div class="accordion-icon-box text-teal bg-teal-subtle rounded-3 d-flex align-items-center justify-content-center">
+                      <i class="fa-solid fa-file-lines"></i>
+                    </div>
+                    <div class="d-flex align-items-center flex-wrap">
+                      <span class="fw-bold text-dark fs-6">Additional Property Rules</span>
+                      <span class="d-none d-md-inline mx-2 text-muted">|</span>
+                      <span class="text-muted small">Add any other important rules, guest instructions or property-specific information.</span>
+                    </div>
+                  </div>
+                  <div class="accordion-toggle-icon text-muted">
+                    <i class="fa-solid" [ngClass]="isStep4SectionExpanded('rules') ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                  </div>
+                </div>
+
+                <div *ngIf="isStep4SectionExpanded('rules')" class="accordion-body-custom p-4 border-top">
+                  <div class="mb-2">
+                    <label class="form-label fw-bold text-dark small mb-1">Additional Property Rules / Guest Instructions (Optional)</label>
+                    <p class="text-muted small mb-2">Enter any quiet hours, visitor policies, pool safety instructions, or local guidelines for guests.</p>
+                    <textarea class="form-control" rows="4" maxlength="1000"
+                              placeholder="Enter any additional property rules, guest instructions or important information that visitors should know before booking..."
+                              [(ngModel)]="step4Data.additionalRules" (ngModelChange)="isStep4Dirty = true"></textarea>
+                    <div class="d-flex justify-content-end text-muted small mt-1">
+                      <span>{{ (step4Data.additionalRules || '').length }} / 1000 characters</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Bottom Navigation Bar -->
+            <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+              <button type="button" class="btn btn-outline-secondary rounded-3 px-4 fw-bold" (click)="backToStep3()">
+                &larr; Previous: Property Information
+              </button>
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-secondary rounded-3 px-4 fw-semibold" (click)="cancelPropertyRegistration()">
+                  Cancel
+                </button>
+                <button *ngIf="editingFromReview" type="button" class="btn btn-outline-teal rounded-3 px-3 fw-bold me-2" [disabled]="step4Submitting" (click)="saveAndReturnToReview(4)">Save &amp; Return to Review &rarr;</button>
+                <button type="button" class="btn btn-teal-primary text-white rounded-3 px-4 fw-bold d-inline-flex align-items-center gap-2"
+                        (click)="proceedToStep5()" [disabled]="step4Submitting">
+                  <span *ngIf="step4Submitting" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                  <span>Next: Review &amp; Submit &rarr;</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ==================== STEP 5: REVIEW & SUBMIT ==================== -->
+          <!-- Normal Review & Submit Form (shown when not registered yet) -->
+          <div *ngIf="currentWizardStep === 5 && !registrationSuccess" class="wizard-step-card bg-white rounded-4 border-0 shadow-sm p-4 p-md-5">
+
+            <!-- Step Header -->
+            <div class="d-flex align-items-center gap-3 border-bottom pb-3 mb-4">
+              <div class="step-icon-box">
+                <i class="fa-regular fa-clipboard"></i>
+              </div>
+              <div>
+                <h4 class="fw-bold text-dark mb-1">Step 5 of 5: Review &amp; Submit</h4>
+                <p class="text-muted small mb-0">Review all the details of your property before submitting for registration.</p>
+              </div>
+            </div>
+
+            <!-- Error Banner -->
+            <div *ngIf="step5ErrorMessage" class="alert alert-danger d-flex align-items-center gap-2 rounded-3 py-2 px-3 mb-4" role="alert">
+              <i class="fa-solid fa-circle-exclamation flex-shrink-0"></i>
+              <div class="small fw-semibold">{{ step5ErrorMessage }}</div>
+            </div>
+
+            <!-- ==================== SECTION 1: BASIC DETAILS ==================== -->
+            <div class="review-accordion-card mb-4 border rounded-4 bg-white shadow-sm overflow-hidden">
+              <div class="review-header d-flex align-items-center justify-content-between p-3 px-4 bg-light bg-opacity-50 border-bottom cursor-pointer"
+                   (click)="toggleReviewSection('basic')">
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                  <div class="review-icon-box text-teal bg-teal bg-opacity-10 rounded-3 d-flex align-items-center justify-content-center">
+                    <i class="fa-solid fa-hotel"></i>
+                  </div>
+                  <h5 class="fw-bold text-dark mb-0">Basic Details</h5>
+                  <span class="text-muted mx-1">|</span>
+                  <span class="text-muted small">Core information about your property.</span>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                  <button type="button" class="btn btn-sm btn-outline-teal d-flex align-items-center gap-1 rounded-3 px-3 py-1 fw-semibold"
+                          (click)="editReviewStep(1, $event)">
+                    <i class="fa-solid fa-pen small"></i>
+                    <span>Edit</span>
+                  </button>
+                  <i class="fa-solid" [ngClass]="reviewSectionsExpanded.basic ? 'fa-chevron-up text-teal' : 'fa-chevron-down text-muted'"></i>
+                </div>
+              </div>
+
+              <!-- Body -->
+              <div *ngIf="reviewSectionsExpanded.basic" class="p-4">
+                <div class="d-flex flex-column flex-lg-row align-items-start gap-4">
+                  <!-- Cover Image Thumbnail -->
+                  <div class="review-cover-wrapper flex-shrink-0">
+                    <img [src]="getReviewCoverImageUrl()" [alt]="step1Data.name" class="rounded-3 shadow-sm review-cover-img" />
+                  </div>
+
+                  <!-- Details Grid -->
+                  <div class="flex-grow-1 w-100">
+                    <div class="row g-3">
+                      <div class="col-sm-6 col-lg-3">
+                        <div class="text-muted small fw-semibold mb-1">Property Name</div>
+                        <div class="fw-bold text-dark">{{ step1Data.name || 'Not provided' }}</div>
+                      </div>
+                      <div class="col-sm-6 col-lg-3">
+                        <div class="text-muted small fw-semibold mb-1">Property Type</div>
+                        <div class="fw-bold text-dark d-flex align-items-center gap-1">
+                          <i class="fa-solid fa-hotel text-muted small"></i>
+                          <span>{{ step1Data.propertyType || 'Not selected' }}</span>
+                        </div>
+                      </div>
+                      <div class="col-sm-6 col-lg-3">
+                        <div class="text-muted small fw-semibold mb-1">Recognized Property Classification</div>
+                        <div class="fw-bold text-dark d-flex align-items-center gap-1">
+                          <i class="fa-regular fa-star text-muted small"></i>
+                          <span>{{ getReviewClassification() }}</span>
+                        </div>
+                      </div>
+                      <div class="col-sm-6 col-lg-3">
+                        <div class="text-muted small fw-semibold mb-1">Property Segment</div>
+                        <div class="fw-bold text-dark d-flex align-items-center gap-1">
+                          <i class="fa-solid fa-gem text-muted small"></i>
+                          <span>{{ getReviewPropertySegment() }}</span>
+                        </div>
+                      </div>
+                      <div *ngIf="step1Data.brandName" class="col-12 mt-2">
+                        <div class="text-muted small fw-semibold mb-1">Brand Name</div>
+                        <div class="fw-medium text-dark d-flex align-items-center gap-1 small">
+                          <i class="fa-solid fa-tag text-muted small"></i>
+                          <span>{{ step1Data.brandName }}</span>
+                        </div>
+                      </div>
+                      <div class="col-12 mt-3 pt-3 border-top">
+                        <div class="text-muted small fw-semibold mb-1">Property Description</div>
+                        <p class="text-muted small mb-0 lh-base">{{ step1Data.description || 'No description provided.' }}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ==================== SECTION 2: LOCATION & ADDRESS ==================== -->
+            <div class="review-accordion-card mb-4 border rounded-4 bg-white shadow-sm overflow-hidden">
+              <div class="review-header d-flex align-items-center justify-content-between p-3 px-4 bg-light bg-opacity-50 border-bottom cursor-pointer"
+                   (click)="toggleReviewSection('address')">
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                  <div class="review-icon-box text-teal bg-teal bg-opacity-10 rounded-3 d-flex align-items-center justify-content-center">
+                    <i class="fa-solid fa-location-dot"></i>
+                  </div>
+                  <h5 class="fw-bold text-dark mb-0">Location &amp; Address</h5>
+                  <span class="text-muted mx-1">|</span>
+                  <span class="text-muted small">Location and address details of your property.</span>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                  <button type="button" class="btn btn-sm btn-outline-teal d-flex align-items-center gap-1 rounded-3 px-3 py-1 fw-semibold"
+                          (click)="editReviewStep(2, $event)">
+                    <i class="fa-solid fa-pen small"></i>
+                    <span>Edit</span>
+                  </button>
+                  <i class="fa-solid" [ngClass]="reviewSectionsExpanded.address ? 'fa-chevron-up text-teal' : 'fa-chevron-down text-muted'"></i>
+                </div>
+              </div>
+
+              <!-- Body -->
+              <div *ngIf="reviewSectionsExpanded.address" class="p-4">
+                <div class="row g-3 align-items-start">
+                  <div class="col-lg-4 col-md-6">
+                    <div class="d-flex align-items-center gap-1 text-muted small fw-semibold mb-1">
+                      <i class="fa-solid fa-location-dot text-teal small"></i>
+                      <span>Address</span>
+                    </div>
+                    <div class="fw-bold text-dark small lh-base">{{ getFormattedFullAddress() }}</div>
+                  </div>
+                  <div class="col-lg-2 col-md-3 col-sm-6">
+                    <div class="d-flex align-items-center gap-1 text-muted small fw-semibold mb-1">
+                      <i class="fa-solid fa-city text-teal small"></i>
+                      <span>City</span>
+                    </div>
+                    <div class="fw-bold text-dark">{{ step2Data.city || 'Not provided' }}</div>
+                  </div>
+                  <div class="col-lg-2 col-md-3 col-sm-6">
+                    <div class="d-flex align-items-center gap-1 text-muted small fw-semibold mb-1">
+                      <i class="fa-solid fa-landmark text-teal small"></i>
+                      <span>State</span>
+                    </div>
+                    <div class="fw-bold text-dark">{{ step2Data.state || 'Not provided' }}</div>
+                  </div>
+                  <div class="col-lg-2 col-md-3 col-sm-6">
+                    <div class="d-flex align-items-center gap-1 text-muted small fw-semibold mb-1">
+                      <i class="fa-regular fa-envelope text-teal small"></i>
+                      <span>Postal Code</span>
+                    </div>
+                    <div class="fw-bold text-dark">{{ step2Data.postalCode || 'Not provided' }}</div>
+                  </div>
+                  <div class="col-lg-2 col-md-3 col-sm-6">
+                    <div class="d-flex align-items-center gap-1 text-muted small fw-semibold mb-1">
+                      <i class="fa-solid fa-flag text-teal small"></i>
+                      <span>Country</span>
+                    </div>
+                    <div class="fw-bold text-dark d-flex align-items-center gap-1">
+                      <span *ngIf="step2Data.country === 'India'">🇮🇳</span>
+                      <span>{{ step2Data.country || 'India' }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ==================== SECTION 3: PROPERTY INFORMATION ==================== -->
+            <div class="review-accordion-card mb-4 border rounded-4 bg-white shadow-sm overflow-hidden">
+              <div class="review-header d-flex align-items-center justify-content-between p-3 px-4 bg-light bg-opacity-50 border-bottom cursor-pointer"
+                   (click)="toggleReviewSection('propertyInfo')">
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                  <div class="review-icon-box text-teal bg-teal bg-opacity-10 rounded-3 d-flex align-items-center justify-content-center">
+                    <i class="fa-regular fa-file-lines"></i>
+                  </div>
+                  <h5 class="fw-bold text-dark mb-0">Property Information</h5>
+                  <span class="text-muted mx-1">|</span>
+                  <span class="text-muted small">Business, contact and operational details.</span>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                  <button type="button" class="btn btn-sm btn-outline-teal d-flex align-items-center gap-1 rounded-3 px-3 py-1 fw-semibold"
+                          (click)="editReviewStep(3, $event)">
+                    <i class="fa-solid fa-pen small"></i>
+                    <span>Edit</span>
+                  </button>
+                  <i class="fa-solid" [ngClass]="reviewSectionsExpanded.propertyInfo ? 'fa-chevron-up text-teal' : 'fa-chevron-down text-muted'"></i>
+                </div>
+              </div>
+
+              <!-- Body -->
+              <div *ngIf="reviewSectionsExpanded.propertyInfo" class="p-4">
+                <div class="row g-4">
+                  <!-- Contact Details -->
+                  <div class="col-lg col-md-6 review-info-box">
+                    <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom">
+                      <i class="fa-solid fa-phone text-teal small"></i>
+                      <span class="fw-bold text-dark small">Contact Details</span>
+                    </div>
+                    <div class="small text-dark mb-1 d-flex align-items-center gap-2">
+                      <i class="fa-solid fa-phone text-muted" style="font-size: 11px;"></i>
+                      <span>{{ step3Data.propertyContactNumber || 'Not provided' }}</span>
+                    </div>
+                    <div *ngIf="step3Data.alternateContactNumber" class="small text-muted mb-1 d-flex align-items-center gap-2">
+                      <i class="fa-solid fa-phone text-muted" style="font-size: 11px;"></i>
+                      <span>{{ step3Data.alternateContactNumber }} (Alt)</span>
+                    </div>
+                    <div class="small text-dark mb-1 d-flex align-items-center gap-2 text-break">
+                      <i class="fa-regular fa-envelope text-muted" style="font-size: 11px;"></i>
+                      <span>{{ step3Data.propertyEmail || 'Not provided' }}</span>
+                    </div>
+                    <div *ngIf="step3Data.websiteUrl" class="small text-teal d-flex align-items-center gap-2 text-break">
+                      <i class="fa-solid fa-globe text-muted" style="font-size: 11px;"></i>
+                      <span>{{ step3Data.websiteUrl }}</span>
+                    </div>
+                  </div>
+
+                  <!-- Business Registration -->
+                  <div class="col-lg col-md-6 review-info-box">
+                    <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom">
+                      <i class="fa-solid fa-briefcase text-teal small"></i>
+                      <span class="fw-bold text-dark small">Business Registration</span>
+                    </div>
+                    <div class="mb-2">
+                      <div class="text-muted" style="font-size: 11px;">Registered Business Name</div>
+                      <div class="fw-bold text-dark small">{{ step3Data.registeredBusinessName || 'Not provided' }}</div>
+                    </div>
+                    <div class="mb-2">
+                      <div class="text-muted" style="font-size: 11px;">Registration Type</div>
+                      <div class="small text-dark fw-medium">{{ step3Data.businessRegistrationType === 'Other' ? step3Data.otherBusinessRegistrationType : step3Data.businessRegistrationType }}</div>
+                    </div>
+                    <div>
+                      <div class="text-muted" style="font-size: 11px;">Registration Number</div>
+                      <div class="small text-dark fw-bold font-monospace">{{ step3Data.businessRegistrationNumber || 'Not provided' }}</div>
+                    </div>
+                  </div>
+
+                  <!-- GST Details -->
+                  <div class="col-lg col-md-6 review-info-box">
+                    <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom">
+                      <i class="fa-regular fa-file-lines text-teal small"></i>
+                      <span class="fw-bold text-dark small">GST Details</span>
+                      <span class="badge py-0 px-1 rounded-pill" [ngClass]="step3Data.isGstRegistered ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary'" style="font-size: 10px;">
+                        {{ step3Data.isGstRegistered ? '(Registered)' : '(Not Registered)' }}
+                      </span>
+                    </div>
+                    <div *ngIf="step3Data.isGstRegistered">
+                      <div class="mb-2">
+                        <div class="text-muted" style="font-size: 11px;">GSTIN</div>
+                        <div class="fw-bold text-dark small font-monospace">{{ step3Data.gstin || 'Not provided' }}</div>
+                      </div>
+                      <div class="mb-2">
+                        <div class="text-muted" style="font-size: 11px;">GST Legal Name</div>
+                        <div class="small text-dark fw-medium">{{ step3Data.gstLegalName || 'Not provided' }}</div>
+                      </div>
+                      <div>
+                        <div class="text-muted" style="font-size: 11px;">GST State</div>
+                        <div class="small text-dark">{{ step3Data.gstState || 'Not provided' }}</div>
+                      </div>
+                    </div>
+                    <div *ngIf="!step3Data.isGstRegistered" class="text-muted small pt-2">
+                      Property is not registered under GST.
+                    </div>
+                  </div>
+
+                  <!-- Property Manager -->
+                  <div class="col-lg col-md-6 review-info-box">
+                    <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom">
+                      <i class="fa-regular fa-user text-teal small"></i>
+                      <span class="fw-bold text-dark small">Property Manager</span>
+                    </div>
+                    <div class="mb-1">
+                      <div class="text-muted" style="font-size: 11px;">Manager Name</div>
+                      <div class="fw-bold text-dark small">{{ step3Data.propertyManagerName || 'Not provided' }}</div>
+                    </div>
+                    <div class="mb-1">
+                      <div class="text-muted" style="font-size: 11px;">Designation</div>
+                      <div class="small text-dark fw-medium">{{ step3Data.propertyManagerDesignation || 'General Manager' }}</div>
+                    </div>
+                    <div class="small text-dark mb-1 d-flex align-items-center gap-2">
+                      <i class="fa-solid fa-phone text-muted" style="font-size: 11px;"></i>
+                      <span>{{ step3Data.propertyManagerContactNumber || 'Not provided' }}</span>
+                    </div>
+                    <div class="small text-dark d-flex align-items-center gap-2 text-break">
+                      <i class="fa-regular fa-envelope text-muted" style="font-size: 11px;"></i>
+                      <span>{{ step3Data.propertyManagerEmail || 'Not provided' }}</span>
+                    </div>
+                  </div>
+
+                  <!-- Operating Hours -->
+                  <div class="col-lg col-md-6 review-info-box">
+                    <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom">
+                      <i class="fa-regular fa-clock text-teal small"></i>
+                      <span class="fw-bold text-dark small">Operating Hours</span>
+                    </div>
+                    <div class="mb-1">
+                      <div class="text-muted" style="font-size: 11px;">Check-in Time</div>
+                      <div class="fw-bold text-dark small">{{ formatTime12Hour(step3Data.checkInTime) }}</div>
+                    </div>
+                    <div class="mb-1">
+                      <div class="text-muted" style="font-size: 11px;">Check-out Time</div>
+                      <div class="fw-bold text-dark small">{{ formatTime12Hour(step3Data.checkOutTime) }}</div>
+                    </div>
+                    <div>
+                      <div class="text-muted" style="font-size: 11px;">Reception Availability</div>
+                      <div class="small text-dark fw-medium">{{ step3Data.receptionAvailability }}</div>
+                      <div *ngIf="step3Data.receptionAvailability === 'Limited Operating Hours' && step3Data.receptionOpeningTime" class="text-muted" style="font-size: 11px;">
+                        ({{ formatTime12Hour(step3Data.receptionOpeningTime) }} - {{ formatTime12Hour(step3Data.receptionClosingTime) }})
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ==================== SECTION 4: FACILITIES & POLICIES ==================== -->
+            <div class="review-accordion-card mb-4 border rounded-4 bg-white shadow-sm overflow-hidden">
+              <div class="review-header d-flex align-items-center justify-content-between p-3 px-4 bg-light bg-opacity-50 border-bottom cursor-pointer"
+                   (click)="toggleReviewSection('facilities')">
+                <div class="d-flex align-items-center flex-wrap gap-2">
+                  <div class="review-icon-box text-teal bg-teal bg-opacity-10 rounded-3 d-flex align-items-center justify-content-center">
+                    <i class="fa-solid fa-bell-concierge"></i>
+                  </div>
+                  <h5 class="fw-bold text-dark mb-0">Facilities &amp; Policies</h5>
+                  <span class="text-muted mx-1">|</span>
+                  <span class="text-muted small">Amenities, guest policies and additional rules.</span>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                  <button type="button" class="btn btn-sm btn-outline-teal d-flex align-items-center gap-1 rounded-3 px-3 py-1 fw-semibold"
+                          (click)="editReviewStep(4, $event)">
+                    <i class="fa-solid fa-pen small"></i>
+                    <span>Edit</span>
+                  </button>
+                  <i class="fa-solid" [ngClass]="reviewSectionsExpanded.facilities ? 'fa-chevron-up text-teal' : 'fa-chevron-down text-muted'"></i>
+                </div>
+              </div>
+
+              <!-- Body -->
+              <div *ngIf="reviewSectionsExpanded.facilities" class="p-4">
+                <div class="row g-4">
+                  <!-- Selected Amenities -->
+                  <div class="col-lg-4 col-md-12">
+                    <div class="d-flex align-items-center gap-2 mb-3 pb-1 border-bottom">
+                      <i class="fa-solid fa-layer-group text-teal small"></i>
+                      <span class="fw-bold text-dark small">Selected Amenities ({{ getAllSelectedAmenities().length }})</span>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                      <span *ngFor="let amenity of getAllSelectedAmenities()" class="review-amenity-chip">
+                        <i [ngClass]="getAmenityIcon(amenity)"></i>
+                        <span>{{ amenity }}</span>
+                      </span>
+                      <span *ngIf="getAllSelectedAmenities().length === 0" class="text-muted small">
+                        No amenities selected.
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Guest Policies -->
+                  <div class="col-lg-4 col-md-6">
+                    <div class="d-flex align-items-center gap-2 mb-3 pb-1 border-bottom">
+                      <i class="fa-solid fa-shield-halved text-teal small"></i>
+                      <span class="fw-bold text-dark small">Guest Policies</span>
+                    </div>
+                    <div class="d-flex flex-column gap-2">
+                      <div class="review-policy-item d-flex align-items-center gap-2 small">
+                        <i class="fa-solid fa-child text-teal" style="width: 16px;"></i>
+                        <span class="text-muted">Children Policy:</span>
+                        <span class="fw-semibold text-dark">{{ step4Data.childrenPolicy }}</span>
+                      </div>
+                      <div class="review-policy-item d-flex align-items-center gap-2 small">
+                        <i class="fa-solid fa-paw text-teal" style="width: 16px;"></i>
+                        <span class="text-muted">Pet Policy:</span>
+                        <span class="fw-semibold text-dark">{{ step4Data.petPolicy }}</span>
+                      </div>
+                      <div class="review-policy-item d-flex align-items-center gap-2 small">
+                        <i class="fa-solid fa-smoking text-teal" style="width: 16px;"></i>
+                        <span class="text-muted">Smoking Policy:</span>
+                        <span class="fw-semibold text-dark">{{ step4Data.smokingPolicy }}</span>
+                      </div>
+                      <div class="review-policy-item d-flex align-items-center gap-2 small">
+                        <i class="fa-solid fa-bed text-teal" style="width: 16px;"></i>
+                        <span class="text-muted">Extra Bed:</span>
+                        <span class="fw-semibold text-dark">{{ step4Data.extraBedPolicy }}</span>
+                      </div>
+                      <div class="review-policy-item d-flex align-items-start gap-2 small">
+                        <i class="fa-solid fa-id-card text-teal mt-1" style="width: 16px;"></i>
+                        <span class="text-muted">Identification:</span>
+                        <span class="fw-semibold text-dark">{{ getFormattedIdentification() }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Additional Property Rules -->
+                  <div class="col-lg-4 col-md-6">
+                    <div class="d-flex align-items-center gap-2 mb-3 pb-1 border-bottom">
+                      <i class="fa-regular fa-file-lines text-teal small"></i>
+                      <span class="fw-bold text-dark small">Additional Property Rules</span>
+                    </div>
+                    <ul class="review-rules-list ps-3 mb-0 small text-dark lh-base">
+                      <li *ngFor="let rule of getFormattedRulesList()" class="mb-1">{{ rule }}</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Accuracy Confirmation Checkbox -->
+            <div class="p-3 bg-light bg-opacity-75 rounded-3 border mb-4">
+              <div class="form-check d-flex align-items-center gap-2 mb-0">
+                <input class="form-check-input custom-checkbox" type="checkbox" id="accuracyCheck" [(ngModel)]="accuracyConfirmed">
+                <label class="form-check-label small text-dark fw-medium" for="accuracyCheck">
+                  I confirm that the information provided is accurate and complete. I agree to comply with TravelEasy's
+                  <a href="#" class="terms-link text-teal text-decoration-underline fw-bold" (click)="openTermsModal($event)">Partner Terms &amp; Conditions</a>.
+                </label>
+              </div>
+            </div>
+
+            <!-- Wizard Bottom Action Bar -->
+            <div class="d-flex align-items-center justify-content-between pt-3 border-top">
+              <button type="button" class="btn btn-outline-secondary rounded-3 px-4 fw-bold" (click)="backToStep4()">
+                &larr; Previous: Facilities &amp; Policies
+              </button>
+              <div class="d-flex align-items-center gap-3">
+                <button type="button" class="btn btn-outline-secondary rounded-3 px-4 fw-bold" (click)="confirmCancelWizard()">
+                  Cancel
+                </button>
+                <button type="button" class="btn btn-teal-primary text-white rounded-3 px-4 fw-bold d-inline-flex align-items-center gap-2"
+                        (click)="submitFinalRegistration()" [disabled]="step5Submitting">
+                  <span *ngIf="step5Submitting" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                  <span>Submit for Registration</span>
+                  <i *ngIf="!step5Submitting" class="fa-solid fa-check small"></i>
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ==================== REGISTRATION SUCCESS CARD ==================== -->
+          <div *ngIf="registrationSuccess" class="wizard-step-card bg-white rounded-4 border-0 shadow-sm p-4 p-md-5 text-center">
+            <div class="mb-4">
+              <div class="success-icon-wrap mx-auto rounded-circle d-flex align-items-center justify-content-center bg-teal bg-opacity-10 text-teal" style="width: 80px; height: 80px; font-size: 40px;">
+                <i class="fa-solid fa-circle-check text-teal"></i>
+              </div>
+            </div>
+            <h3 class="fw-bold text-dark mb-2">Property Successfully Registered!</h3>
+            <p class="text-muted mb-4 mx-auto" style="max-width: 580px;">
+              Congratulations! <strong>{{ activatedPropertyDetails?.name || step1Data.name }}</strong> has been registered and activated on the TravelEasy platform. In accordance with policy BD-03, your property is now <strong>ACTIVE</strong> and live in your portfolio.
+            </p>
+
+            <div class="p-3 bg-light rounded-3 border d-inline-block text-start mb-4 shadow-sm" style="min-width: 340px; max-width: 480px;">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small">Property Name:</span>
+                <span class="fw-bold text-dark">{{ activatedPropertyDetails?.name || step1Data.name }}</span>
+              </div>
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small">Property ID:</span>
+                <span class="fw-bold text-teal">#{{ activatedPropertyDetails?.id || step1Data.id }}</span>
+              </div>
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small">Status:</span>
+                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1 rounded-pill">
+                  <i class="fa-solid fa-circle-check me-1 small"></i> ACTIVE
+                </span>
+              </div>
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small">Location:</span>
+                <span class="fw-semibold text-dark small">{{ step2Data.city }}, {{ step2Data.state }}</span>
+              </div>
+              <div *ngIf="activatedPropertyDetails?.activatedAt" class="d-flex align-items-center justify-content-between">
+                <span class="text-muted small">Activated At:</span>
+                <span class="text-muted small">{{ activatedPropertyDetails?.activatedAt | date:'medium' }}</span>
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-center gap-3">
+              <button type="button" class="btn btn-teal-primary text-white rounded-3 px-4 py-2 fw-bold d-inline-flex align-items-center gap-2" (click)="viewActivatedProperty()">
+                <i class="fa-solid fa-hotel me-1"></i>
+                <span>Go to My Properties</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- ==================== PARTNER TERMS & CONDITIONS MODAL ==================== -->
+          <div *ngIf="showTermsModal" class="modal-backdrop-custom d-flex align-items-center justify-content-center">
+            <div class="modal-dialog-custom bg-white rounded-4 shadow-lg p-4 p-md-5" style="max-width: 650px; width: 92%; max-height: 85vh; overflow-y: auto;">
+              <div class="d-flex align-items-center justify-content-between pb-3 mb-3 border-bottom">
+                <div class="d-flex align-items-center gap-2">
+                  <i class="fa-solid fa-file-contract text-teal fs-4"></i>
+                  <h5 class="fw-bold text-dark mb-0">TravelEasy Partner Terms &amp; Conditions</h5>
+                </div>
+                <button type="button" class="btn-close" (click)="closeTermsModal()"></button>
+              </div>
+
+              <div class="modal-body-terms text-muted small lh-base mb-4">
+                <p>Welcome to TravelEasy's Partner Network. By registering and listing your property on TravelEasy, you agree to the following terms and operating conditions:</p>
+
+                <h6 class="fw-bold text-dark mt-3 mb-1">1. Accuracy of Property Information</h6>
+                <p>The hotel manager certifies that all property details, addresses, business registrations, GST details, facilities, amenities, and guest policies submitted are accurate, truthful, and up-to-date.</p>
+
+                <h6 class="fw-bold text-dark mt-3 mb-1">2. Compliance with Local Laws and Safety</h6>
+                <p>The property must comply with all applicable local, state, and central hotel regulations, fire safety requirements, health ordinances, and guest registration guidelines including mandatory photo-identification verification.</p>
+
+                <h6 class="fw-bold text-dark mt-3 mb-1">3. Booking Fulfillment and Pricing</h6>
+                <p>Hotels agree to honor all confirmed reservations made through TravelEasy without unapproved cancellations, unexpected surcharges, or unwarranted room downgrades.</p>
+
+                <h6 class="fw-bold text-dark mt-3 mb-1">4. Guest Data Protection &amp; Privacy</h6>
+                <p>Partner hotels agree to protect guest personal data and privacy in accordance with applicable data protection legislation.</p>
+
+                <h6 class="fw-bold text-dark mt-3 mb-1">5. Account Activation &amp; Integrity</h6>
+                <p>Per policy BD-03, successful submission registers and activates the property on the TravelEasy platform. TravelEasy reserves the right to audit, inspect, or suspend properties failing to meet network standards.</p>
+              </div>
+
+              <div class="d-flex justify-content-end pt-3 border-top">
+                <button type="button" class="btn btn-teal-primary text-white rounded-3 px-4 fw-bold" (click)="closeTermsModal()">
+                  I Understand &amp; Close
                 </button>
               </div>
             </div>

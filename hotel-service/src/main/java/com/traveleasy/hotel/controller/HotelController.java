@@ -1,5 +1,7 @@
 package com.traveleasy.hotel.controller;
 
+import com.traveleasy.hotel.service.AddressReferenceData;
+
 import com.traveleasy.hotel.dto.*;
 import com.traveleasy.hotel.model.HotelProperty;
 import com.traveleasy.hotel.model.HotelImage;
@@ -100,6 +102,137 @@ public class HotelController {
         hotelPropertyService.deleteDraft(draftId, principal);
         return ResponseEntity.ok(Map.of("message", "Property draft and associated images deleted successfully", "draftId", draftId));
     }
+
+    // =========================================================================
+    // 1B. PROPERTY REGISTRATION WIZARD (WP-05 STEP 2: LOCATION & ADDRESS)
+    // =========================================================================
+
+    @PostMapping("/draft/{draftId}/step-2")
+    public ResponseEntity<?> saveStep2DraftWithId(
+            @PathVariable Long draftId,
+            @Valid @RequestBody HotelStep2RequestDto request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "save property location and address draft");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelStep2ResponseDto response = hotelPropertyService.saveStep2Draft(draftId, request, principal);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/draft/step-2")
+    public ResponseEntity<?> saveStep2Draft(
+            @Valid @RequestBody HotelStep2RequestDto request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "save property location and address draft");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelStep2ResponseDto response = hotelPropertyService.saveStep2Draft(request.getDraftId(), request, principal);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/draft/{draftId}/step-3")
+    public ResponseEntity<?> saveStep3Draft(
+            @PathVariable Long draftId,
+            @Valid @RequestBody HotelStep3RequestDto request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "save property information draft");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelStep3ResponseDto response = hotelPropertyService.saveStep3Draft(draftId, request, principal);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/draft/step-3")
+    public ResponseEntity<?> saveStep3Draft(
+            @Valid @RequestBody HotelStep3RequestDto request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "save property information draft");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelStep3ResponseDto response = hotelPropertyService.saveStep3Draft(request.getDraftId(), request, principal);
+        return ResponseEntity.ok(response);
+    }
+
+    // =========================================================================
+    // 1D. PROPERTY REGISTRATION WIZARD: STEP 4 (FACILITIES & POLICIES)
+    // =========================================================================
+
+    @PostMapping("/draft/{draftId}/step-4")
+    public ResponseEntity<?> saveStep4DraftWithId(
+            @PathVariable Long draftId,
+            @Valid @RequestBody HotelStep4RequestDto request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "save facilities and policies draft");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelStep4ResponseDto response = hotelPropertyService.saveStep4Draft(draftId, request, principal);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/draft/step-4")
+    public ResponseEntity<?> saveStep4Draft(
+            @Valid @RequestBody HotelStep4RequestDto request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "save facilities and policies draft");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelStep4ResponseDto response = hotelPropertyService.saveStep4Draft(request.getDraftId(), request, principal);
+        return ResponseEntity.ok(response);
+    }
+
+    // =========================================================================
+    // 1E. PROPERTY REGISTRATION WIZARD: STEP 5 (REVIEW & SUBMIT / ACTIVATION)
+    // =========================================================================
+
+    @PostMapping("/draft/{draftId}/submit")
+    public ResponseEntity<?> submitDraftWithId(
+            @PathVariable Long draftId,
+            @Valid @RequestBody(required = false) HotelStep5SubmitRequestDto request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "submit property registration");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelStep5ResponseDto response = hotelPropertyService.submitPropertyRegistration(draftId, request, principal);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/draft/submit")
+    public ResponseEntity<?> submitDraft(
+            @Valid @RequestBody HotelStep5SubmitRequestDto request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "submit property registration");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelStep5ResponseDto response = hotelPropertyService.submitPropertyRegistration(request.getDraftId(), request, principal);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/reference/countries")
+    public ResponseEntity<List<String>> getSupportedCountries() {
+        return ResponseEntity.ok(AddressReferenceData.getSupportedCountries());
+    }
+
+    @GetMapping("/reference/states")
+    public ResponseEntity<List<String>> getStatesForCountry(@RequestParam(defaultValue = "India") String country) {
+        return ResponseEntity.ok(AddressReferenceData.getStatesForCountry(country));
+    }
+
 
     // =========================================================================
     // 1B. PROPERTY IMAGE MANAGEMENT & SERVING
