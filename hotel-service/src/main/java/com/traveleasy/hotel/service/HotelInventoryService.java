@@ -512,6 +512,17 @@ public class HotelInventoryService {
         RoomType roomType = roomTypeRepository.findById(roomId)
                 .orElseThrow(() -> new ResourceNotFoundException("Room category not found with ID: " + roomId));
 
+        HotelProperty hotel = hotelRepository.findById(roomType.getHotelId())
+                .orElseThrow(() -> new ResourceNotFoundException("Parent hotel property not found with ID: " + roomType.getHotelId()));
+
+        if (principal != null && !principal.isAdmin() && (principal.userId() == null || !principal.userId().equals(hotel.getManagerId()))) {
+            throw new OwnershipAccessDeniedException("Access denied: You do not own hotel property " + hotel.getId());
+        }
+
+        if (roomType.getStatus() != null && "ARCHIVED".equalsIgnoreCase(roomType.getStatus())) {
+            throw new DomainValidationException("Cannot retrieve operational inventory calendar for an ARCHIVED room category");
+        }
+
         if (startDate == null) startDate = LocalDate.now();
         if (endDate == null) endDate = startDate.plusDays(30);
 
@@ -562,7 +573,9 @@ public class HotelInventoryService {
             throw new DomainValidationException("Start date must not be after end date");
         }
 
-        List<RoomType> roomTypes = roomTypeRepository.findByHotelId(hotelId);
+        List<RoomType> roomTypes = roomTypeRepository.findByHotelId(hotelId).stream()
+                .filter(rt -> rt.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(rt.getStatus()))
+                .toList();
 
         int totalPhysicalNights = 0;
         int occupiedNights = 0;

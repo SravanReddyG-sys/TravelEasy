@@ -216,3 +216,24 @@ export interface RoomTypeDto {
   status?: string;
 }
 
+export interface PriceCalendarEntryDto {
+  date: string;
+  basePrice: number;
+  overridePrice?: number | null;
+  effectivePrice: number;
+  isOverride: boolean;
+  override?: boolean;
+}
+
+export interface PriceOverrideRequestDto {
+  overrideDate: string;
+  pricePerNight: number;
+}
+
+export interface PriceRangeOverrideRequestDto {
+  startDate: string;
+  endDate: string;
+  pricePerNight: number;
+}
+
+

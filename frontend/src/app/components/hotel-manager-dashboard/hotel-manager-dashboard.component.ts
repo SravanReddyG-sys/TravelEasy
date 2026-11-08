@@ -522,8 +522,78 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   roomDetailsError: string = '';
 
   // Form Models - Block Rooms
+  // ==================== INVENTORY & PRICING: INVENTORY CALENDAR (WP-07.1) ====================
+  activeInventoryRoomTypes: any[] = [];
+  selectedInventoryRoomId: number | null = null;
+  selectedInventoryRoom: any = null;
+
+  inventoryCurrentYear: number = new Date().getFullYear();
+  inventoryCurrentMonth: number = new Date().getMonth(); // 0-based: 0 = Jan .. 11 = Dec
+  inventoryStartDate: string = '';
+  inventoryEndDate: string = '';
+  showInventoryDateRangeDropdown: boolean = false;
+
+  isInventoryCalendarLoading: boolean = false;
+  inventoryCalendarError: string = '';
+  inventoryCalendarDays: any[] = [];
+  inventoryCalendarGridWeeks: any[][] = [];
+
+  selectedInventoryDateStr: string = '';
+  selectedInventoryDateRecord: any = null;
+
+  // Range Summary Metrics
+  inventoryTotalRoomNights: number = 0;
+  inventoryBookedNights: number = 0;
+  inventoryHeldNights: number = 0;
+  inventoryBlockedNights: number = 0;
+  inventoryAvailableNights: number = 0;
+  inventoryOccupancyRate: number = 0;
+
+  // ==================== INVENTORY & PRICING: PRICING CALENDAR (WP-07.2) ====================
+  activePricingRoomTypes: any[] = [];
+  selectedPricingRoomId: number | null = null;
+  selectedPricingRoom: any = null;
+
+  pricingCurrentYear: number = new Date().getFullYear();
+  pricingCurrentMonth: number = new Date().getMonth(); // 0-based: 0 = Jan .. 11 = Dec
+  pricingStartDate: string = '';
+  pricingEndDate: string = '';
+  showPricingDateRangeDropdown: boolean = false;
+
+  isPricingCalendarLoading: boolean = false;
+  pricingCalendarError: string = '';
+  pricingCalendarDays: any[] = [];
+  pricingCalendarGridWeeks: any[][] = [];
+
+  selectedPricingDateStr: string = '';
+  selectedPricingDateRecord: any = null;
+
+  // Pricing Summary Metrics
+  pricingTotalNights: number = 0;
+  pricingBasePriceNights: number = 0;
+  pricingOverrideNights: number = 0;
+  pricingBasePrice: number = 0;
+  pricingAvgEffectivePrice: number = 0;
+
+  // Add Price Override Modal State
+  showAddPriceOverrideModal: boolean = false;
+  overrideType: 'single' | 'range' = 'single';
+  singleOverrideDate: string = '';
+  singleOverridePrice: number | null = null;
+  rangeStartDate: string = '';
+  rangeEndDate: string = '';
+  rangeOverridePrice: number | null = null;
+  isSubmittingOverride: boolean = false;
+  overrideFormError: string = '';
+  overrideFormSuccess: string = '';
+
+  // Remove Price Override Modal State
+  showRemoveOverrideModal: boolean = false;
+  isRemovingOverride: boolean = false;
+  removeOverrideError: string = '';
+
   // ==================== INVENTORY & PRICING: BASE PRICE MANAGEMENT (WP-07.2) ====================
-  inventorySubNav: 'inventory-calendar' | 'pricing-calendar' | 'base-price' | 'room-blocks' = 'base-price';
+  inventorySubNav: 'inventory-calendar' | 'pricing-calendar' | 'base-price' | 'room-blocks' = 'inventory-calendar';
   basePriceSearchQuery: string = '';
   basePriceSortOption: string = 'name-asc';
   displayedBasePriceRooms: any[] = [];
@@ -653,6 +723,14 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
       this.cancelRestoreRoom();
     } else if (this.showEditBasePriceModal) {
       this.closeEditBasePriceModal();
+    } else if (this.showAddPriceOverrideModal) {
+      this.closeAddPriceOverrideModal();
+    } else if (this.showRemoveOverrideModal) {
+      this.closeRemoveOverrideModal();
+    } else if (this.showInventoryDateRangeDropdown) {
+      this.showInventoryDateRangeDropdown = false;
+    } else if (this.showPricingDateRangeDropdown) {
+      this.showPricingDateRangeDropdown = false;
     }
   }
 
@@ -670,6 +748,12 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
     }
     if (!target.closest('.property-dropdown-container')) {
       this.showPropertySelectorDropdown = false;
+    }
+    if (!target.closest('.inv-cal-date-range-wrap')) {
+      this.showInventoryDateRangeDropdown = false;
+    }
+    if (!target.closest('.pricing-cal-date-range-wrap')) {
+      this.showPricingDateRangeDropdown = false;
     }
   }
 
@@ -874,6 +958,11 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
         this.roomTypes = res.roomTypes || [];
         this.roomBlocks = res.roomBlocks || [];
         this.refreshBasePriceListing();
+        if (this.inventorySubNav === 'inventory-calendar') {
+          this.initInventoryCalendar();
+        } else if (this.inventorySubNav === 'pricing-calendar') {
+          this.initPricingCalendar();
+        }
         this.fetchReservationsAndCompute(res.inventorySummary, res.prevInventorySummary);
       },
       error: (err) => {
@@ -2555,6 +2644,10 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
       this.refreshRoomBlocksListing();
     } else if (tab === 'base-price') {
       this.refreshBasePriceListing();
+    } else if (tab === 'inventory-calendar') {
+      this.initInventoryCalendar();
+    } else if (tab === 'pricing-calendar') {
+      this.initPricingCalendar();
     }
   }
 
@@ -3164,6 +3257,817 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
         error: (err) => alert(err.error?.message || 'Marking no-show failed')
       });
     }
+  }
+
+  // ==================== WP-07.1: INVENTORY CALENDAR (METHODS) ====================
+  initInventoryCalendar(): void {
+    if (!this.selectedHotel) return;
+
+    // Filter only ACTIVE room types for the selected hotel
+    this.activeInventoryRoomTypes = (this.roomTypes || []).filter(
+      rt => (!rt.status || rt.status.toUpperCase() === 'ACTIVE') &&
+            (!rt.hotelId || Number(rt.hotelId) === Number(this.selectedHotel?.id))
+    );
+
+    // Default to the first active room type if current selection is invalid
+    const currentSelectedValid = this.selectedInventoryRoomId &&
+      this.activeInventoryRoomTypes.some(rt => rt.id === Number(this.selectedInventoryRoomId));
+
+    if (!currentSelectedValid) {
+      if (this.activeInventoryRoomTypes.length > 0) {
+        this.selectedInventoryRoomId = this.activeInventoryRoomTypes[0].id;
+        this.selectedInventoryRoom = this.activeInventoryRoomTypes[0];
+      } else {
+        this.selectedInventoryRoomId = null;
+        this.selectedInventoryRoom = null;
+        this.inventoryCalendarDays = [];
+        this.inventoryCalendarGridWeeks = [];
+        this.selectedInventoryDateRecord = null;
+        this.selectedInventoryDateStr = '';
+        this.resetInventoryMetrics();
+        return;
+      }
+    } else {
+      this.selectedInventoryRoom = this.activeInventoryRoomTypes.find(
+        rt => rt.id === Number(this.selectedInventoryRoomId)
+      ) || null;
+    }
+
+    // Default to current month if dates are not initialized
+    if (!this.inventoryStartDate || !this.inventoryEndDate) {
+      const now = new Date();
+      this.setInventoryMonth(now.getFullYear(), now.getMonth(), false);
+    }
+
+    this.loadInventoryCalendar();
+  }
+
+  onInventoryRoomTypeChange(): void {
+    this.selectedInventoryRoom = this.activeInventoryRoomTypes.find(
+      rt => rt.id === Number(this.selectedInventoryRoomId)
+    ) || null;
+    this.loadInventoryCalendar();
+  }
+
+  setInventoryMonth(year: number, month: number, reload: boolean = true): void {
+    this.inventoryCurrentYear = year;
+    this.inventoryCurrentMonth = month;
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    this.inventoryStartDate = this.formatDateIso(firstDay);
+    this.inventoryEndDate = this.formatDateIso(lastDay);
+
+    if (reload) {
+      this.loadInventoryCalendar();
+    }
+  }
+
+  prevInventoryMonth(): void {
+    let y = this.inventoryCurrentYear;
+    let m = this.inventoryCurrentMonth - 1;
+    if (m < 0) {
+      m = 11;
+      y -= 1;
+    }
+    this.setInventoryMonth(y, m, true);
+  }
+
+  nextInventoryMonth(): void {
+    let y = this.inventoryCurrentYear;
+    let m = this.inventoryCurrentMonth + 1;
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+    this.setInventoryMonth(y, m, true);
+  }
+
+  getInventoryMonthYearLabel(): string {
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return `${monthNames[this.inventoryCurrentMonth]} ${this.inventoryCurrentYear}`;
+  }
+
+  getInventoryDateRangeLabel(): string {
+    if (!this.inventoryStartDate || !this.inventoryEndDate) return 'Select date range';
+    return `${this.formatInventoryDateLong(this.inventoryStartDate)} – ${this.formatInventoryDateLong(this.inventoryEndDate)}`;
+  }
+
+  toggleInventoryDateRangeDropdown(): void {
+    this.showInventoryDateRangeDropdown = !this.showInventoryDateRangeDropdown;
+  }
+
+  applyInventoryCustomDateRange(): void {
+    if (!this.inventoryStartDate || !this.inventoryEndDate) {
+      this.inventoryCalendarError = 'Please select both start date and end date.';
+      return;
+    }
+    if (this.inventoryStartDate > this.inventoryEndDate) {
+      this.inventoryCalendarError = 'Start date must not be after end date.';
+      return;
+    }
+    this.showInventoryDateRangeDropdown = false;
+    this.inventoryCalendarError = '';
+
+    // Align current month/year to startDate
+    const parts = this.inventoryStartDate.split('-');
+    if (parts.length === 3) {
+      this.inventoryCurrentYear = parseInt(parts[0], 10);
+      this.inventoryCurrentMonth = parseInt(parts[1], 10) - 1;
+    }
+    this.loadInventoryCalendar();
+  }
+
+  resetInventoryDateRangeToCurrentMonth(): void {
+    this.showInventoryDateRangeDropdown = false;
+    const now = new Date();
+    this.setInventoryMonth(now.getFullYear(), now.getMonth(), true);
+  }
+
+  refreshInventoryCalendar(): void {
+    this.loadInventoryCalendar();
+  }
+
+  loadInventoryCalendar(): void {
+    if (!this.selectedInventoryRoomId) {
+      this.inventoryCalendarDays = [];
+      this.inventoryCalendarGridWeeks = [];
+      this.resetInventoryMetrics();
+      return;
+    }
+
+    this.isInventoryCalendarLoading = true;
+    this.inventoryCalendarError = '';
+
+    this.hotelService.getInventoryCalendar(
+      this.selectedInventoryRoomId,
+      this.inventoryStartDate,
+      this.inventoryEndDate
+    ).subscribe({
+      next: (days: any[]) => {
+        this.isInventoryCalendarLoading = false;
+        this.inventoryCalendarDays = days || [];
+        this.computeInventorySummaryMetrics(this.inventoryCalendarDays);
+        this.generateInventoryCalendarGrid();
+
+        // Update selected date record
+        if (this.inventoryCalendarDays.length > 0) {
+          const found = this.inventoryCalendarDays.find(d => d.date === this.selectedInventoryDateStr);
+          if (found) {
+            this.selectedInventoryDateRecord = found;
+          } else {
+            // Pick today if within range, else first day in list
+            const todayIso = this.formatDateIso(new Date());
+            const todayItem = this.inventoryCalendarDays.find(d => d.date === todayIso);
+            if (todayItem) {
+              this.selectedInventoryDateStr = todayItem.date;
+              this.selectedInventoryDateRecord = todayItem;
+            } else {
+              this.selectedInventoryDateStr = this.inventoryCalendarDays[0].date;
+              this.selectedInventoryDateRecord = this.inventoryCalendarDays[0];
+            }
+          }
+        } else {
+          this.selectedInventoryDateRecord = null;
+          this.selectedInventoryDateStr = '';
+        }
+      },
+      error: (err: any) => {
+        this.isInventoryCalendarLoading = false;
+        console.error('Failed to load inventory calendar:', err);
+        this.inventoryCalendarError = err.error?.message || 'Failed to retrieve daily inventory calendar. Please try again.';
+      }
+    });
+  }
+
+  resetInventoryMetrics(): void {
+    this.inventoryTotalRoomNights = 0;
+    this.inventoryBookedNights = 0;
+    this.inventoryHeldNights = 0;
+    this.inventoryBlockedNights = 0;
+    this.inventoryAvailableNights = 0;
+    this.inventoryOccupancyRate = 0;
+  }
+
+  computeInventorySummaryMetrics(records: any[]): void {
+    let total = 0;
+    let booked = 0;
+    let held = 0;
+    let blocked = 0;
+    let available = 0;
+
+    for (const r of records) {
+      total += (Number(r.totalRooms) || 0);
+      booked += (Number(r.bookedRooms) || 0);
+      held += (Number(r.heldRooms) || 0);
+      blocked += (Number(r.blockedRooms) || 0);
+      available += (Number(r.availableRooms) || 0);
+    }
+
+    this.inventoryTotalRoomNights = total;
+    this.inventoryBookedNights = booked;
+    this.inventoryHeldNights = held;
+    this.inventoryBlockedNights = blocked;
+    this.inventoryAvailableNights = available;
+    this.inventoryOccupancyRate = total > 0 ? Math.round(((booked / total) * 100) * 10) / 10 : 0.0;
+  }
+
+  generateInventoryCalendarGrid(): void {
+    const year = this.inventoryCurrentYear;
+    const month = this.inventoryCurrentMonth;
+    const shortMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const shortMonth = shortMonths[month];
+
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstWeekday = new Date(year, month, 1).getDay(); // 0 = Sun, 1 = Mon ... 6 = Sat
+
+    const totalCapacity = Number(this.selectedInventoryRoom?.totalRooms) || 0;
+    const cells: any[] = [];
+
+    // Leading empty cells
+    for (let i = 0; i < firstWeekday; i++) {
+      cells.push({ isEmpty: true });
+    }
+
+    // Days in displayed month
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dayDate = new Date(year, month, d);
+      const dateStr = this.formatDateIso(dayDate);
+      const rec = this.inventoryCalendarDays.find(r => r.date === dateStr);
+
+      const dayTotal = rec ? Number(rec.totalRooms) : totalCapacity;
+      const dayAvailable = rec ? Number(rec.availableRooms) : dayTotal;
+      const dayBooked = rec ? Number(rec.bookedRooms) : 0;
+      const dayHeld = rec ? Number(rec.heldRooms) : 0;
+      const dayBlocked = rec ? Number(rec.blockedRooms) : 0;
+
+      const classification = this.getAvailabilityClassification(dayAvailable, dayTotal);
+
+      cells.push({
+        isEmpty: false,
+        dayNumber: d,
+        dateStr: dateStr,
+        headerLabel: `${d} ${shortMonth}`,
+        totalRooms: dayTotal,
+        availableRooms: dayAvailable,
+        bookedRooms: dayBooked,
+        heldRooms: dayHeld,
+        blockedRooms: dayBlocked,
+        classification: classification,
+        record: rec || {
+          date: dateStr,
+          totalRooms: dayTotal,
+          availableRooms: dayAvailable,
+          bookedRooms: dayBooked,
+          heldRooms: dayHeld,
+          blockedRooms: dayBlocked
+        }
+      });
+    }
+
+    // Trailing empty cells to complete full weeks of 7
+    while (cells.length % 7 !== 0) {
+      cells.push({ isEmpty: true });
+    }
+
+    // Chunk into 7-day rows (weeks)
+    const weeks: any[][] = [];
+    for (let i = 0; i < cells.length; i += 7) {
+      weeks.push(cells.slice(i, i + 7));
+    }
+    this.inventoryCalendarGridWeeks = weeks;
+  }
+
+  selectInventoryDate(cell: any): void {
+    if (!cell || cell.isEmpty) return;
+    this.selectedInventoryDateStr = cell.dateStr;
+    this.selectedInventoryDateRecord = cell.record;
+  }
+
+  getAvailabilityClassification(available: number, total: number): 'high' | 'low' | 'none' {
+    if (total <= 0 || available <= 0) return 'none';
+    if (available <= 0.25 * total) return 'low';
+    return 'high';
+  }
+
+  formatInventoryDateLong(dateStr: string): string {
+    if (!dateStr) return '';
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const m = parseInt(parts[1], 10) - 1;
+        const d = parseInt(parts[2], 10);
+        const y = parts[0];
+        return `${monthNames[m]} ${d}, ${y}`;
+      }
+      return dateStr;
+    } catch {
+      return dateStr;
+    }
+  }
+
+  // ==================== WP-07.2: PRICING CALENDAR (METHODS) ====================
+  initPricingCalendar(): void {
+    if (!this.selectedHotel) return;
+
+    // Filter only ACTIVE room types for the selected hotel
+    this.activePricingRoomTypes = (this.roomTypes || []).filter(
+      rt => (!rt.status || rt.status.toUpperCase() === 'ACTIVE') &&
+            (!rt.hotelId || Number(rt.hotelId) === Number(this.selectedHotel?.id))
+    );
+
+    // Default to the first active room type if current selection is invalid
+    const currentSelectedValid = this.selectedPricingRoomId &&
+      this.activePricingRoomTypes.some(rt => rt.id === Number(this.selectedPricingRoomId));
+
+    if (!currentSelectedValid) {
+      if (this.activePricingRoomTypes.length > 0) {
+        this.selectedPricingRoomId = this.activePricingRoomTypes[0].id;
+        this.selectedPricingRoom = this.activePricingRoomTypes[0];
+      } else {
+        this.selectedPricingRoomId = null;
+        this.selectedPricingRoom = null;
+        this.pricingCalendarDays = [];
+        this.pricingCalendarGridWeeks = [];
+        this.selectedPricingDateRecord = null;
+        this.selectedPricingDateStr = '';
+        this.resetPricingMetrics();
+        return;
+      }
+    } else {
+      this.selectedPricingRoom = this.activePricingRoomTypes.find(
+        rt => rt.id === Number(this.selectedPricingRoomId)
+      ) || null;
+    }
+
+    // Default to current month if dates are not initialized
+    if (!this.pricingStartDate || !this.pricingEndDate) {
+      const now = new Date();
+      this.setPricingMonth(now.getFullYear(), now.getMonth(), false);
+    }
+
+    this.loadPricingCalendar();
+  }
+
+  onPricingRoomTypeChange(): void {
+    this.selectedPricingRoom = this.activePricingRoomTypes.find(
+      rt => rt.id === Number(this.selectedPricingRoomId)
+    ) || null;
+    this.loadPricingCalendar();
+  }
+
+  setPricingMonth(year: number, month: number, reload: boolean = true): void {
+    this.pricingCurrentYear = year;
+    this.pricingCurrentMonth = month;
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    this.pricingStartDate = this.formatDateIso(firstDay);
+    this.pricingEndDate = this.formatDateIso(lastDay);
+
+    if (reload) {
+      this.loadPricingCalendar();
+    }
+  }
+
+  prevPricingMonth(): void {
+    let y = this.pricingCurrentYear;
+    let m = this.pricingCurrentMonth - 1;
+    if (m < 0) {
+      m = 11;
+      y -= 1;
+    }
+    this.setPricingMonth(y, m, true);
+  }
+
+  nextPricingMonth(): void {
+    let y = this.pricingCurrentYear;
+    let m = this.pricingCurrentMonth + 1;
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+    this.setPricingMonth(y, m, true);
+  }
+
+  getPricingMonthYearLabel(): string {
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return `${monthNames[this.pricingCurrentMonth]} ${this.pricingCurrentYear}`;
+  }
+
+  getPricingDateRangeLabel(): string {
+    if (!this.pricingStartDate || !this.pricingEndDate) return 'Select date range';
+    return `${this.formatPricingDateLong(this.pricingStartDate, true)} – ${this.formatPricingDateLong(this.pricingEndDate, true)}`;
+  }
+
+  togglePricingDateRangeDropdown(): void {
+    this.showPricingDateRangeDropdown = !this.showPricingDateRangeDropdown;
+  }
+
+  applyPricingCustomDateRange(): void {
+    if (!this.pricingStartDate || !this.pricingEndDate) {
+      this.pricingCalendarError = 'Please select both start date and end date.';
+      return;
+    }
+    if (this.pricingStartDate > this.pricingEndDate) {
+      this.pricingCalendarError = 'Start date must not be after end date.';
+      return;
+    }
+    this.showPricingDateRangeDropdown = false;
+    this.pricingCalendarError = '';
+
+    const parts = this.pricingStartDate.split('-');
+    if (parts.length === 3) {
+      this.pricingCurrentYear = parseInt(parts[0], 10);
+      this.pricingCurrentMonth = parseInt(parts[1], 10) - 1;
+    }
+    this.loadPricingCalendar();
+  }
+
+  resetPricingDateRangeToCurrentMonth(): void {
+    this.showPricingDateRangeDropdown = false;
+    const now = new Date();
+    this.setPricingMonth(now.getFullYear(), now.getMonth(), true);
+  }
+
+  refreshPricingCalendar(): void {
+    this.loadPricingCalendar();
+  }
+
+  loadPricingCalendar(): void {
+    if (!this.selectedPricingRoomId) {
+      this.pricingCalendarDays = [];
+      this.pricingCalendarGridWeeks = [];
+      this.resetPricingMetrics();
+      return;
+    }
+
+    this.isPricingCalendarLoading = true;
+    this.pricingCalendarError = '';
+
+    this.hotelService.getPriceCalendar(
+      this.selectedPricingRoomId,
+      this.pricingStartDate,
+      this.pricingEndDate
+    ).subscribe({
+      next: (days: any[]) => {
+        this.isPricingCalendarLoading = false;
+        const defaultBasePrice = Number(this.selectedPricingRoom?.pricePerNight) || 0;
+        this.pricingCalendarDays = (days || []).map(item => {
+          const isOverride = item.isOverride === true || item.override === true;
+          const basePrice = item.basePrice != null ? Number(item.basePrice) : defaultBasePrice;
+          const overridePrice = isOverride ? (item.overridePrice != null ? Number(item.overridePrice) : (item.effectivePrice != null ? Number(item.effectivePrice) : null)) : null;
+          const effectivePrice = item.effectivePrice != null ? Number(item.effectivePrice) : (isOverride && overridePrice != null ? overridePrice : basePrice);
+          return {
+            ...item,
+            date: item.date,
+            basePrice,
+            overridePrice,
+            effectivePrice,
+            isOverride
+          };
+        });
+        this.computePricingSummaryMetrics(this.pricingCalendarDays);
+        this.generatePricingCalendarGrid();
+
+        if (this.pricingCalendarDays.length > 0) {
+          const found = this.pricingCalendarDays.find(d => d.date === this.selectedPricingDateStr);
+          if (found) {
+            this.selectedPricingDateRecord = found;
+          } else {
+            const todayIso = this.formatDateIso(new Date());
+            const todayItem = this.pricingCalendarDays.find(d => d.date === todayIso);
+            if (todayItem) {
+              this.selectedPricingDateStr = todayItem.date;
+              this.selectedPricingDateRecord = todayItem;
+            } else {
+              this.selectedPricingDateStr = this.pricingCalendarDays[0].date;
+              this.selectedPricingDateRecord = this.pricingCalendarDays[0];
+            }
+          }
+        } else {
+          this.selectedPricingDateRecord = null;
+          this.selectedPricingDateStr = '';
+        }
+      },
+      error: (err: any) => {
+        this.isPricingCalendarLoading = false;
+        console.error('Failed to load pricing calendar:', err);
+        this.pricingCalendarError = err.error?.message || 'Failed to retrieve pricing calendar. Please try again.';
+      }
+    });
+  }
+
+  resetPricingMetrics(): void {
+    this.pricingTotalNights = 0;
+    this.pricingBasePriceNights = 0;
+    this.pricingOverrideNights = 0;
+    this.pricingBasePrice = 0;
+    this.pricingAvgEffectivePrice = 0;
+  }
+
+  computePricingSummaryMetrics(records: any[]): void {
+    const total = records.length;
+    let baseNights = 0;
+    let overrideNights = 0;
+    let effectiveSum = 0;
+
+    const basePrice = Number(this.selectedPricingRoom?.pricePerNight) || 0;
+
+    for (const r of records) {
+      const isOver = r.isOverride === true || r.override === true;
+      if (isOver) {
+        overrideNights++;
+      } else {
+        baseNights++;
+      }
+      effectiveSum += (Number(r.effectivePrice) || (isOver && r.overridePrice != null ? Number(r.overridePrice) : basePrice));
+    }
+
+    this.pricingTotalNights = total;
+    this.pricingBasePriceNights = baseNights;
+    this.pricingOverrideNights = overrideNights;
+    this.pricingBasePrice = basePrice;
+    this.pricingAvgEffectivePrice = total > 0 ? Math.round(effectiveSum / total) : basePrice;
+  }
+
+  generatePricingCalendarGrid(): void {
+    const year = this.pricingCurrentYear;
+    const month = this.pricingCurrentMonth;
+
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstWeekday = new Date(year, month, 1).getDay(); // 0 = Sun .. 6 = Sat
+    const prevMonthDays = new Date(year, month, 0).getDate();
+
+    const basePrice = Number(this.selectedPricingRoom?.pricePerNight) || 0;
+    const cells: any[] = [];
+
+    // Leading days from previous month
+    for (let i = firstWeekday - 1; i >= 0; i--) {
+      cells.push({
+        isLeadingTrailing: true,
+        dayNumber: prevMonthDays - i
+      });
+    }
+
+    // Days in current month
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dayDate = new Date(year, month, d);
+      const dateStr = this.formatDateIso(dayDate);
+      const rec = this.pricingCalendarDays.find(r => r.date === dateStr);
+
+      const isOverride = rec ? (rec.isOverride === true || rec.override === true) : false;
+      const basePriceVal = rec && rec.basePrice != null ? Number(rec.basePrice) : basePrice;
+      const effectivePrice = rec && rec.effectivePrice != null ? Number(rec.effectivePrice) : (isOverride && rec?.overridePrice != null ? Number(rec.overridePrice) : basePriceVal);
+      const overridePrice = rec && isOverride ? (rec.overridePrice != null ? Number(rec.overridePrice) : effectivePrice) : null;
+
+      const normalizedRec = rec ? {
+        ...rec,
+        date: dateStr,
+        basePrice: basePriceVal,
+        overridePrice: overridePrice,
+        effectivePrice: effectivePrice,
+        isOverride: isOverride
+      } : {
+        date: dateStr,
+        basePrice: basePriceVal,
+        overridePrice: overridePrice,
+        effectivePrice: effectivePrice,
+        isOverride: isOverride
+      };
+
+      cells.push({
+        isLeadingTrailing: false,
+        dayNumber: d,
+        dateStr: dateStr,
+        basePrice: basePriceVal,
+        overridePrice: overridePrice,
+        effectivePrice: effectivePrice,
+        isOverride: isOverride,
+        record: normalizedRec
+      });
+    }
+
+    // Trailing days from next month to complete row of 7
+    let nextMonthDay = 1;
+    while (cells.length % 7 !== 0) {
+      cells.push({
+        isLeadingTrailing: true,
+        dayNumber: nextMonthDay++
+      });
+    }
+
+    // Chunk into 7-day rows (weeks)
+    const weeks: any[][] = [];
+    for (let i = 0; i < cells.length; i += 7) {
+      weeks.push(cells.slice(i, i + 7));
+    }
+    this.pricingCalendarGridWeeks = weeks;
+  }
+
+  selectPricingDate(cell: any): void {
+    if (!cell || cell.isLeadingTrailing) return;
+    this.selectedPricingDateStr = cell.dateStr;
+    this.selectedPricingDateRecord = cell.record;
+  }
+
+  formatPricingDateLong(dateStr: string, zeroPadDay: boolean = false): string {
+    if (!dateStr) return '';
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const m = parseInt(parts[1], 10) - 1;
+        const d = parseInt(parts[2], 10);
+        const dayStr = zeroPadDay ? String(d).padStart(2, '0') : String(d);
+        const y = parts[0];
+        return `${monthNames[m]} ${dayStr}, ${y}`;
+      }
+      return dateStr;
+    } catch {
+      return dateStr;
+    }
+  }
+
+  getPricingRoomImage(): string {
+    if (this.selectedPricingRoom?.imageUrl) return this.selectedPricingRoom.imageUrl;
+    if (this.selectedPricingRoom?.roomImages) {
+      try {
+        const parsed = typeof this.selectedPricingRoom.roomImages === 'string'
+          ? JSON.parse(this.selectedPricingRoom.roomImages)
+          : this.selectedPricingRoom.roomImages;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
+      } catch {
+        // fallback
+      }
+    }
+    return 'https://images.unsplash.com/photo-1590490360182-c33d57733427';
+  }
+
+  // ==================== ADD PRICE OVERRIDE MODAL METHODS ====================
+  openAddPriceOverrideModal(): void {
+    this.showAddPriceOverrideModal = true;
+    this.overrideFormError = '';
+    this.overrideFormSuccess = '';
+    this.overrideType = 'single';
+    this.singleOverrideDate = this.selectedPricingDateStr || this.pricingStartDate || this.formatDateIso(new Date());
+    this.singleOverridePrice = null;
+
+    this.rangeStartDate = this.pricingStartDate || this.formatDateIso(new Date());
+    this.rangeEndDate = this.pricingEndDate || this.formatDateIso(new Date());
+    this.rangeOverridePrice = null;
+  }
+
+  closeAddPriceOverrideModal(): void {
+    this.showAddPriceOverrideModal = false;
+    this.overrideFormError = '';
+    this.overrideFormSuccess = '';
+  }
+
+  setOverrideType(type: 'single' | 'range'): void {
+    this.overrideType = type;
+    this.overrideFormError = '';
+  }
+
+  getRangeNightsCount(): number {
+    if (!this.rangeStartDate || !this.rangeEndDate) return 0;
+    try {
+      const d1 = new Date(this.rangeStartDate);
+      const d2 = new Date(this.rangeEndDate);
+      const diff = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+      return diff >= 0 ? diff + 1 : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  getPricePreviewText(): string {
+    const basePriceStr = this.formatCurrency(this.selectedPricingRoom?.pricePerNight);
+    if (this.overrideType === 'single') {
+      const dateLabel = this.formatPricingDateLong(this.singleOverrideDate);
+      const priceStr = this.singleOverridePrice != null && this.singleOverridePrice > 0
+        ? this.formatCurrency(this.singleOverridePrice)
+        : '₹--';
+      return `Effective price on ${dateLabel} will be ${priceStr} per night (Base price: ${basePriceStr}).`;
+    } else {
+      const startLabel = this.formatPricingDateLong(this.rangeStartDate);
+      const endLabel = this.formatPricingDateLong(this.rangeEndDate);
+      const nights = this.getRangeNightsCount();
+      const priceStr = this.rangeOverridePrice != null && this.rangeOverridePrice > 0
+        ? this.formatCurrency(this.rangeOverridePrice)
+        : '₹--';
+      return `Effective price from ${startLabel} to ${endLabel} (${nights} night${nights !== 1 ? 's' : ''}) will be ${priceStr} per night (Base price: ${basePriceStr}).`;
+    }
+  }
+
+  submitAddPriceOverride(): void {
+    if (!this.selectedPricingRoomId) {
+      this.overrideFormError = 'No room category selected.';
+      return;
+    }
+
+    if (this.overrideType === 'single') {
+      if (!this.singleOverrideDate) {
+        this.overrideFormError = 'Override date is mandatory.';
+        return;
+      }
+      if (!this.singleOverridePrice || this.singleOverridePrice <= 0) {
+        this.overrideFormError = 'Please enter a valid positive price greater than zero.';
+        return;
+      }
+
+      this.isSubmittingOverride = true;
+      this.overrideFormError = '';
+
+      this.hotelService.setPriceOverride(this.selectedPricingRoomId, {
+        overrideDate: this.singleOverrideDate,
+        pricePerNight: Number(this.singleOverridePrice)
+      }).subscribe({
+        next: (res) => {
+          this.isSubmittingOverride = false;
+          this.selectedPricingDateStr = this.singleOverrideDate;
+          this.closeAddPriceOverrideModal();
+          this.loadPricingCalendar();
+        },
+        error: (err) => {
+          this.isSubmittingOverride = false;
+          this.overrideFormError = err.error?.message || 'Failed to save price override. Please check inputs.';
+        }
+      });
+
+    } else {
+      if (!this.rangeStartDate || !this.rangeEndDate) {
+        this.overrideFormError = 'Start date and end date are mandatory.';
+        return;
+      }
+      if (this.rangeStartDate > this.rangeEndDate) {
+        this.overrideFormError = 'Start date must not be after end date.';
+        return;
+      }
+      if (!this.rangeOverridePrice || this.rangeOverridePrice <= 0) {
+        this.overrideFormError = 'Please enter a valid positive price greater than zero.';
+        return;
+      }
+
+      this.isSubmittingOverride = true;
+      this.overrideFormError = '';
+
+      this.hotelService.setPriceOverrideRange(this.selectedPricingRoomId, {
+        startDate: this.rangeStartDate,
+        endDate: this.rangeEndDate,
+        pricePerNight: Number(this.rangeOverridePrice)
+      }).subscribe({
+        next: (res) => {
+          this.isSubmittingOverride = false;
+          this.selectedPricingDateStr = this.rangeStartDate;
+          this.closeAddPriceOverrideModal();
+          this.loadPricingCalendar();
+        },
+        error: (err) => {
+          this.isSubmittingOverride = false;
+          this.overrideFormError = err.error?.message || 'Failed to save price override range. Please check inputs.';
+        }
+      });
+    }
+  }
+
+  // ==================== REMOVE PRICE OVERRIDE METHODS ====================
+  openRemoveOverrideModal(): void {
+    if (!this.selectedPricingDateStr || !this.selectedPricingDateRecord?.isOverride) {
+      return;
+    }
+    this.showRemoveOverrideModal = true;
+    this.removeOverrideError = '';
+  }
+
+  closeRemoveOverrideModal(): void {
+    this.showRemoveOverrideModal = false;
+    this.removeOverrideError = '';
+  }
+
+  confirmRemoveOverride(): void {
+    if (!this.selectedPricingRoomId || !this.selectedPricingDateStr) {
+      return;
+    }
+    this.isRemovingOverride = true;
+    this.removeOverrideError = '';
+
+    this.hotelService.deletePriceOverride(this.selectedPricingRoomId, this.selectedPricingDateStr).subscribe({
+      next: (res) => {
+        this.isRemovingOverride = false;
+        this.closeRemoveOverrideModal();
+        this.loadPricingCalendar();
+      },
+      error: (err) => {
+        this.isRemovingOverride = false;
+        this.removeOverrideError = err.error?.message || 'Failed to remove price override.';
+      }
+    });
   }
 
   // ==================== FORMATTERS & UTILITIES ====================

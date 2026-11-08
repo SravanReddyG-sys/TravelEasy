@@ -4771,18 +4771,728 @@
 
         </div>
 
-        <!-- ==================== SUB-VIEW: CALENDARS PLACEHOLDER ==================== -->
-        <div *ngIf="inventorySubNav === 'inventory-calendar' || inventorySubNav === 'pricing-calendar'" class="content-card p-5 text-center mb-4">
-          <div class="metric-icon-box bg-cyan-light text-cyan rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" style="width: 60px; height: 60px;">
-            <i [class]="inventorySubNav === 'inventory-calendar' ? 'fa-regular fa-calendar fs-3' : 'fa-solid fa-tags fs-3'"></i>
+        <!-- ==================== SUB-VIEW: INVENTORY CALENDAR (WP-07.1) ==================== -->
+        <div *ngIf="inventorySubNav === 'inventory-calendar'">
+
+          <!-- 1. Page Header & Subtitle -->
+          <div class="mb-4">
+            <h4 class="fw-bold text-dark mb-1">Inventory Calendar</h4>
+            <p class="text-muted small mb-0">View daily inventory, allocations, and availability for a room type.</p>
           </div>
-          <h5 class="fw-bold text-dark mb-1">
-            {{ inventorySubNav === 'inventory-calendar' ? 'Inventory Calendar' : 'Pricing Calendar' }}
-          </h5>
-          <p class="text-muted small mb-3">Calendar grid scheduling and date-wise controls will be available in the upcoming calendar package.</p>
-          <button type="button" class="btn btn-outline-teal rounded-pill px-4 btn-sm" (click)="inventorySubNav = 'base-price'">
-            Go to Base Price Management
-          </button>
+
+          <!-- Empty State: No Active Room Types -->
+          <div *ngIf="activeInventoryRoomTypes.length === 0" class="card p-5 text-center bg-white rounded-4 border shadow-2xs mb-4">
+            <div class="metric-icon-box bg-cyan-light text-cyan rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" style="width: 56px; height: 56px;">
+              <i class="fa-solid fa-bed fs-4"></i>
+            </div>
+            <h5 class="fw-bold text-dark mb-1">No Active Room Types Available</h5>
+            <p class="text-muted small mb-3">Your property currently has no active room categories configured for inventory calendar tracking.</p>
+            <div>
+              <button type="button" class="btn btn-teal rounded-pill px-4 btn-sm text-white" (click)="onAddRoomType()">
+                <i class="fa-solid fa-plus me-1"></i> Add Room Type
+              </button>
+            </div>
+          </div>
+
+          <div *ngIf="activeInventoryRoomTypes.length > 0">
+
+            <!-- Error Banner -->
+            <div *ngIf="inventoryCalendarError" class="alert alert-danger d-flex align-items-center justify-content-between p-3 rounded-3 small mb-4 border-0" style="background-color: #fef2f2; color: #991b1b;">
+              <div class="d-flex align-items-center gap-2">
+                <i class="fa-solid fa-circle-exclamation fs-5 flex-shrink-0"></i>
+                <span>{{ inventoryCalendarError }}</span>
+              </div>
+              <button type="button" class="btn-close" (click)="inventoryCalendarError = ''"></button>
+            </div>
+
+            <!-- Unified Filter & Room Summary Card matching Mockup -->
+            <div class="card p-3 rounded-4 border bg-white shadow-2xs mb-4 inv-cal-top-card">
+
+              <!-- 1. Filter & Navigation Row -->
+              <div class="row g-3 align-items-end inv-cal-filter-bar">
+
+                <!-- A. Room Type Selector -->
+                <div class="col-12 col-md-3">
+                  <label class="form-label small fw-bold text-dark mb-1">Room Type <span class="text-danger">*</span></label>
+                  <div class="inv-cal-select-wrap">
+                    <span class="inv-cal-select-icon pe-none">
+                      <i class="fa-solid fa-bed"></i>
+                    </span>
+                    <select class="form-select inv-cal-select"
+                            [(ngModel)]="selectedInventoryRoomId"
+                            (change)="onInventoryRoomTypeChange()">
+                      <option *ngFor="let rt of activeInventoryRoomTypes" [value]="rt.id">{{ rt.roomTypeName }}</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- B. Date Range Selector -->
+                <div class="col-12 col-md-4 inv-cal-date-range-wrap position-relative" style="z-index: 1050;">
+                  <label class="form-label small fw-bold text-dark mb-1">Date Range</label>
+                  <button type="button"
+                          class="form-control text-start d-flex align-items-center rounded-3 bg-white border inv-cal-input-btn"
+                          (click)="toggleInventoryDateRangeDropdown(); $event.stopPropagation()">
+                    <i class="bi bi-calendar3 text-secondary me-2.5" style="font-size: 0.95rem; color: #64748b;"></i>
+                    <span class="fw-medium text-dark text-truncate" style="font-size: 0.88rem;">{{ getInventoryDateRangeLabel() }}</span>
+                  </button>
+
+                  <!-- Popover for custom date range -->
+                  <div *ngIf="showInventoryDateRangeDropdown"
+                       class="position-absolute bg-white rounded-3 border p-3 mt-1 shadow-lg inv-cal-date-picker-overlay"
+                       style="width: 320px; left: 0; top: 100%; z-index: 10000 !important; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18); border-color: #cbd5e1;"
+                       (click)="$event.stopPropagation()">
+                    <div class="mb-2">
+                      <label class="form-label small fw-semibold text-secondary mb-1">Start Date</label>
+                      <input type="date" class="form-control form-control-sm rounded-2" [(ngModel)]="inventoryStartDate" />
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label small fw-semibold text-secondary mb-1">End Date (Inclusive)</label>
+                      <input type="date" class="form-control form-control-sm rounded-2" [(ngModel)]="inventoryEndDate" />
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 pt-1">
+                      <button type="button" class="btn btn-sm rounded-pill px-3 py-1 bg-white border text-secondary" (click)="resetInventoryDateRangeToCurrentMonth()">Reset</button>
+                      <button type="button" class="btn btn-sm text-white rounded-pill px-3 py-1 fw-medium" style="background-color: #0284c7; border: none;" (click)="applyInventoryCustomDateRange()">Apply</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- C. Month Navigation Controls -->
+                <div class="col-12 col-md-3">
+                  <div class="inv-cal-pager-wrap d-flex align-items-center justify-content-between border rounded-3 bg-white">
+                    <button type="button" class="btn btn-sm btn-link p-0 text-secondary d-flex align-items-center justify-content-center inv-cal-pager-btn" (click)="prevInventoryMonth()" title="Previous Month">
+                      <i class="fa-solid fa-chevron-left" style="font-size: 0.75rem; color: #64748b;"></i>
+                    </button>
+                    <div class="d-flex align-items-center justify-content-center px-2 fw-bold text-dark" style="font-size: 0.88rem;">
+                      <span>{{ getInventoryMonthYearLabel() }}</span>
+                      <i class="fa-solid fa-chevron-down ms-2" style="font-size: 0.7rem; color: #0f172a;"></i>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-link p-0 text-secondary d-flex align-items-center justify-content-center inv-cal-pager-btn" (click)="nextInventoryMonth()" title="Next Month">
+                      <i class="fa-solid fa-chevron-right" style="font-size: 0.75rem; color: #64748b;"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- D. Refresh Button -->
+                <div class="col-12 col-md-2 d-flex justify-content-end">
+                  <button type="button"
+                          class="btn inv-cal-refresh-btn d-inline-flex align-items-center justify-content-center w-100"
+                          [disabled]="isInventoryCalendarLoading"
+                          (click)="refreshInventoryCalendar()">
+                    <i class="fa-solid fa-arrows-rotate me-2" [class.fa-spin]="isInventoryCalendarLoading" style="color: #0284c7; font-size: 0.88rem;"></i>
+                    <span class="fw-semibold" style="color: #0284c7; font-size: 0.88rem;">Refresh</span>
+                  </button>
+                </div>
+
+              </div>
+
+              <!-- Subtle Horizontal Divider -->
+              <div class="inv-cal-card-divider my-3"></div>
+
+              <!-- 2. Room Type Summary & Metric Cards Row -->
+              <div class="row g-3 align-items-center">
+
+                <!-- Left: Room Type Info Card -->
+                <div class="col-12 col-xl-4 d-flex align-items-center pe-xl-2">
+                  <div class="rounded-3 overflow-hidden border bg-light flex-shrink-0 me-3" style="width: 88px; height: 62px;">
+                    <img *ngIf="selectedInventoryRoom?.imageUrl"
+                         [src]="selectedInventoryRoom.imageUrl"
+                         [alt]="selectedInventoryRoom?.roomTypeName"
+                         class="w-100 h-100 object-fit-cover"
+                         (error)="$any($event.target).src = 'https://images.unsplash.com/photo-1590490360182-c33d57733427'" />
+                    <div *ngIf="!selectedInventoryRoom?.imageUrl" class="w-100 h-100 d-flex align-items-center justify-content-center text-muted">
+                      <i class="fa-solid fa-bed fs-4 opacity-50"></i>
+                    </div>
+                  </div>
+                  <div class="text-truncate flex-grow-1">
+                    <h6 class="fw-bold text-dark mb-1 text-truncate" style="font-size: 0.95rem;" [title]="selectedInventoryRoom?.roomTypeName">
+                      {{ selectedInventoryRoom?.roomTypeName || 'Room Type' }}
+                    </h6>
+                    <div class="d-flex flex-column gap-1" style="font-size: 0.8rem; color: #475569;">
+                      <div class="d-flex align-items-center gap-1.5">
+                        <i class="fa-solid fa-bed text-muted me-1" style="font-size: 0.8rem;"></i>
+                        <span>Total Rooms: <strong style="color: #0f172a; font-weight: 600;">{{ selectedInventoryRoom?.totalRooms || 0 }}</strong></span>
+                      </div>
+                      <div class="d-flex align-items-center gap-1.5">
+                        <i class="bi bi-info-circle text-muted me-1" style="font-size: 0.8rem;"></i>
+                        <span>Base Price: <strong style="color: #0f172a; font-weight: 600;">{{ formatCurrency(selectedInventoryRoom?.pricePerNight) }}/night</strong></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="d-none d-xl-block inv-cal-vr-divider"></div>
+                </div>
+
+                <!-- Right: 6 Metric Cards -->
+                <div class="col-12 col-xl-8">
+                  <div class="row g-2">
+
+                    <!-- 1. Total Room Nights (Light Blue) -->
+                    <div class="col-4 col-sm-2">
+                      <div class="inv-cal-metric-box" style="background-color: #f0f9ff; border: 1px solid #e0f2fe;">
+                        <div class="inv-cal-metric-val" style="color: #0284c7;">{{ inventoryTotalRoomNights }}</div>
+                        <div class="inv-cal-metric-lbl">Total<br>Room Nights</div>
+                      </div>
+                    </div>
+
+                    <!-- 2. Booked Nights (Light Red) -->
+                    <div class="col-4 col-sm-2">
+                      <div class="inv-cal-metric-box" style="background-color: #fef2f2; border: 1px solid #fee2e2;">
+                        <div class="inv-cal-metric-val" style="color: #dc2626;">{{ inventoryBookedNights }}</div>
+                        <div class="inv-cal-metric-lbl">Booked<br>Nights</div>
+                      </div>
+                    </div>
+
+                    <!-- 3. Held Nights (Light Yellow) -->
+                    <div class="col-4 col-sm-2">
+                      <div class="inv-cal-metric-box" style="background-color: #fefce8; border: 1px solid #fef08a;">
+                        <div class="inv-cal-metric-val" style="color: #ca8a04;">{{ inventoryHeldNights }}</div>
+                        <div class="inv-cal-metric-lbl">Held<br>Nights</div>
+                      </div>
+                    </div>
+
+                    <!-- 4. Blocked Nights (Light Purple) -->
+                    <div class="col-4 col-sm-2">
+                      <div class="inv-cal-metric-box" style="background-color: #faf5ff; border: 1px solid #f3e8ff;">
+                        <div class="inv-cal-metric-val" style="color: #9333ea;">{{ inventoryBlockedNights }}</div>
+                        <div class="inv-cal-metric-lbl">Blocked<br>Nights</div>
+                      </div>
+                    </div>
+
+                    <!-- 5. Available Nights (Light Green) -->
+                    <div class="col-4 col-sm-2">
+                      <div class="inv-cal-metric-box" style="background-color: #f0fdf4; border: 1px solid #dcfce7;">
+                        <div class="inv-cal-metric-val" style="color: #16a34a;">{{ inventoryAvailableNights }}</div>
+                        <div class="inv-cal-metric-lbl">Available<br>Nights</div>
+                      </div>
+                    </div>
+
+                    <!-- 6. Occupancy (Neutral Light Grey) -->
+                    <div class="col-4 col-sm-2">
+                      <div class="inv-cal-metric-box" style="background-color: #f8fafc; border: 1px solid #e2e8f0;">
+                        <div class="inv-cal-metric-val text-dark">{{ inventoryOccupancyRate }}%</div>
+                        <div class="inv-cal-metric-lbl">Occupancy</div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+            <!-- 4. Main Calendar Content Card (Grid + Info Panel matching Mockup) -->
+            <div class="card p-3.5 p-md-4 rounded-4 border bg-white shadow-2xs mb-4">
+              <div class="row g-4 align-items-stretch">
+
+                <!-- Left Column: Calendar Grid -->
+                <div class="col-12 col-lg-8 col-xl-9">
+                  <div class="inv-cal-table-card position-relative overflow-hidden h-100">
+
+                    <!-- Loading Overlay -->
+                    <div *ngIf="isInventoryCalendarLoading"
+                         class="position-absolute top-0 start-0 w-100 h-100 bg-white bg-opacity-75 d-flex align-items-center justify-content-center z-3">
+                      <div class="spinner-border text-teal" role="status">
+                        <span class="visually-hidden">Loading calendar...</span>
+                      </div>
+                    </div>
+
+                    <!-- Calendar Table Grid -->
+                    <div class="table-responsive">
+                      <table class="table inv-cal-grid-table mb-0">
+                        <thead>
+                          <tr>
+                            <th>Sun</th>
+                            <th>Mon</th>
+                            <th>Tue</th>
+                            <th>Wed</th>
+                            <th>Thu</th>
+                            <th>Fri</th>
+                            <th>Sat</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr *ngFor="let week of inventoryCalendarGridWeeks">
+                            <td *ngFor="let cell of week"
+                                class="p-0 position-relative inv-cal-td"
+                                [ngClass]="{
+                                  'inv-cal-empty-cell': cell.isEmpty,
+                                  'inv-cal-day-cell': !cell.isEmpty,
+                                  'inv-cal-cell-selected': !cell.isEmpty && cell.dateStr === selectedInventoryDateStr,
+                                  'inv-cal-avail-high': !cell.isEmpty && cell.classification === 'high',
+                                  'inv-cal-avail-low': !cell.isEmpty && cell.classification === 'low',
+                                  'inv-cal-avail-none': !cell.isEmpty && cell.classification === 'none'
+                                }"
+                                (click)="selectInventoryDate(cell)">
+                              <div *ngIf="!cell.isEmpty" class="inv-cal-cell-content">
+                                <div class="inv-cal-day-num">{{ cell.headerLabel }}</div>
+                                <div class="inv-cal-day-avl" [ngClass]="{'text-danger': cell.classification === 'none'}">
+                                  Avl: <strong [class.text-danger]="cell.classification === 'none'">{{ cell.availableRooms }} / {{ cell.totalRooms }}</strong>
+                                </div>
+                              </div>
+                              <div *ngIf="cell.isEmpty" class="inv-cal-cell-content"></div>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                  </div>
+                </div>
+
+                <!-- Right Column: Information Panel (Single Card matching Mockup) -->
+                <div class="col-12 col-lg-4 col-xl-3">
+                  <div class="inv-cal-side-card">
+
+                    <!-- Top Half: How to read (Legend) -->
+                    <div>
+                      <div class="d-flex align-items-center gap-2 mb-3">
+                        <i class="bi bi-info-circle text-primary" style="font-size: 1.15rem; color: #2563eb !important;"></i>
+                        <span class="fw-bold text-dark" style="font-size: 1.05rem;">How to read</span>
+                      </div>
+
+                      <div class="d-flex flex-column gap-2.5">
+                        <!-- High availability -->
+                        <div class="d-flex align-items-center gap-2.5">
+                          <div class="rounded-2 flex-shrink-0" style="width: 26px; height: 26px; background-color: #dcfce7; border: 1.5px solid #86efac;">  </div>
+                          <div>
+                            <div class="fw-bold text-dark" style="font-size: 0.85rem; line-height: 1.2;"> High availability</div>
+                            <div class="text-secondary" style="font-size: 0.78rem; line-height: 1.2;">  (&gt; 25% of total rooms)</div>
+                          </div>
+                        </div>
+
+                        <!-- Low availability -->
+                        <div class="d-flex align-items-center gap-2.5">
+                          <div class="rounded-2 flex-shrink-0" style="width: 26px; height: 26px; background-color: #fef9c3; border: 1.5px solid #fde047;"></div>
+                          <div>
+                            <div class="fw-bold text-dark" style="font-size: 0.85rem; line-height: 1.2;"> Low availability</div>
+                            <div class="text-secondary" style="font-size: 0.78rem; line-height: 1.2;">  (1 – 25% of total rooms)</div>
+                          </div>
+                        </div>
+
+                        <!-- No availability -->
+                        <div class="d-flex align-items-center gap-2.5">
+                          <div class="rounded-2 flex-shrink-0" style="width: 26px; height: 26px; background-color: #fee2e2; border: 1.5px solid #fca5a5;"></div>
+                          <div>
+                            <div class="fw-bold text-dark" style="font-size: 0.85rem; line-height: 1.2;"> No availability</div>
+                            <div class="text-secondary" style="font-size: 0.78rem; line-height: 1.2;">  (0 rooms available)</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Divider -->
+                    <hr class="my-3.5 border-light-subtle" style="border-top: 1px solid #f1f5f9 !important; margin: 18px 0; opacity: 1;">
+
+                    <!-- Bottom Half: Daily inventory (selected date) -->
+                    <div>
+                      <div class="fw-bold text-dark mb-0.5" style="font-size: 0.95rem;">Daily inventory (selected date)</div>
+                      <div class="fw-semibold mb-2" style="color: #2563eb; font-size: 0.88rem;">
+                        {{ formatInventoryDateLong(selectedInventoryDateStr) || 'No date selected' }}
+                      </div>
+
+                      <div class="d-flex flex-column" style="font-size: 0.85rem;">
+                        <div class="d-flex align-items-center justify-content-between py-2 border-bottom border-light-subtle" style="border-color: #f1f5f9 !important;">
+                          <span class="text-dark fw-medium">Total Rooms</span>
+                          <strong class="text-dark">{{ selectedInventoryDateRecord?.totalRooms ?? '-' }}</strong>
+                        </div>
+                        <div class="d-flex align-items-center justify-content-between py-2 border-bottom border-light-subtle" style="border-color: #f1f5f9 !important;">
+                          <span class="text-dark fw-medium">Booked Rooms</span>
+                          <strong class="text-dark">{{ selectedInventoryDateRecord?.bookedRooms ?? '-' }}</strong>
+                        </div>
+                        <div class="d-flex align-items-center justify-content-between py-2 border-bottom border-light-subtle" style="border-color: #f1f5f9 !important;">
+                          <span class="text-dark fw-medium">Held Rooms</span>
+                          <strong class="text-dark">{{ selectedInventoryDateRecord?.heldRooms ?? '-' }}</strong>
+                        </div>
+                        <div class="d-flex align-items-center justify-content-between py-2 mb-1">
+                          <span class="text-dark fw-medium">Blocked Rooms</span>
+                          <strong class="text-dark">{{ selectedInventoryDateRecord?.blockedRooms ?? '-' }}</strong>
+                        </div>
+                      </div>
+
+                      <!-- Available Rooms Highlighted Badge -->
+                      <div class="d-flex align-items-center justify-content-between px-3 py-2.5 rounded-3 mt-1"
+                           [ngStyle]="selectedInventoryDateRecord?.availableRooms === 0 ? {'background-color': '#fee2e2', 'color': '#991b1b'} : (selectedInventoryDateRecord?.availableRooms <= 0.25 * selectedInventoryDateRecord?.totalRooms ? {'background-color': '#fef9c3', 'color': '#854d0e'} : {'background-color': '#dcfce7', 'color': '#166534'})">
+                        <span class="fw-bold" style="font-size: 0.9rem;">Available Rooms</span>
+                        <strong style="font-size: 1rem; font-weight: 800;">{{ selectedInventoryDateRecord?.availableRooms ?? '-' }}</strong>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- ==================== SUB-VIEW: PRICING CALENDAR (WP-07.2) ==================== -->
+        <div *ngIf="inventorySubNav === 'pricing-calendar'" class="pricing-cal-view mb-4">
+
+          <!-- Empty State if no active room types -->
+          <div *ngIf="activePricingRoomTypes.length === 0" class="content-card p-5 text-center mb-4 bg-white rounded-4 border">
+            <div class="metric-icon-box bg-cyan-light text-cyan rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" style="width: 60px; height: 60px;">
+              <i class="fa-solid fa-bed fs-3 text-secondary"></i>
+            </div>
+            <h5 class="fw-bold text-dark mb-1">No Active Room Types Available</h5>
+            <p class="text-muted small mb-3">Add or activate a room type to manage pricing and rate overrides.</p>
+            <div>
+              <button type="button" class="btn btn-teal rounded-pill px-4 btn-sm text-white" (click)="onAddRoomType()">
+                <i class="fa-solid fa-plus me-1"></i> Add Room Type
+              </button>
+            </div>
+          </div>
+
+          <div *ngIf="activePricingRoomTypes.length > 0">
+
+            <!-- Error Banner -->
+            <div *ngIf="pricingCalendarError" class="alert alert-danger d-flex align-items-center justify-content-between p-3 rounded-3 small mb-4 border-0" style="background-color: #fef2f2; color: #991b1b;">
+              <div class="d-flex align-items-center gap-2">
+                <i class="fa-solid fa-circle-exclamation fs-5 flex-shrink-0"></i>
+                <span>{{ pricingCalendarError }}</span>
+              </div>
+              <button type="button" class="btn-close" (click)="pricingCalendarError = ''"></button>
+            </div>
+
+            <!-- Page Header Card / Container -->
+            <div class="card p-4 rounded-4 border bg-white shadow-2xs mb-4 pricing-cal-top-card">
+
+              <!-- Section Title & Subtitle -->
+              <div class="mb-3">
+                <h5 class="fw-bold text-dark mb-1" style="font-size: 1.15rem; letter-spacing: -0.01em;">Pricing Calendar</h5>
+                <p class="text-muted small mb-0" style="font-size: 0.85rem;">View effective nightly prices, manage date-specific price overrides for a room type.</p>
+              </div>
+
+              <!-- 1. Filter & Navigation Row -->
+              <div class="row g-3 align-items-end pricing-cal-filter-bar mb-3">
+
+                <!-- A. Room Type Selector -->
+                <div class="col-12 col-md-3">
+                  <label class="form-label small fw-bold text-dark mb-1">Room Type <span class="text-danger">*</span></label>
+                  <div class="pricing-cal-select-wrap">
+                    <span class="pricing-cal-select-icon pe-none">
+                      <i class="fa-solid fa-bed"></i>
+                    </span>
+                    <select class="form-select pricing-cal-select"
+                            [(ngModel)]="selectedPricingRoomId"
+                            (change)="onPricingRoomTypeChange()">
+                      <option *ngFor="let rt of activePricingRoomTypes" [value]="rt.id">{{ rt.roomTypeName }}</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- B. Date Range Selector -->
+                <div class="col-12 col-md-4 pricing-cal-date-range-wrap position-relative" style="z-index: 1050;">
+                  <label class="form-label small fw-bold text-dark mb-1">Date Range</label>
+                  <button type="button"
+                          class="form-control text-start d-flex align-items-center rounded-3 bg-white border pricing-cal-input-btn"
+                          (click)="togglePricingDateRangeDropdown(); $event.stopPropagation()">
+                    <i class="bi bi-calendar3 text-secondary me-2.5" style="font-size: 0.95rem; color: #64748b;"></i>
+                    <span class="fw-medium text-dark text-truncate" style="font-size: 0.88rem;">{{ getPricingDateRangeLabel() }}</span>
+                  </button>
+
+                  <!-- Popover for custom date range -->
+                  <div *ngIf="showPricingDateRangeDropdown"
+                       class="position-absolute bg-white rounded-3 border p-3 mt-1 shadow-lg pricing-cal-date-picker-overlay"
+                       style="width: 320px; left: 0; top: 100%; z-index: 10000 !important; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18); border-color: #cbd5e1;"
+                       (click)="$event.stopPropagation()">
+                    <div class="mb-2">
+                      <label class="form-label small fw-semibold text-secondary mb-1">Start Date</label>
+                      <input type="date" class="form-control form-control-sm rounded-2" [(ngModel)]="pricingStartDate" />
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label small fw-semibold text-secondary mb-1">End Date (Inclusive)</label>
+                      <input type="date" class="form-control form-control-sm rounded-2" [(ngModel)]="pricingEndDate" />
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 pt-1">
+                      <button type="button" class="btn btn-sm rounded-pill px-3 py-1 bg-white border text-secondary" (click)="resetPricingDateRangeToCurrentMonth()">Reset</button>
+                      <button type="button" class="btn btn-sm text-white rounded-pill px-3 py-1 fw-medium" style="background-color: #0d9488; border: none;" (click)="applyPricingCustomDateRange()">Apply</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- C. Month Navigation Controls -->
+                <div class="col-12 col-md-3">
+                  <div class="pricing-cal-pager-wrap d-flex align-items-center justify-content-between border rounded-3 bg-white">
+                    <button type="button" class="btn btn-sm btn-link p-0 text-secondary d-flex align-items-center justify-content-center pricing-cal-pager-btn" (click)="prevPricingMonth()" title="Previous Month">
+                      <i class="fa-solid fa-chevron-left" style="font-size: 0.75rem; color: #64748b;"></i>
+                    </button>
+                    <div class="d-flex align-items-center justify-content-center px-2 fw-bold text-dark" style="font-size: 0.88rem;">
+                      <span>{{ getPricingMonthYearLabel() }}</span>
+                      <i class="fa-solid fa-chevron-down ms-2" style="font-size: 0.7rem; color: #0f172a;"></i>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-link p-0 text-secondary d-flex align-items-center justify-content-center pricing-cal-pager-btn" (click)="nextPricingMonth()" title="Next Month">
+                      <i class="fa-solid fa-chevron-right" style="font-size: 0.75rem; color: #64748b;"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- D. Add Price Override Button -->
+                <div class="col-12 col-md-2 d-flex justify-content-end">
+                  <button type="button"
+                          class="btn btn-teal text-white rounded-3 px-3 py-2 d-inline-flex align-items-center justify-content-center gap-2 w-100 fw-semibold"
+                          style="background-color: #0d9488; border-color: #0d9488; font-size: 0.88rem; height: 42px;"
+                          (click)="openAddPriceOverrideModal()">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Add Price Override</span>
+                  </button>
+                </div>
+
+              </div>
+
+              <!-- Subtle Divider Line -->
+              <div class="pricing-cal-card-divider my-3"></div>
+
+              <!-- 2. Room Type Summary & 5 Metric Cards Row -->
+              <div class="row g-3 align-items-center">
+
+                <!-- Left: Room Type Info Card -->
+                <div class="col-12 col-xl-4 d-flex align-items-center pe-xl-2">
+                  <div class="rounded-3 overflow-hidden border bg-light flex-shrink-0 me-3" style="width: 88px; height: 62px;">
+                    <img [src]="getPricingRoomImage()"
+                         [alt]="selectedPricingRoom?.roomTypeName"
+                         class="w-100 h-100 object-fit-cover"
+                         (error)="$any($event.target).src = 'https://images.unsplash.com/photo-1590490360182-c33d57733427'" />
+                  </div>
+                  <div class="text-truncate flex-grow-1">
+                    <h6 class="fw-bold text-dark mb-1 text-truncate" style="font-size: 0.95rem;" [title]="selectedPricingRoom?.roomTypeName">
+                      {{ selectedPricingRoom?.roomTypeName || 'Room Type' }}
+                    </h6>
+                    <div class="d-flex flex-column gap-1" style="font-size: 0.8rem; color: #475569;">
+                      <div class="d-flex align-items-center gap-1.5">
+                        <i class="fa-solid fa-bed text-muted me-1" style="font-size: 0.8rem;"></i>
+                        <span>Total Rooms: <strong style="color: #0f172a; font-weight: 600;">{{ selectedPricingRoom?.totalRooms || 0 }}</strong></span>
+                      </div>
+                      <div class="d-flex align-items-center gap-1.5">
+                        <i class="bi bi-info-circle text-muted me-1" style="font-size: 0.8rem;"></i>
+                        <span>Base Price: <strong style="color: #0f172a; font-weight: 600;">{{ formatCurrency(selectedPricingRoom?.pricePerNight) }}/night</strong></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="d-none d-xl-block pricing-cal-vr-divider"></div>
+                </div>
+
+                <!-- Right: 5 Summary Metric Cards -->
+                <div class="col-12 col-xl-8">
+                  <div class="row g-2">
+
+                    <!-- 1. Total Nights (Blue) -->
+                    <div class="col-6 col-sm" style="flex: 1 1 0;">
+                      <div class="pricing-cal-metric-box" style="background-color: #eff6ff; border: 1px solid #dbeafe;">
+                        <div class="pricing-cal-metric-val" style="color: #1d4ed8;">{{ pricingTotalNights }}</div>
+                        <div class="pricing-cal-metric-lbl">Total<br>Nights</div>
+                      </div>
+                    </div>
+
+                    <!-- 2. Base Price Nights (Purple) -->
+                    <div class="col-6 col-sm" style="flex: 1 1 0;">
+                      <div class="pricing-cal-metric-box" style="background-color: #f5f3ff; border: 1px solid #ede9fe;">
+                        <div class="pricing-cal-metric-val" style="color: #6d28d9;">{{ pricingBasePriceNights }}</div>
+                        <div class="pricing-cal-metric-lbl">Base Price<br>Nights</div>
+                      </div>
+                    </div>
+
+                    <!-- 3. Override Nights (Yellow/Amber) -->
+                    <div class="col-6 col-sm" style="flex: 1 1 0;">
+                      <div class="pricing-cal-metric-box" style="background-color: #fefce8; border: 1px solid #fef08a;">
+                        <div class="pricing-cal-metric-val" style="color: #b45309;">{{ pricingOverrideNights }}</div>
+                        <div class="pricing-cal-metric-lbl">Override<br>Nights</div>
+                      </div>
+                    </div>
+
+                    <!-- 4. Base Price per night (Green) -->
+                    <div class="col-6 col-sm" style="flex: 1 1 0;">
+                      <div class="pricing-cal-metric-box" style="background-color: #f0fdf4; border: 1px solid #dcfce7;">
+                        <div class="pricing-cal-metric-val" style="color: #15803d; font-size: 1.05rem;">{{ formatCurrency(pricingBasePrice) }}</div>
+                        <div class="pricing-cal-metric-lbl">Base Price<br>(per night)</div>
+                      </div>
+                    </div>
+
+                    <!-- 5. Avg. Effective Price per night (Teal/Cyan) -->
+                    <div class="col-6 col-sm" style="flex: 1 1 0;">
+                      <div class="pricing-cal-metric-box" style="background-color: #ecfeff; border: 1px solid #cffafe;">
+                        <div class="pricing-cal-metric-val" style="color: #0e7490; font-size: 1.05rem;">{{ formatCurrency(pricingAvgEffectivePrice) }}</div>
+                        <div class="pricing-cal-metric-lbl">Avg. Effective Price<br>(per night)</div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+            <!-- Calendar & Right Side Unified Card -->
+            <div class="card p-4 rounded-4 border bg-white shadow-2xs pricing-cal-main-card">
+              <div class="row g-4">
+
+                <!-- Left: 7-Column Calendar Grid -->
+                <div class="col-12 col-xl-9">
+                  <div class="table-responsive rounded-3 border pricing-cal-table-wrap">
+                    <table class="table table-bordered mb-0 pricing-cal-table text-center align-middle">
+                      <thead class="pricing-cal-thead">
+                        <tr>
+                          <th class="py-2.5 fw-semibold text-secondary" style="width: 14.28%;">Sun</th>
+                          <th class="py-2.5 fw-semibold text-secondary" style="width: 14.28%;">Mon</th>
+                          <th class="py-2.5 fw-semibold text-secondary" style="width: 14.28%;">Tue</th>
+                          <th class="py-2.5 fw-semibold text-secondary" style="width: 14.28%;">Wed</th>
+                          <th class="py-2.5 fw-semibold text-secondary" style="width: 14.28%;">Thu</th>
+                          <th class="py-2.5 fw-semibold text-secondary" style="width: 14.28%;">Fri</th>
+                          <th class="py-2.5 fw-semibold text-secondary" style="width: 14.28%;">Sat</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let week of pricingCalendarGridWeeks">
+                          <td *ngFor="let cell of week"
+                              class="p-0 position-relative pricing-cal-td"
+                              [class.pricing-td-leading-trailing]="cell.isLeadingTrailing"
+                              [class.pricing-td-active]="!cell.isLeadingTrailing"
+                              [class.pricing-td-selected]="!cell.isLeadingTrailing && cell.dateStr === selectedPricingDateStr"
+                              (click)="selectPricingDate(cell)">
+
+                            <!-- Leading / Trailing cell outside month -->
+                            <div *ngIf="cell.isLeadingTrailing" class="pricing-cal-cell-inner pricing-cal-cell-muted">
+                              <span class="pricing-cal-day-num text-muted opacity-50">{{ cell.dayNumber }}</span>
+                            </div>
+
+                            <!-- Current Month Cell -->
+                            <div *ngIf="!cell.isLeadingTrailing"
+                                 class="pricing-cal-cell-inner"
+                                 [class.pricing-cell-base]="!cell.isOverride"
+                                 [class.pricing-cell-override]="cell.isOverride"
+                                 [class.pricing-cell-selected]="cell.dateStr === selectedPricingDateStr">
+
+                              <!-- Top row: day number on left, tag icon on right if override -->
+                              <div class="d-flex align-items-center justify-content-between w-100 px-2 pt-2">
+                                <span class="pricing-cal-day-num fw-bold">{{ cell.dayNumber }}</span>
+                                <span *ngIf="cell.isOverride" class="pricing-cal-override-tag" title="Price Override Active">
+                                  <i class="fa-solid fa-tag" style="color: #d97706; font-size: 0.85rem;"></i>
+                                </span>
+                              </div>
+
+                              <!-- Bottom row: effective nightly price -->
+                              <div class="pricing-cal-price-wrap px-2 pb-2 mt-auto text-center">
+                                <span class="pricing-cal-price-val" [class.fw-bold]="cell.isOverride">
+                                  {{ formatCurrency(cell.effectivePrice) }}
+                                </span>
+                              </div>
+
+                            </div>
+
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- Right: Selected Date Details & "How to read" Legend -->
+                <div class="col-12 col-xl-3 d-flex flex-column gap-3">
+
+                  <!-- Selected Date Details Panel -->
+                  <div class="pricing-cal-side-panel border rounded-4 p-3 bg-white">
+
+                    <!-- Panel Header -->
+                    <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                      <i class="bi bi-calendar3" style="color: #0d9488; font-size: 1.1rem;"></i>
+                      <h6 class="fw-bold text-dark mb-0" style="font-size: 0.95rem;">
+                        Selected Date: {{ formatPricingDateLong(selectedPricingDateStr) || 'None' }}
+                      </h6>
+                    </div>
+
+                    <!-- Effective Price Highlight Box -->
+                    <div class="pricing-cal-highlight-box rounded-3 p-3 text-center mb-3" style="background-color: #ecfeff; border: 1px solid #cffafe;">
+                      <div class="small fw-semibold text-secondary mb-1" style="font-size: 0.8rem; color: #475569;">Effective Price</div>
+                      <div class="fw-bold" style="color: #0e7490; font-size: 1.35rem; letter-spacing: -0.01em;">
+                        {{ formatCurrency(selectedPricingDateRecord?.effectivePrice || selectedPricingRoom?.pricePerNight) }} <span class="fw-normal" style="font-size: 0.88rem; color: #64748b;">/ night</span>
+                      </div>
+                    </div>
+
+                    <!-- Key-Value Breakdown -->
+                    <div class="d-flex flex-column gap-2 mb-3" style="font-size: 0.88rem;">
+                      <div class="d-flex align-items-center justify-content-between py-1 border-bottom border-light-subtle">
+                        <span class="text-secondary d-flex align-items-center gap-1.5">
+                          <i class="fa-solid fa-shield-halved text-muted" style="font-size: 0.8rem;"></i> Base Price
+                        </span>
+                        <strong class="text-dark">{{ formatCurrency(selectedPricingDateRecord?.basePrice || selectedPricingRoom?.pricePerNight) }}</strong>
+                      </div>
+                      <div class="d-flex align-items-center justify-content-between py-1 border-bottom border-light-subtle">
+                        <span class="text-secondary d-flex align-items-center gap-1.5">
+                          <i class="fa-solid fa-tag text-muted" style="font-size: 0.8rem;"></i> Override Price
+                        </span>
+                        <strong class="text-dark">{{ selectedPricingDateRecord?.isOverride ? formatCurrency(selectedPricingDateRecord?.overridePrice) : '–' }}</strong>
+                      </div>
+                      <div class="d-flex align-items-center justify-content-between py-1">
+                        <span class="text-secondary d-flex align-items-center gap-1.5">
+                          <i class="bi bi-info-circle text-muted" style="font-size: 0.8rem;"></i> Status
+                        </span>
+                        <span class="badge fw-medium px-2 py-1"
+                              [ngStyle]="selectedPricingDateRecord?.isOverride ? {'background-color': '#fef9c3', 'color': '#854d0e'} : {'background-color': '#dcfce7', 'color': '#166534'}">
+                          {{ selectedPricingDateRecord?.isOverride ? 'Override Price' : 'Base Price' }}
+                        </span>
+                      </div>
+                    </div>
+
+                    <!-- Remove Override Action (visible when override is active) -->
+                    <div *ngIf="selectedPricingDateRecord?.isOverride" class="pt-2 border-top">
+                      <button type="button"
+                              class="btn btn-outline-danger btn-sm w-100 rounded-3 py-2 fw-medium d-flex align-items-center justify-content-center gap-2"
+                              (click)="openRemoveOverrideModal()">
+                        <i class="fa-solid fa-trash-can"></i>
+                        <span>Remove Override</span>
+                      </button>
+                    </div>
+
+                  </div>
+
+                  <!-- "How to read" Legend Panel -->
+                  <div class="pricing-cal-side-panel border rounded-4 p-3 bg-white">
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                      <i class="bi bi-info-circle text-primary" style="font-size: 1.05rem;"></i>
+                      <h6 class="fw-bold text-dark mb-0" style="font-size: 0.92rem;">How to read</h6>
+                    </div>
+
+                    <div class="d-flex flex-column gap-3" style="font-size: 0.84rem;">
+                      <!-- Base price date -->
+                      <div class="d-flex align-items-start gap-2.5">
+                        <div class="pricing-cal-swatch pricing-swatch-base flex-shrink-0 mt-0.5"></div>
+                        <div>
+                          <div class="fw-semibold text-dark">Base price date</div>
+                          <div class="text-secondary small">(Uses room type base price)</div>
+                        </div>
+                      </div>
+
+                      <!-- Override price date -->
+                      <div class="d-flex align-items-start gap-2.5">
+                        <div class="pricing-cal-swatch pricing-swatch-override flex-shrink-0 mt-0.5 d-flex align-items-center justify-content-center">
+                          <i class="fa-solid fa-tag" style="color: #b45309; font-size: 0.65rem;"></i>
+                        </div>
+                        <div>
+                          <div class="fw-semibold text-dark">Override price date</div>
+                          <div class="text-secondary small">(Has a date-specific price)</div>
+                        </div>
+                      </div>
+
+                      <!-- Selected date -->
+                      <div class="d-flex align-items-start gap-2.5">
+                        <div class="pricing-cal-swatch pricing-swatch-selected flex-shrink-0 mt-0.5"></div>
+                        <div>
+                          <div class="fw-semibold text-dark">Selected date</div>
+                          <div class="text-secondary small">(Currently viewed date)</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+
         </div>
 
       </div>
@@ -4957,7 +5667,217 @@
         </div>
       </div>
 
-      <!-- ==================== MODAL 1: CREATE ROOM BLOCK OVERLAY (WP-07.3 / REF 2) ==================== -->
+            <!-- ==================== CENTERED ADD PRICE OVERRIDE MODAL (WP-07.2 / REF 2) ==================== -->
+      <div *ngIf="showAddPriceOverrideModal"
+           class="modal-backdrop-custom d-flex align-items-center justify-content-center"
+           (click)="closeAddPriceOverrideModal()"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="addPriceOverrideModalTitle">
+
+        <div class="modal-dialog-custom bg-white rounded-4 shadow-lg p-4 p-md-5"
+             style="max-width: 640px; width: 92%; max-height: 90vh; overflow-y: auto;"
+             (click)="$event.stopPropagation()">
+
+          <!-- Modal Header -->
+          <div class="d-flex align-items-start justify-content-between pb-3 mb-4 border-bottom border-light-subtle">
+            <div class="d-flex align-items-center gap-3">
+              <div class="metric-icon-box bg-cyan-light text-cyan rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px; background-color: #ecfeff; color: #0d9488;">
+                <i class="fa-solid fa-tag fs-4"></i>
+              </div>
+              <div>
+                <h5 id="addPriceOverrideModalTitle" class="fw-bold text-dark mb-1">Add Price Override</h5>
+                <p class="text-muted small mb-0">Set a date-specific price for the selected room type.</p>
+              </div>
+            </div>
+            <button type="button" class="btn-close" (click)="closeAddPriceOverrideModal()" aria-label="Close"></button>
+          </div>
+
+          <!-- Error Message Banner -->
+          <div *ngIf="overrideFormError" class="alert alert-danger d-flex align-items-center justify-content-between p-3 rounded-3 small mb-4 border-0" style="background-color: #fef2f2; color: #991b1b;">
+            <div class="d-flex align-items-center gap-2">
+              <i class="fa-solid fa-circle-exclamation fs-5 flex-shrink-0"></i>
+              <span>{{ overrideFormError }}</span>
+            </div>
+            <button type="button" class="btn-close" (click)="overrideFormError = ''"></button>
+          </div>
+
+          <!-- Room Info Card -->
+          <div class="pricing-modal-room-card rounded-3 p-3 mb-4 d-flex align-items-center gap-3" style="background-color: #f8fafc; border: 1px solid #e2e8f0;">
+            <div class="rounded-3 overflow-hidden border bg-light flex-shrink-0" style="width: 90px; height: 64px;">
+              <img [src]="getPricingRoomImage()"
+                   [alt]="selectedPricingRoom?.roomTypeName"
+                   class="w-100 h-100 object-fit-cover"
+                   (error)="$any($event.target).src = 'https://images.unsplash.com/photo-1590490360182-c33d57733427'" />
+            </div>
+            <div class="flex-grow-1 text-truncate">
+              <h6 class="fw-bold text-dark mb-1 text-truncate" style="font-size: 0.95rem;">{{ selectedPricingRoom?.roomTypeName || 'Room Category' }}</h6>
+              <div class="d-flex flex-column gap-1" style="font-size: 0.8rem; color: #475569;">
+                <div class="d-flex align-items-center gap-1.5">
+                  <i class="fa-solid fa-bed text-muted me-1"></i>
+                  <span>Total Rooms: <strong style="color: #0f172a; font-weight: 600;">{{ selectedPricingRoom?.totalRooms || 0 }}</strong></span>
+                </div>
+                <div class="d-flex align-items-center gap-1.5">
+                  <i class="bi bi-info-circle text-muted me-1"></i>
+                  <span>Base Price: <strong style="color: #0f172a; font-weight: 600;">{{ formatCurrency(selectedPricingRoom?.pricePerNight) }} / night</strong></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Override Type Selection -->
+          <div class="mb-4">
+            <label class="form-label small fw-bold text-dark mb-2">Override Type</label>
+            <div class="row g-3">
+
+              <!-- Single Date Card -->
+              <div class="col-12 col-sm-6">
+                <div class="pricing-override-type-card rounded-3 p-3 border cursor-pointer d-flex align-items-center gap-3"
+                     [class.active]="overrideType === 'single'"
+                     (click)="setOverrideType('single')">
+                  <div class="pricing-radio-dot" [class.checked]="overrideType === 'single'">
+                    <div class="pricing-radio-inner"></div>
+                  </div>
+                  <i class="bi bi-calendar3 fs-5 text-secondary"></i>
+                  <div>
+                    <div class="fw-bold text-dark" style="font-size: 0.9rem;">Single Date</div>
+                    <div class="text-secondary small" style="font-size: 0.78rem;">Set a price for a specific date</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Date Range Card -->
+              <div class="col-12 col-sm-6">
+                <div class="pricing-override-type-card rounded-3 p-3 border cursor-pointer d-flex align-items-center gap-3"
+                     [class.active]="overrideType === 'range'"
+                     (click)="setOverrideType('range')">
+                  <div class="pricing-radio-dot" [class.checked]="overrideType === 'range'">
+                    <div class="pricing-radio-inner"></div>
+                  </div>
+                  <i class="bi bi-calendar-range fs-5 text-secondary"></i>
+                  <div>
+                    <div class="fw-bold text-dark" style="font-size: 0.9rem;">Date Range</div>
+                    <div class="text-secondary small" style="font-size: 0.78rem;">Set a price for multiple consecutive dates</div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Dynamic Form Inputs -->
+          <div *ngIf="overrideType === 'single'" class="row g-3 mb-4">
+            <div class="col-12 col-sm-6">
+              <label class="form-label small fw-bold text-dark mb-1">Override Date <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <input type="date" class="form-control rounded-3" [(ngModel)]="singleOverrideDate" />
+              </div>
+            </div>
+            <div class="col-12 col-sm-6">
+              <label class="form-label small fw-bold text-dark mb-1">Override Price (per night) <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text bg-white border-end-0 fw-semibold text-secondary">₹</span>
+                <input type="number" min="1" step="0.01" class="form-control border-start-0 rounded-end-3" placeholder="4,800" [(ngModel)]="singleOverridePrice" />
+              </div>
+            </div>
+          </div>
+
+          <div *ngIf="overrideType === 'range'" class="row g-3 mb-4">
+            <div class="col-12 col-sm-4">
+              <label class="form-label small fw-bold text-dark mb-1">Start Date <span class="text-danger">*</span></label>
+              <input type="date" class="form-control rounded-3" [(ngModel)]="rangeStartDate" />
+            </div>
+            <div class="col-12 col-sm-4">
+              <label class="form-label small fw-bold text-dark mb-1">End Date <span class="text-danger">*</span></label>
+              <input type="date" class="form-control rounded-3" [(ngModel)]="rangeEndDate" />
+            </div>
+            <div class="col-12 col-sm-4">
+              <label class="form-label small fw-bold text-dark mb-1">Override Price (per night) <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text bg-white border-end-0 fw-semibold text-secondary">₹</span>
+                <input type="number" min="1" step="0.01" class="form-control border-start-0 rounded-end-3" placeholder="4,800" [(ngModel)]="rangeOverridePrice" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Price Preview Box -->
+          <div class="pricing-preview-box rounded-3 p-3 mb-4 d-flex align-items-start gap-2.5" style="background-color: #ecfeff; border: 1px solid #cffafe;">
+            <i class="bi bi-info-circle text-cyan mt-0.5" style="color: #0891b2; font-size: 1.05rem;"></i>
+            <div>
+              <div class="fw-bold mb-1" style="color: #0e7490; font-size: 0.88rem;">Price Preview</div>
+              <div class="small" style="color: #155e75; font-size: 0.82rem;">
+                {{ getPricePreviewText() }}
+              </div>
+            </div>
+          </div>
+
+          <!-- Modal Action Buttons -->
+          <div class="d-flex align-items-center justify-content-end gap-3 pt-2">
+            <button type="button" class="btn btn-light rounded-pill px-4 fw-medium border" (click)="closeAddPriceOverrideModal()">
+              Cancel
+            </button>
+            <button type="button"
+                    class="btn btn-teal text-white rounded-pill px-4 fw-semibold d-inline-flex align-items-center gap-2"
+                    style="background-color: #0d9488; border-color: #0d9488;"
+                    [disabled]="isSubmittingOverride"
+                    (click)="submitAddPriceOverride()">
+              <span *ngIf="isSubmittingOverride" class="spinner-border spinner-border-sm"></span>
+              <span>Add Override</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ==================== REMOVE OVERRIDE CONFIRMATION MODAL ==================== -->
+      <div *ngIf="showRemoveOverrideModal"
+           class="modal-backdrop-custom d-flex align-items-center justify-content-center"
+           (click)="closeRemoveOverrideModal()"
+           role="dialog"
+           aria-modal="true">
+
+        <div class="modal-dialog-custom bg-white rounded-4 shadow-lg p-4 p-md-5"
+             style="max-width: 520px; width: 92%;"
+             (click)="$event.stopPropagation()">
+
+          <div class="d-flex align-items-start justify-content-between pb-3 mb-3 border-bottom border-light-subtle">
+            <div class="d-flex align-items-center gap-3">
+              <div class="metric-icon-box bg-red-light text-danger rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px; background-color: #fef2f2; color: #dc2626;">
+                <i class="fa-solid fa-triangle-exclamation fs-4"></i>
+              </div>
+              <div>
+                <h5 class="fw-bold text-dark mb-1">Remove Price Override?</h5>
+                <p class="text-muted small mb-0">Restore base price for this date.</p>
+              </div>
+            </div>
+            <button type="button" class="btn-close" (click)="closeRemoveOverrideModal()" aria-label="Close"></button>
+          </div>
+
+          <div *ngIf="removeOverrideError" class="alert alert-danger p-2.5 rounded-3 small mb-3">
+            {{ removeOverrideError }}
+          </div>
+
+          <p class="text-secondary small mb-4" style="line-height: 1.5; font-size: 0.9rem;">
+            Are you sure you want to remove the price override for <strong>{{ formatPricingDateLong(selectedPricingDateStr) }}</strong>? The effective nightly price will revert to the standard base price of <strong>{{ formatCurrency(selectedPricingRoom?.pricePerNight) }}</strong>.
+          </p>
+
+          <div class="d-flex align-items-center justify-content-end gap-3">
+            <button type="button" class="btn btn-light rounded-pill px-4 fw-medium border" (click)="closeRemoveOverrideModal()">
+              Cancel
+            </button>
+            <button type="button"
+                    class="btn btn-danger text-white rounded-pill px-4 fw-semibold d-inline-flex align-items-center gap-2"
+                    [disabled]="isRemovingOverride"
+                    (click)="confirmRemoveOverride()">
+              <span *ngIf="isRemovingOverride" class="spinner-border spinner-border-sm"></span>
+              <span>Remove Override</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+<!-- ==================== MODAL 1: CREATE ROOM BLOCK OVERLAY (WP-07.3 / REF 2) ==================== -->
       <div *ngIf="showCreateBlockModal"
            class="modal-backdrop-custom d-flex align-items-center justify-content-center"
            (click)="closeCreateBlockModal()"

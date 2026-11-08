@@ -1,5 +1,6 @@
 package com.traveleasy.hotel.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 import java.time.LocalDate;
@@ -13,5 +14,17 @@ public class PriceCalendarEntryDto {
     private Double basePrice;
     private Double overridePrice;
     private Double effectivePrice;
+
+    @JsonProperty("isOverride")
     private boolean isOverride;
+
+    @JsonProperty("isOverride")
+    public boolean isOverride() {
+        return isOverride;
+    }
+
+    @JsonProperty("isOverride")
+    public void setOverride(boolean isOverride) {
+        this.isOverride = isOverride;
+    }
 }

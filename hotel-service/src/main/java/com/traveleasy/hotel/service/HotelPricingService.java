@@ -77,9 +77,12 @@ public class HotelPricingService {
         if (dto.getOverrideDate() == null) {
             throw new DomainValidationException("Override date is mandatory");
         }
-        if (dto.getPricePerNight() == null || dto.getPricePerNight() <= 0) {
+        if (dto.getPricePerNight() == null || dto.getPricePerNight() <= 0
+                || Double.isNaN(dto.getPricePerNight()) || Double.isInfinite(dto.getPricePerNight())) {
             throw new DomainValidationException("Price per night must be positive and greater than zero");
         }
+
+        double roundedPrice = Math.round(dto.getPricePerNight() * 100.0) / 100.0;
 
         RoomPriceOverride override = priceOverrideRepository
                 .findByRoomIdAndOverrideDate(roomId, dto.getOverrideDate())
@@ -89,11 +92,11 @@ public class HotelPricingService {
                         .overrideDate(dto.getOverrideDate())
                         .build());
 
-        override.setPricePerNight(dto.getPricePerNight());
+        override.setPricePerNight(roundedPrice);
         RoomPriceOverride saved = priceOverrideRepository.save(override);
 
         log.info("Set price override for roomId {} on {} to {} by user {}",
-                roomId, dto.getOverrideDate(), dto.getPricePerNight(), principal != null ? principal.userId() : "system");
+                roomId, dto.getOverrideDate(), roundedPrice, principal != null ? principal.userId() : "system");
 
         return PriceCalendarEntryDto.builder()
                 .date(saved.getOverrideDate())
@@ -114,9 +117,12 @@ public class HotelPricingService {
         if (dto.getStartDate().isAfter(dto.getEndDate())) {
             throw new DomainValidationException("Start date must not be after end date");
         }
-        if (dto.getPricePerNight() == null || dto.getPricePerNight() <= 0) {
+        if (dto.getPricePerNight() == null || dto.getPricePerNight() <= 0
+                || Double.isNaN(dto.getPricePerNight()) || Double.isInfinite(dto.getPricePerNight())) {
             throw new DomainValidationException("Price per night must be positive and greater than zero");
         }
+
+        double roundedPrice = Math.round(dto.getPricePerNight() * 100.0) / 100.0;
 
         List<PriceCalendarEntryDto> results = new ArrayList<>();
         LocalDate cur = dto.getStartDate();
@@ -129,7 +135,7 @@ public class HotelPricingService {
                             .overrideDate(cur)
                             .build());
 
-            override.setPricePerNight(dto.getPricePerNight());
+            override.setPricePerNight(roundedPrice);
             RoomPriceOverride saved = priceOverrideRepository.save(override);
             results.add(PriceCalendarEntryDto.builder()
                     .date(saved.getOverrideDate())
@@ -142,7 +148,7 @@ public class HotelPricingService {
         }
 
         log.info("Set range price overrides for roomId {} from {} to {} to {} by user {}",
-                roomId, dto.getStartDate(), dto.getEndDate(), dto.getPricePerNight(), principal != null ? principal.userId() : "system");
+                roomId, dto.getStartDate(), dto.getEndDate(), roundedPrice, principal != null ? principal.userId() : "system");
 
         return results;
     }
@@ -188,9 +194,9 @@ public class HotelPricingService {
         List<PriceCalendarEntryDto> calendar = new ArrayList<>();
         LocalDate cur = startDate;
         while (!cur.isAfter(endDate)) {
-            Double overridePrice = overrideMap.get(cur);
-            boolean isOverride = overridePrice != null;
-            double effectivePrice = isOverride ? overridePrice : (roomType.getPricePerNight() != null ? roomType.getPricePerNight() : 0.0);
+            boolean isOverride = overrideMap.containsKey(cur);
+            Double overridePrice = isOverride ? overrideMap.get(cur) : null;
+            double effectivePrice = (isOverride && overridePrice != null) ? overridePrice : (roomType.getPricePerNight() != null ? roomType.getPricePerNight() : 0.0);
 
             calendar.add(PriceCalendarEntryDto.builder()
                     .date(cur)
@@ -219,10 +225,6 @@ public class HotelPricingService {
             throw new DomainValidationException("Base price must be a valid positive number greater than zero");
         }
 
-        if ("ARCHIVED".equalsIgnoreCase(roomType.getStatus())) {
-            throw new DomainValidationException("Cannot update base price for an archived room category");
-        }
-
         double roundedPrice = Math.round(dto.getBasePrice() * 100.0) / 100.0;
         roomType.setPricePerNight(roundedPrice);
         RoomType saved = roomTypeRepository.save(roomType);
@@ -236,6 +238,10 @@ public class HotelPricingService {
     private RoomType validateOwnershipAndGetRoom(Long roomId, CallerPrincipal principal) {
         RoomType roomType = roomTypeRepository.findById(roomId)
                 .orElseThrow(() -> new ResourceNotFoundException("Room category not found with ID: " + roomId));
+
+        if ("ARCHIVED".equalsIgnoreCase(roomType.getStatus())) {
+            throw new DomainValidationException("Operational pricing management is not permitted for an archived room category");
+        }
 
         if (principal == null || principal.isAdmin()) {
             return roomType;
