@@ -870,4 +870,201 @@ public class RoomTypeCreationTest {
         RoomType dbRoom = roomTypeRepository.findById(room.getId()).orElseThrow();
         assertEquals("Manager 1 Room", dbRoom.getRoomTypeName(), "Room name must not be altered");
     }
+
+    // =========================================================================
+    // WP-06 RESTORE ARCHIVED ROOM TYPE TESTS
+    // =========================================================================
+
+    @Test
+    @DisplayName("WP-06 Restore 1: Successful restoration of archived room type preserves ID, attributes, and sets status ACTIVE")
+    public void testRestoreRoomType_Success() {
+        RoomType room = roomTypeRepository.save(RoomType.builder()
+                .hotelId(testHotel.getId())
+                .roomTypeName("Penthouse Suite")
+                .maxOccupancy(4)
+                .pricePerNight(15000.0)
+                .totalRooms(2)
+                .availableRooms(0)
+                .amenities("Private Pool, Butler Service")
+                .imageUrl("http://example.com/penthouse.jpg")
+                .status("ARCHIVED")
+                .build());
+
+        Long originalId = room.getId();
+
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders(managerToken));
+        ResponseEntity<Map> response = restTemplate.exchange(
+                getBaseUrl() + "/rooms/" + originalId + "/restore",
+                HttpMethod.PATCH,
+                entity,
+                Map.class
+        );
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("ACTIVE", response.getBody().get("status"));
+        assertEquals("Penthouse Suite", response.getBody().get("roomTypeName"));
+
+        // Verify entity preservation in DB (same ID, all attributes intact, status ACTIVE, availableRooms = totalRooms)
+        RoomType dbRoom = roomTypeRepository.findById(originalId).orElseThrow();
+        assertEquals(originalId, dbRoom.getId());
+        assertEquals(testHotel.getId(), dbRoom.getHotelId());
+        assertEquals("Penthouse Suite", dbRoom.getRoomTypeName());
+        assertEquals(4, dbRoom.getMaxOccupancy());
+        assertEquals(15000.0, dbRoom.getPricePerNight());
+        assertEquals(2, dbRoom.getTotalRooms());
+        assertEquals(2, dbRoom.getAvailableRooms());
+        assertEquals("Private Pool, Butler Service", dbRoom.getAmenities());
+        assertEquals("http://example.com/penthouse.jpg", dbRoom.getImageUrl());
+        assertEquals("ACTIVE", dbRoom.getStatus());
+    }
+
+    @Test
+    @DisplayName("WP-06 Restore 2: Attempt to restore an already active room type is rejected with 400")
+    public void testRestoreRoomType_AlreadyActive_Rejected() {
+        RoomType room = roomTypeRepository.save(RoomType.builder()
+                .hotelId(testHotel.getId())
+                .roomTypeName("Already Active Room")
+                .maxOccupancy(2)
+                .totalRooms(5)
+                .availableRooms(5)
+                .status("ACTIVE")
+                .build());
+
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders(managerToken));
+        ResponseEntity<Map> response = restTemplate.exchange(
+                getBaseUrl() + "/rooms/" + room.getId() + "/restore",
+                HttpMethod.PATCH,
+                entity,
+                Map.class
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertTrue(response.getBody().get("message").toString().contains("not archived"));
+    }
+
+    @Test
+    @DisplayName("WP-06 Restore 3: Nonexistent room type returns 404 Not Found")
+    public void testRestoreRoomType_Nonexistent_NotFound() {
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders(managerToken));
+        ResponseEntity<Map> response = restTemplate.exchange(
+                getBaseUrl() + "/rooms/999999/restore",
+                HttpMethod.PATCH,
+                entity,
+                Map.class
+        );
+
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("WP-06 Restore 4: Manager attempting to restore another manager's property room is rejected with 403")
+    public void testRestoreRoomType_NonOwner_Forbidden() {
+        RoomType room = roomTypeRepository.save(RoomType.builder()
+                .hotelId(testHotel.getId())
+                .roomTypeName("Manager 1 Archived Room")
+                .maxOccupancy(2)
+                .totalRooms(3)
+                .availableRooms(0)
+                .status("ARCHIVED")
+                .build());
+
+        // Manager 2 attempts to restore Manager 1's archived room
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders(manager2Token));
+        ResponseEntity<Map> response = restTemplate.exchange(
+                getBaseUrl() + "/rooms/" + room.getId() + "/restore",
+                HttpMethod.PATCH,
+                entity,
+                Map.class
+        );
+
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
+        assertEquals("ARCHIVED", roomTypeRepository.findById(room.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    @DisplayName("WP-06 Restore 5: Unauthorized request without valid JWT token is rejected with 401")
+    public void testRestoreRoomType_Unauthorized_Rejected() {
+        RoomType room = roomTypeRepository.save(RoomType.builder()
+                .hotelId(testHotel.getId())
+                .roomTypeName("Unauth Restored Room")
+                .maxOccupancy(2)
+                .totalRooms(3)
+                .availableRooms(0)
+                .status("ARCHIVED")
+                .build());
+
+        // Call without Authorization header
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders(null));
+        ResponseEntity<Map> response = restTemplate.exchange(
+                getBaseUrl() + "/rooms/" + room.getId() + "/restore",
+                HttpMethod.PATCH,
+                entity,
+                Map.class
+        );
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+    }
+
+    @Test
+    @DisplayName("WP-06 Restore 6: Admin can restore an archived room type across any property")
+    public void testRestoreRoomType_Admin_Success() {
+        String adminToken = createTestToken(9999L, "ROLE_ADMIN", "admin@traveleasy.com", "System Admin", 3600000);
+
+        RoomType room = roomTypeRepository.save(RoomType.builder()
+                .hotelId(testHotel.getId())
+                .roomTypeName("Admin Restored Room")
+                .maxOccupancy(2)
+                .totalRooms(4)
+                .availableRooms(0)
+                .status("ARCHIVED")
+                .build());
+
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders(adminToken));
+        ResponseEntity<Map> response = restTemplate.exchange(
+                getBaseUrl() + "/rooms/" + room.getId() + "/restore",
+                HttpMethod.PATCH,
+                entity,
+                Map.class
+        );
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("ACTIVE", response.getBody().get("status"));
+        assertEquals("ACTIVE", roomTypeRepository.findById(room.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    @DisplayName("WP-06 Restore 7: Reject restore if another active room type in property already has the same name")
+    public void testRestoreRoomType_DuplicateActiveNameConflict_Rejected() {
+        // Create an existing ACTIVE room named "Royal Suite"
+        roomTypeRepository.save(RoomType.builder()
+                .hotelId(testHotel.getId())
+                .roomTypeName("Royal Suite")
+                .maxOccupancy(4)
+                .totalRooms(2)
+                .availableRooms(2)
+                .status("ACTIVE")
+                .build());
+
+        // Create an ARCHIVED room also named "Royal Suite"
+        RoomType archivedRoom = roomTypeRepository.save(RoomType.builder()
+                .hotelId(testHotel.getId())
+                .roomTypeName("Royal Suite")
+                .maxOccupancy(3)
+                .totalRooms(2)
+                .availableRooms(0)
+                .status("ARCHIVED")
+                .build());
+
+        HttpEntity<Void> entity = new HttpEntity<>(authHeaders(managerToken));
+        ResponseEntity<Map> response = restTemplate.exchange(
+                getBaseUrl() + "/rooms/" + archivedRoom.getId() + "/restore",
+                HttpMethod.PATCH,
+                entity,
+                Map.class
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertTrue(response.getBody().get("message").toString().contains("already exists"));
+        assertEquals("ARCHIVED", roomTypeRepository.findById(archivedRoom.getId()).orElseThrow().getStatus());
+    }
 }

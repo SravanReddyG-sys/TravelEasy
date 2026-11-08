@@ -53,6 +53,10 @@ public class RoomBlockService {
             throw new DomainValidationException("Room category " + roomId + " does not belong to hotel property " + hotelId);
         }
 
+        if ("ARCHIVED".equalsIgnoreCase(roomType.getStatus())) {
+            throw new DomainValidationException("Cannot create a room block for an archived room category");
+        }
+
         // 1. Mandatory Reason validation (BD-10)
         if (dto.getReason() == null || dto.getReason().trim().isEmpty()) {
             throw new DomainValidationException("A blocking reason is mandatory (BD-10)");
@@ -61,6 +65,12 @@ public class RoomBlockService {
         if (!ALLOWED_REASONS.contains(normalizedReason)) {
             throw new DomainValidationException("Invalid blocking reason. Allowed values: MAINTENANCE, RENOVATION, OPERATIONAL, OTHER");
         }
+
+        // Notes length validation (max 250 characters)
+        if (dto.getNotes() != null && dto.getNotes().trim().length() > 250) {
+            throw new DomainValidationException("Notes cannot exceed 250 characters");
+        }
+        String cleanNotes = (dto.getNotes() != null && !dto.getNotes().trim().isEmpty()) ? dto.getNotes().trim() : null;
 
         // 2. Date range validation
         if (dto.getStartDate() == null || dto.getEndDate() == null) {
@@ -127,7 +137,7 @@ public class RoomBlockService {
                 .startDate(dto.getStartDate())
                 .endDate(dto.getEndDate())
                 .reason(normalizedReason)
-                .notes(dto.getNotes())
+                .notes(cleanNotes)
                 .status("ACTIVE")
                 .build();
 
@@ -138,7 +148,7 @@ public class RoomBlockService {
                 saved.getId(), roomId, count, dto.getStartDate(), dto.getEndDate(), normalizedReason,
                 principal != null ? principal.userId() : "system");
 
-        return toResponseDto(saved, roomType.getRoomTypeName());
+        return toResponseDto(saved, roomType);
     }
 
     @Transactional
@@ -149,11 +159,9 @@ public class RoomBlockService {
         validateOwnershipAndGetHotel(block.getHotelId(), principal);
 
         RoomType roomType = roomTypeRepository.findById(block.getRoomId()).orElse(null);
-        String roomTypeName = roomType != null ? roomType.getRoomTypeName() : "Room";
 
         if ("RELEASED".equalsIgnoreCase(block.getStatus())) {
-            log.info("Block ID {} is already RELEASED. Returning existing block.", blockId);
-            return toResponseDto(block, roomTypeName);
+            throw new DomainValidationException("Room block ID " + blockId + " is already in RELEASED status");
         }
 
         // Restore blocked rooms across all nights
@@ -180,7 +188,7 @@ public class RoomBlockService {
         log.info("Released room block ID {} for roomId {} by user {}",
                 blockId, block.getRoomId(), principal != null ? principal.userId() : "system");
 
-        return toResponseDto(saved, roomTypeName);
+        return toResponseDto(saved, roomType);
     }
 
     public List<RoomBlockResponseDto> getBlocksByHotel(Long hotelId, CallerPrincipal principal) {
@@ -188,12 +196,12 @@ public class RoomBlockService {
 
         List<RoomInventoryBlock> blocks = blockRepository.findByHotelIdOrderByCreatedAtDesc(hotelId);
         List<RoomBlockResponseDto> result = new ArrayList<>();
-        Map<Long, String> roomNames = new HashMap<>();
+        Map<Long, RoomType> roomTypeMap = new HashMap<>();
 
         for (RoomInventoryBlock b : blocks) {
-            String name = roomNames.computeIfAbsent(b.getRoomId(), id ->
-                    roomTypeRepository.findById(id).map(RoomType::getRoomTypeName).orElse("Room " + id));
-            result.add(toResponseDto(b, name));
+            RoomType rt = roomTypeMap.computeIfAbsent(b.getRoomId(), id ->
+                    roomTypeRepository.findById(id).orElse(null));
+            result.add(toResponseDto(b, rt));
         }
         return result;
     }
@@ -206,9 +214,17 @@ public class RoomBlockService {
         List<RoomInventoryBlock> blocks = blockRepository.findByRoomIdOrderByCreatedAtDesc(roomId);
         List<RoomBlockResponseDto> result = new ArrayList<>();
         for (RoomInventoryBlock b : blocks) {
-            result.add(toResponseDto(b, roomType.getRoomTypeName()));
+            result.add(toResponseDto(b, roomType));
         }
         return result;
+    }
+
+    public RoomBlockResponseDto getBlockById(Long blockId, CallerPrincipal principal) {
+        RoomInventoryBlock block = blockRepository.findById(blockId)
+                .orElseThrow(() -> new ResourceNotFoundException("Room block record not found with ID: " + blockId));
+        validateOwnershipAndGetHotel(block.getHotelId(), principal);
+        RoomType roomType = roomTypeRepository.findById(block.getRoomId()).orElse(null);
+        return toResponseDto(block, roomType);
     }
 
     private HotelProperty validateOwnershipAndGetHotel(Long hotelId, CallerPrincipal principal) {
@@ -229,7 +245,12 @@ public class RoomBlockService {
         throw new OwnershipAccessDeniedException("Access denied: Hotel Manager or Admin role required");
     }
 
-    private RoomBlockResponseDto toResponseDto(RoomInventoryBlock b, String roomTypeName) {
+    private RoomBlockResponseDto toResponseDto(RoomInventoryBlock b, RoomType roomType) {
+        String roomTypeName = roomType != null ? roomType.getRoomTypeName() : ("Room #" + b.getRoomId());
+        String imageUrl = roomType != null ? roomType.getImageUrl() : null;
+        Integer totalRooms = roomType != null ? roomType.getTotalRooms() : null;
+        Integer maxOccupancy = roomType != null ? roomType.getMaxOccupancy() : null;
+
         return RoomBlockResponseDto.builder()
                 .id(b.getId())
                 .hotelId(b.getHotelId())
@@ -244,6 +265,10 @@ public class RoomBlockService {
                 .status(b.getStatus())
                 .createdAt(b.getCreatedAt())
                 .releasedAt(b.getReleasedAt())
+                .imageUrl(imageUrl)
+                .totalRooms(totalRooms)
+                .maxOccupancy(maxOccupancy)
+                .blockCode(String.format("BLK-%04d", b.getId()))
                 .build();
     }
 }

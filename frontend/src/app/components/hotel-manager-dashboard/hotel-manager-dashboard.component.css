@@ -2216,3 +2216,77 @@
   color: #ffffff;
 }
 
+/* WP-07.2: Base Price Management Styles */
+.inventory-subnav-bar .nav-tab-item {
+  color: #64748b;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  padding-bottom: 8px;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.inventory-subnav-bar .nav-tab-item:hover {
+  color: #0d9488;
+}
+
+.inventory-subnav-bar .nav-tab-item.active-tab {
+  color: #0d9488 !important;
+  border-bottom: 3px solid #0d9488 !important;
+  font-weight: 700;
+}
+
+.border-cyan {
+  border-color: #0d9488 !important;
+}
+
+.room-thumb-preview {
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.room-thumb-preview:hover {
+  transform: translateY(-1px);
+  border-color: #0d9488;
+}
+
+
+/* ==================== WP-07.3: ROOM BLOCKS MANAGEMENT STYLES ==================== */
+.block-action-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+.block-action-btn:hover {
+  background-color: #f1f5f9;
+  color: #0d9488 !important;
+}
+
+.block-menu-popover {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+  animation: fadeInMenu 0.15s ease-out;
+}
+
+@keyframes fadeInMenu {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.block-menu-popover button:hover {
+  background-color: #f0fdfa !important;
+  color: #0d9488 !important;
+}
+
+.block-menu-popover button:hover i {
+  color: #0d9488 !important;
+}

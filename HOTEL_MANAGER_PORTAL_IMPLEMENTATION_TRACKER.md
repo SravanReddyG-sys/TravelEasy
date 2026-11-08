@@ -22,7 +22,8 @@
 | **WP-05-REG-3** | **Hotel Property Registration Wizard (Step 3 — Property Information)** | Approved UI (`media_1794031767598_f92c3ff7.jpg`), 5 collapsible accordion subsections (Property Contact Details, Business Registration Details, GST Details, Property Manager Details, Operating Hours), conditional GSTIN regex & GST fields, conditional custom business registration, conditional limited reception hours, MySQL `hotel_properties` extension (22 columns), single-row draft persistence (`registrationStep = 3`), manager isolation (403/401), bidirectional navigation | **COMPLETED & VERIFIED** | **PASS (16/16 Dedicated Step 3 Tests, 128/128 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-05_PROPERTY_REGISTRATION_STEP3_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-05_PROPERTY_REGISTRATION_STEP3_IMPLEMENTATION_REPORT.md) |
 | **WP-05-REG-4** | **Hotel Property Registration Wizard (Step 4 — Facilities & Policies)** | Approved UI (`media_1794041582166_418ee857.jpg`), 3 collapsible accordion subsections (Property Facilities & Amenities, Guest Policies, Additional Property Rules), 7 predefined categories with 18 standard amenities, dynamic custom amenity creation with duplicate detection, 4 mandatory guest policies, multi-select identification with conditional custom ID, 1000-char additional rules counter, MySQL `hotel_properties` extension (9 columns), legacy `amenities` synchronization, single-row draft persistence (`registrationStep = 4`), manager isolation (403/401), bidirectional navigation | **COMPLETED & VERIFIED** | **PASS (13/13 Dedicated Step 4 Tests, 141/141 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-05_PROPERTY_REGISTRATION_STEP4_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-05_PROPERTY_REGISTRATION_STEP4_IMPLEMENTATION_REPORT.md) |
 | **WP-05-REG-5** | **Hotel Property Registration Wizard (Step 5 — Review & Submit)** | Approved UI (`media_1794045327682_35fea960.jpg`), 4 independent multi-open expandable review sections (Basic Details, Location & Address, Property Information, Facilities & Policies), individual section Edit buttons with bidirectional navigation, accuracy confirmation checkbox, Partner Terms & Conditions modal, final registration & BD-03 activation, duplicate-submission prevention, draft status cleanup, manager ownership checks | **COMPLETED & VERIFIED** | **PASS (11/11 Dedicated Step 5 Tests, 152/152 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-05_PROPERTY_REGISTRATION_STEP5_IMPLEMENTATION_REPORT.md`](file:///C:/Users/reddy/.gemini/antigravity/brain/eea23d8b-ad0e-4f6f-93fd-d2d485cfbd8d/WP-05_PROPERTY_REGISTRATION_STEP5_IMPLEMENTATION_REPORT.md) |
-| **WP-06** | **Room Management (Listing, Add, Details Modal & Edit Room Type)** | Approved UIs (`media_1794059956325_d111e7c5.jpg`, `media_1794069851155_a0cea92a.jpg`, `media_1794073143182_fe92d404.jpg`, `media_1794075021966_99d66a94.jpg`). Full-page Add Room Type, card-based Room Types listing (filter, sort, search, metrics, soft archive), centered Room Type Details modal overlay, and full-page Edit Room Type form (context summary bar, inline steppers, amenity chips with checkmark badges, image replace/remove dropzone, bidirectional structural occupancy check, date-wise capacity validation, pricing preservation, non-owner 403 enforcement). | **COMPLETED & VERIFIED** | **PASS (23/23 Dedicated WP-06 Tests, 175/175 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-06_EDIT_ROOM_TYPE_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-06_EDIT_ROOM_TYPE_IMPLEMENTATION_REPORT.md) |
+| **WP-06** | **Room Management (Listing, Add, Details Modal, Edit & Restore Room Type)** | Approved UIs (`media_1794059956325_d111e7c5.jpg`, `media_1794069851155_a0cea92a.jpg`, `media_1794073143182_fe92d404.jpg`, `media_1794075021966_99d66a94.jpg`). Full-page Add Room Type, card-based Room Types listing (filter, sort, search, metrics, soft archive), centered Room Type Details modal overlay, full-page Edit Room Type form, and Restore Archived Room Type workflow (`PATCH /api/hotels/rooms/{roomId}/restore`, confirmation modal, duplicate name check, ownership verification, pricing/inventory boundaries preserved). | **COMPLETED & VERIFIED** | **PASS (30/30 Dedicated WP-06 Tests, 182/182 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-06_RESTORE_ARCHIVED_ROOM_TYPE_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-06_RESTORE_ARCHIVED_ROOM_TYPE_IMPLEMENTATION_REPORT.md) |
+| **WP-07.2** | **Base Price Management (Listing & Centered Edit Modal)** | Approved UIs (`media_1794121505130_243869ee.jpg`, `media_1794121833441_393b4714.jpg`). Inventory & Pricing sub-navigation (4 tabs), Base Price Management listing page with 3 summary cards (Active Room Types, Highest Base Price, Lowest Base Price), real-time search and 4-way sorting, room-type pricing table with edit actions, centered Edit Base Price overlay modal (matching Room Type Details styling, 2-column layout, image preview + thumbnails, input validation, informational note panel), backend API (`PUT /api/hotels/rooms/{roomId}/base-price`), ownership & role authorization, active status enforcement, date-specific override preservation, historical booking immutability. | **COMPLETED & VERIFIED** | **PASS (13/13 Dedicated WP-07.2 Tests, 195/195 Suite Passed, Angular Build Clean 0 Errors)** | [`WP-07.2_BASE_PRICE_MANAGEMENT_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-07.2_BASE_PRICE_MANAGEMENT_IMPLEMENTATION_REPORT.md) |
 
 ---
 
@@ -464,7 +465,7 @@
 
 ---
 
-## 12. WP-06: Room Management — Add Room Type & Room Types Listing Page Redesign
+## 12. WP-06: Room Management — Add, Listing, Details Modal, Edit & Restore Room Type
 
 - **Status:** **COMPLETED & VERIFIED**
 - **Date Completed:** November 7, 2026
@@ -473,6 +474,7 @@
   - Room Count Naming Convention: `media_1794062276952_70dab92a.png`
   - Room Types Listing Page: `media_1794069851155_a0cea92a.jpg`
   - Room Type Details Centered Modal: `media_1794073143182_fe92d404.jpg`
+  - Edit Room Type: `media_1794075021966_99d66a94.jpg`
 - **Key Deliverables:**
   1. **Add Room Type Single-Page Form:**
      - Replaced legacy modal room creation with an integrated 2-column form.
@@ -485,7 +487,7 @@
      - Header: Title **Room Management**, subtitle, top-right `Archived Room Types` (outlined teal) and `+ Add Room Type` (solid teal).
      - 3 Metric Cards: Total Room Types (cyan bed), Active Room Types (green bed), Archived Room Types (purple box).
      - Toolbar: Real-time search by name, status filter (Active, Archived, All), 6-option sort dropdown, and Grid/List view switcher.
-     - 2-Column Responsive Grid View: Room photo thumbnail/placeholder, room type name, active/archived status pill badge, specs (`X Guests`, `Y Total Rooms`), up to 3 amenity chips preview + `+N more` badge, and action buttons (`View Details`, `Edit`, `Archive` [active only]).
+     - 2-Column Responsive Grid View: Room photo thumbnail/placeholder, room type name, active/archived status pill badge, specs (`X Guests`, `Y Total Rooms`), up to 3 amenity chips preview + `+N more` badge, and action buttons (`View Details`, `Edit`, `Archive` [active only], `Restore` [archived only]).
      - List View (Table): Compact table without pricing or availability columns.
      - Empty states: `No Room Types Configured` (with `+ Add Room Type` button) and `No Room Types Found` (with `Reset Filters` button).
      - Soft Archive Modal: Explains archiving prevents new reservations while preserving historical data and bookings.
@@ -493,19 +495,136 @@
      - Centered large modal overlay with background dimming backdrop.
      - Header: Cyan eye icon box, title `Room Type Details`, subtitle, top-right close button.
      - Two-column content layout: Left column room image (`imageUrl` with cover object-fit and fallback placeholder); Right column: Room name, status badge (`Active` in green or `Archived` in gray), Basic Information card (Room Type ID e.g. `RT-0004`, Room Type Name, Maximum Occupancy `X Guests`, Total Rooms `Y`), and Amenities card (complete list of all predefined and custom amenities rendered as rounded chips with icons).
-     - Footer actions: Neutral outlined `Close` and filled teal `Edit Room Type` (passing selected room ID to edit workflow dependency).
+     - Footer actions: Neutral outlined `Close`, filled teal `Edit Room Type` (active room types), and `Restore Room Type` (archived room types).
      - Modal lifecycle & accessibility: Escape key closes, backdrop click closes, close icon/button closes, background scrolling disabled when open, dialog semantics (`role="dialog"`).
-  4. **Strict Separation of Concerns:**
-     - **Zero Pricing in Room Management:** `pricePerNight`, base rates, and overrides strictly omitted from Room Management and isolated to Inventory & Pricing.
-     - **Zero Availability in Room Management:** `availableRooms`, daily inventory, booked/held counts, and occupancy percentages strictly omitted from Room Management.
-  5. **Database & API Integration:**
-     - Extended `room_types` table with `image_url VARCHAR(500)` and `amenities VARCHAR(1000)`.
-     - `POST /{hotelId}/rooms`: Creates room type with optional `pricePerNight` and auto-initialized daily inventory.
-     - `GET /{hotelId}/rooms`: Returns both Active and Archived room types for managers/admins; returns only Active for public/travellers.
-     - `GET /rooms/{roomId}`: Fetches individual room type details for the details modal.
-     - `DELETE /rooms/{roomId}`: Soft-archives room type (`status = "ARCHIVED"`) after validating no active allocations exist (`allocatedRooms == 0`).
+  4. **Edit Room Type Full-Page Form (`media_1794075021966_99d66a94.jpg`):**
+     - Header & context summary bar displaying Room Type Name, ID pill, status badge, Total Rooms, and Max Occupancy.
+     - Pre-populated form fields, stepper controls with +/- buttons and min boundary guards.
+     - Duplicate active name detection excluding the room being edited.
+     - Capacity contraction guard preventing total rooms from being set lower than peak future booked date-wise allocations.
+     - Room image replace/remove dropzone.
+  5. **Restore Archived Room Type Workflow:**
+     - Endpoint: PATCH / PUT / POST /api/hotels/rooms/{roomId}/restore (dual PUT/PATCH supported for reverse-proxy compatibility).
+     - Role authorization: `ROLE_HOTEL_MANAGER` and `ROLE_ADMIN`. Ownership verification for managers.
+     - Status verification: Must be currently `ARCHIVED` (returns `400 Bad Request` if already `ACTIVE`).
+     - Duplicate name check: Prevents restoration if an active category with the same name exists in the property.
+     - Data preservation: Preserves entity ID, hotelId, specifications, amenities, and image; resets scalar `availableRooms = totalRooms`.
+     - Zero disruption: Leaves date-wise inventory, pricing, and historical bookings untouched.
+     - UI: `Restore` button on archived cards/rows, `Restore Room Type` button in details modal, centered confirmation modal, and auto-dismissing success banner.
   6. **Automated Verification:**
-     - Dedicated Test Suite: [`RoomTypeCreationTest.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/test/java/com/traveleasy/hotel/RoomTypeCreationTest.java) — **14/14 tests passed (100%)**.
-     - Full Regression Suite: **166/166 tests passed (100% pass rate, 0 failures, 0 errors across 9 test classes)**.
+     - Dedicated Test Suite: [`RoomTypeCreationTest.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/test/java/com/traveleasy/hotel/RoomTypeCreationTest.java) — **30/30 tests passed (100%)** (including 7 dedicated restore tests).
+     - Full Regression Suite: **182/182 tests passed (100% pass rate, 0 failures, 0 errors across 9 test classes)**.
      - Angular Production Build: **Clean bundle generation (0 errors, 1.76 MB production bundle)**.
-- **Report Reference:** [`WP-06_ROOM_MANAGEMENT_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-06_ADD_ROOM_TYPE_IMPLEMENTATION_REPORT.md)
+- **Report Reference:** [`WP-06_RESTORE_ARCHIVED_ROOM_TYPE_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-06_RESTORE_ARCHIVED_ROOM_TYPE_IMPLEMENTATION_REPORT.md)
+
+---
+
+## 13. WP-07.2: Inventory & Pricing — Base Price Management & Centered Edit Modal
+
+- **Status:** **COMPLETED & VERIFIED**
+- **Date Completed:** November 8, 2026
+- **Authoritative Mockups:**
+  - Base Price Management Listing Page: `media_1794121505130_243869ee.jpg`
+  - Centered Edit Base Price Modal Overlay: `media_1794121833441_393b4714.jpg`
+- **Key Deliverables:**
+  1. **Inventory & Pricing Navigation & Sub-Tabs:**
+     - 4 Sub-navigation tabs: Inventory Calendar, Pricing Calendar, Base Price Management (Active with teal highlight & underline), Room Blocks.
+     - Preserved existing application shell, dashboard header, and sidebar navigation with Inventory & Pricing active.
+  2. **Base Price Management Listing Page (`media_1794121505130_243869ee.jpg`):**
+     - Page heading: **Base Price Management** with supporting subtitle description.
+     - 3 Metric Summary Cards:
+       - Active Room Types (cyan bed icon).
+       - Highest Base Price (`₹X,XXX / night`, green rupee icon).
+       - Lowest Base Price (`₹X,XXX / night`, purple rupee icon).
+     - Search & Sorting Toolbar: Real-time case-insensitive name filter, 4-option sort dropdown (Name A-Z, Name Z-A, Price Low-High, Price High-Low).
+     - Full-width Room-Type Pricing Table: Room Type (thumbnail + title + subtitle), Total Rooms (`totalRooms` physical capacity with info icon), Max Occupancy (person icon + `X Guests`), Base Price per night (`₹X,XXX` bold), Actions (outlined teal `Edit Price` button).
+     - Empty & Loading States: Empty active rooms, search query no-match with reset button, loading feedback.
+  3. **Centered Edit Base Price Modal Overlay (`media_1794121833441_393b4714.jpg`):**
+     - Centered overlay modal matching Room Type Details design language with dimmed background.
+     - Header: Cyan stack-of-coins icon, title `Edit Base Price`, subtitle, and top-right close button.
+     - Two-column layout:
+       - Left: Hero room photo + thumbnail switcher supporting multiple angles.
+       - Right: Room title, Active status badge, Basic Information card (Room Type ID, Total Rooms, Max Occupancy), Base Price input card with currency prefix `₹`, numeric validation, and Informational Note panel.
+     - Informational Note: Reminds managers that base price is default, date-specific overrides take precedence, and existing bookings are unaffected.
+     - Modal Footer: Secondary outlined Cancel button and filled teal `Update Price` button with loading spinner and duplicate-submission prevention.
+  4. **Backend Implementation (`PUT /api/hotels/rooms/{roomId}/base-price`):**
+     - Dedicated endpoint: `PUT /api/hotels/rooms/{roomId}/base-price`.
+     - Request DTO: [`BasePriceUpdateRequestDto.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/main/java/com/traveleasy/hotel/dto/BasePriceUpdateRequestDto.java) with `@NotNull` and `@DecimalMin("0.01")`.
+     - Service Method: `HotelPricingService.updateBasePrice` enforcing JWT authentication, manager/admin roles, property ownership (`403 Forbidden` if not owner), room existence (`404 Not Found`), and active status (`400 Bad Request` if archived).
+     - Monetary precision: rounds to 2 decimal places.
+  5. **Pricing Business Rules & Invariants Preserved:**
+     - Effective price resolution: `EffectivePrice(date) = Override(date) ?? BasePrice`.
+     - Date-specific overrides remain completely intact and untouched.
+     - Historical booking records (`HotelBookingAllocation`, `Booking`) preserve immutable pricing snapshots.
+  6. **Automated Verification:**
+     - Dedicated Test Suite: [`BasePriceManagementTest.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/test/java/com/traveleasy/hotel/BasePriceManagementTest.java) — **13/13 tests passed (100%)**.
+     - Full Regression Suite: **195/195 tests passed (100% pass rate, 0 failures, 0 errors across 10 test classes)**.
+     - Angular Production Build: **Clean bundle generation (0 errors, 1.84 MB bundle)**.
+- **Report Reference:** [`WP-07.2_BASE_PRICE_MANAGEMENT_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-07.2_BASE_PRICE_MANAGEMENT_IMPLEMENTATION_REPORT.md)
+
+
+---
+
+## 14. WP-07.3: Inventory & Pricing — Room Blocks Management: Complete Frontend & Backend Integration
+
+- **Status:** **COMPLETED & VERIFIED**
+- **Date Completed:** November 8, 2026
+- **Authoritative Mockups:**
+  - Reference 1 — Room Blocks Listing Page: `media_1794129439733_3e16e99c.jpg`
+  - Reference 2 — Create Room Block Centered Overlay Modal: `media_1794129166686_f8d82c99.jpg`
+  - Reference 3 — Room Block Details Centered Overlay Modal: `media_1794129376294_d9c9f6d6.jpg`
+  - Reference 4 — Release Room Block Confirmation Modal: `media_1794129405828_887ea2c6.jpg`
+- **Key Deliverables:**
+  1. **Room Blocks Listing Page (`media_1794129439733_3e16e99c.jpg`):**
+     - Section Heading: **Room Blocks** with supporting description: *"Block a number of rooms for a specific period (e.g., group booking, maintenance, or hotel use)."*
+     - Prominent Action Button: Top-right teal filled `+ Create Room Block`.
+     - 3 Metric Summary Cards:
+       - **Total Blocks** (cyan bed icon in light cyan rounded square `#ccfbf1`).
+       - **Active Blocks** (green bed icon in light green rounded square `#dcfce7`).
+       - **Released Blocks** (purple bed icon in light purple rounded square `#f3e8ff`).
+     - Search & Filtering Toolbar:
+       - Real-time case-insensitive search by Block ID (`BLK-XXXX`), reason, notes, or room type name.
+       - Room Type filter dropdown: All Room Types + active and historical room types represented in blocks.
+       - Status filter dropdown: All Statuses, Active, Released.
+       - Date Range filter popover: Filter by start and end date using strict overlap semantics (`bStart < fEnd && bEnd > fStart`).
+       - Table list toggle icon.
+     - Full-Width Table:
+       - Columns: Block ID (`BLK-0012`), Room Type (thumbnail + name), Blocked Rooms, Start Date (`Apr 10, 2026`), End Date (`Apr 15, 2026`), Reason, Status (`Active` green pill / `Released` gray pill), Actions (`...` three-dot button).
+     - Floating Action Popover Menu:
+       - Compact white floating menu over table.
+       - Active blocks: `View Details` (eye icon) and `Release Block` (rotate icon).
+       - Released blocks: `View Details` only.
+     - Pagination: `Showing 1 - 5 of 12 blocks`, Previous/Next chevrons and numbered page buttons with active teal highlight.
+  2. **Create Room Block Centered Overlay Modal (`media_1794129166686_f8d82c99.jpg`):**
+     - Centered modal on dimmed background with cyan calendar-plus icon, title, subtitle, and close `×` button.
+     - Two-column layout:
+       - Left: Hero room image and interactive thumbnail gallery; placeholder state before room selection.
+       - Right:
+         - **Room Type Selection**: Mandatory dropdown populated strictly with ACTIVE room types belonging to selected property.
+         - **Room Information**: Dynamically displays Total Rooms and Maximum Occupancy upon room selection.
+         - **Block Details**: Blocked rooms numeric stepper ($\ge 1$), Date range with exclusive end date semantics, Reason mandatory dropdown (`OPERATIONAL`, `MAINTENANCE`, `RENOVATION`, `OTHER`), Notes optional textarea with 250 character limit and live counter.
+         - **Informational Note**: Cyan callout explaining blocked inventory and exclusive end-date semantics.
+     - Footer: Outlined Cancel button and solid teal `+ Create Block` button with loading spinner and duplicate submission prevention.
+  3. **Room Block Details Centered Overlay Modal (`media_1794129376294_d9c9f6d6.jpg`):**
+     - Centered read-only modal overlay with cyan eye icon.
+     - Left: Hero room image and thumbnails.
+     - Right: Block ID (`BLK-0012`) and Active/Released status pill badge; Room Information (Room Type, Total Rooms, Max Occupancy); Block Details (Blocked Rooms, Start Date, End Date, Reason, Notes); Informational Note (adapted for Active vs Released states).
+     - Footer: Outlined Close button, and solid teal `Release Block` button for active blocks (opens release confirmation modal).
+  4. **Release Room Block Confirmation Modal (`media_1794129405828_887ea2c6.jpg`):**
+     - Centered confirmation modal with cyan rotate icon.
+     - Content: Room thumbnail, Block ID, Active status badge, Room Type, Blocked Rooms, Start Date, End Date, Reason.
+     - Amber Warning Box:
+       - Bold alert: *"Releasing this block will make X rooms available for new bookings"*.
+       - Subtext: *"The rooms will be restored to the available inventory for the period [startDate] – [endDate]."*
+     - Footer: Outlined Cancel button and solid teal `Release Block` button with loading state.
+  5. **Backend Operations & Enhancements:**
+     - Endpoint `POST /api/hotels/{hotelId}/rooms/{roomId}/blocks`: Atomically creates block, validates active room status, enforces notes $\le 250$ chars, acquires pessimistic locks on daily inventory, validates available capacity for every date in `[startDate, endDate)`, increments `blockedRooms`, updates legacy available rooms snapshot.
+     - Endpoint `PUT / PATCH / POST /api/hotels/blocks/{blockId}/release`: Atomically releases block, validates ownership, rejects already released blocks with 400 Bad Request, restores daily inventory across all dates, marks status `RELEASED`, sets `releasedAt`, preserves historical audit record.
+     - Endpoint `GET /api/hotels/{hotelId}/blocks`: Retrieves all blocks for hotel, enriches DTO with `imageUrl`, `totalRooms`, `maxOccupancy`, and `blockCode` (`BLK-%04d`).
+     - Endpoint `GET /api/hotels/blocks/{blockId}`: Retrieves single block by ID with manager ownership validation.
+  6. **Automated Verification:**
+     - Dedicated Test Suite: [`RoomBlockManagementTest.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/test/java/com/traveleasy/hotel/RoomBlockManagementTest.java) — **9/9 tests passed (100%)**.
+     - Inventory, Pricing & Blocking Test Suite: [`HotelInventoryPricingAndBlockingTest.java`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/hotel-service/src/test/java/com/traveleasy/hotel/HotelInventoryPricingAndBlockingTest.java) — **26/26 tests passed (100%)**.
+     - Full Regression Suite: **204/204 tests passed (100% pass rate, 0 failures, 0 errors across 10 test classes)**.
+     - Angular Production Build: **Clean bundle generation (0 errors, 1.89 MB bundle)**.
+- **Report Reference:** [`WP-07.3_ROOM_BLOCKS_MANAGEMENT_IMPLEMENTATION_REPORT.md`](file:///c:/Users/reddy/Documents/Materials_and_Assignments/FALL%20SEM(26-27)/SAA/SAA_Project/WP-07.3_ROOM_BLOCKS_MANAGEMENT_IMPLEMENTATION_REPORT.md)

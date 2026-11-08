@@ -508,6 +508,13 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   archiveRoomError: string = '';
   archiveRoomSuccess: string = '';
 
+  // Restore Room Modal State (WP-06)
+  showRestoreRoomModal: boolean = false;
+  roomToRestore: any = null;
+  isRestoringRoom: boolean = false;
+  restoreRoomError: string = '';
+  restoreRoomSuccess: string = '';
+
   // Room Details Modal State (WP-06)
   showRoomDetailsModal: boolean = false;
   selectedRoomDetails: any = null;
@@ -515,6 +522,85 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   roomDetailsError: string = '';
 
   // Form Models - Block Rooms
+  // ==================== INVENTORY & PRICING: BASE PRICE MANAGEMENT (WP-07.2) ====================
+  inventorySubNav: 'inventory-calendar' | 'pricing-calendar' | 'base-price' | 'room-blocks' = 'base-price';
+  basePriceSearchQuery: string = '';
+  basePriceSortOption: string = 'name-asc';
+  displayedBasePriceRooms: any[] = [];
+  highestBasePrice: number = 0;
+  lowestBasePrice: number = 0;
+
+  // Edit Base Price Modal State
+  showEditBasePriceModal: boolean = false;
+  selectedRoomForPrice: any = null;
+  activeEditPriceImage: string = '';
+  editBasePriceValue: number | null = null;
+  editBasePriceInputError: string = '';
+  editBasePriceError: string = '';
+  isUpdatingBasePrice: boolean = false;
+  basePriceUpdateSuccess: string = '';
+
+  // ==================== INVENTORY & PRICING: ROOM BLOCKS MANAGEMENT (WP-07.3) ====================
+  Math = Math;
+  roomBlocksList: any[] = [];
+  displayedRoomBlocks: any[] = [];
+  isLoadingRoomBlocks: boolean = false;
+  roomBlocksSuccess: string = '';
+  roomBlocksError: string = '';
+
+  // Summary Metrics (Property-wide)
+  totalBlocksCount: number = 0;
+  activeBlocksCount: number = 0;
+  releasedBlocksCount: number = 0;
+
+  // Search & Filtering
+  blockSearchQuery: string = '';
+  selectedBlockRoomTypeFilter: string = 'all'; // 'all' or roomId string
+  selectedBlockStatusFilter: string = 'all'; // 'all', 'ACTIVE', 'RELEASED'
+  blockDateFilterStart: string = '';
+  blockDateFilterEnd: string = '';
+  showBlockDateFilterDropdown: boolean = false;
+
+  // Pagination
+  blocksCurrentPage: number = 1;
+  blocksPageSize: number = 5;
+  totalMatchingBlocks: number = 0;
+  totalBlocksPages: number = 1;
+
+  // Three-dot action menu
+  activeBlockMenuId: number | null = null;
+
+  // Modal 1: Create Room Block Modal State (Ref 2)
+  showCreateBlockModal: boolean = false;
+  activeRoomTypesForBlock: any[] = [];
+  selectedRoomTypeForBlock: any = null;
+  createBlockSelectedRoomId: number | null = null;
+  createBlockMainImage: string = '';
+  createBlockThumbnails: string[] = [];
+  createBlockActiveThumbIndex: number = 0;
+  createBlockCount: number = 1;
+  createBlockStartDate: string = '';
+  createBlockEndDate: string = '';
+  createBlockReason: string = 'OPERATIONAL';
+  createBlockNotes: string = '';
+  createBlockError: string = '';
+  isCreatingBlock: boolean = false;
+  showCreateBlockDateDropdown: boolean = false;
+
+  // Modal 2: Room Block Details Modal State (Ref 3)
+  showBlockDetailsModal: boolean = false;
+  selectedBlockForDetails: any = null;
+  blockDetailsMainImage: string = '';
+  blockDetailsThumbnails: string[] = [];
+  blockDetailsActiveThumbIndex: number = 0;
+
+  // Modal 3: Release Room Block Confirmation Modal State (Ref 4)
+  showReleaseBlockModal: boolean = false;
+  blockToRelease: any = null;
+  isReleasingBlock: boolean = false;
+  releaseBlockError: string = '';
+
+  // Legacy compatibility fields
   blockRoomId: number | null = null;
   blockStartDate: string = '';
   blockEndDate: string = '';
@@ -561,6 +647,12 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   onEscapeKeyDown(event: KeyboardEvent): void {
     if (this.showRoomDetailsModal) {
       this.closeRoomDetailsModal();
+    } else if (this.showArchiveRoomModal) {
+      this.cancelArchiveRoom();
+    } else if (this.showRestoreRoomModal) {
+      this.cancelRestoreRoom();
+    } else if (this.showEditBasePriceModal) {
+      this.closeEditBasePriceModal();
     }
   }
 
@@ -763,6 +855,8 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
     if (!this.selectedHotel) {
       this.roomTypes = [];
       this.roomBlocks = [];
+      this.refreshBasePriceListing();
+        this.refreshRoomBlocksListing();
       this.fetchReservationsAndCompute(null, null);
       return;
     }
@@ -779,6 +873,7 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.roomTypes = res.roomTypes || [];
         this.roomBlocks = res.roomBlocks || [];
+        this.refreshBasePriceListing();
         this.fetchReservationsAndCompute(res.inventorySummary, res.prevInventorySummary);
       },
       error: (err) => {
@@ -2191,6 +2286,226 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  // =========================================================================
+  // WP-06: RESTORE ARCHIVED ROOM TYPE METHODS
+  // =========================================================================
+  openRestoreRoomModal(room: any): void {
+    this.roomToRestore = room;
+    this.restoreRoomError = '';
+    this.showRestoreRoomModal = true;
+  }
+
+  cancelRestoreRoom(): void {
+    this.showRestoreRoomModal = false;
+    this.roomToRestore = null;
+    this.restoreRoomError = '';
+  }
+
+  onRestoreRoomFromModal(room: any): void {
+    const targetRoom = room || this.selectedRoomDetails;
+    this.closeRoomDetailsModal();
+    if (targetRoom) {
+      this.openRestoreRoomModal(targetRoom);
+    }
+  }
+
+  confirmRestoreRoom(): void {
+    if (!this.roomToRestore || !this.roomToRestore.id) return;
+
+    this.isRestoringRoom = true;
+    this.restoreRoomError = '';
+
+    this.hotelService.restoreRoomType(this.roomToRestore.id).subscribe({
+      next: (res: any) => {
+        this.isRestoringRoom = false;
+        const restoredName = this.roomToRestore.roomTypeName;
+        const restoredId = this.roomToRestore.id;
+        this.showRestoreRoomModal = false;
+        this.roomToRestore = null;
+        this.restoreRoomSuccess = `Room type "${restoredName}" has been successfully restored to Active.`;
+
+        // Update local room status immediately for instant feedback
+        if (this.roomTypes) {
+          const target = this.roomTypes.find((r: any) => r.id === (res?.roomId || restoredId));
+          if (target) {
+            target.status = 'ACTIVE';
+            target.availableRooms = target.totalRooms;
+          }
+        }
+
+        // Reload property room types to get updated status and counts
+        this.loadDashboardData();
+
+        setTimeout(() => {
+          this.restoreRoomSuccess = '';
+        }, 4000);
+      },
+      error: (err) => {
+        this.isRestoringRoom = false;
+        console.error('Failed to restore room type:', err);
+        this.restoreRoomError = err.error?.message || 'Failed to restore room type. Please ensure no active room type with the same name exists.';
+      }
+    });
+  }
+
+  // =========================================================================
+  // WP-07.2: BASE PRICE MANAGEMENT METHODS
+  // =========================================================================
+
+  refreshBasePriceListing(): void {
+    const activeRooms = (this.roomTypes || []).filter((r: any) => (r.status || 'ACTIVE').toUpperCase() === 'ACTIVE');
+
+    if (activeRooms.length > 0) {
+      const prices = activeRooms.map((r: any) => Number(r.pricePerNight) || 0);
+      this.highestBasePrice = Math.max(...prices);
+      this.lowestBasePrice = Math.min(...prices);
+    } else {
+      this.highestBasePrice = 0;
+      this.lowestBasePrice = 0;
+    }
+
+    let filtered = [...activeRooms];
+    if (this.basePriceSearchQuery && this.basePriceSearchQuery.trim()) {
+      const q = this.basePriceSearchQuery.trim().toLowerCase();
+      filtered = filtered.filter((r: any) => (r.roomTypeName || '').toLowerCase().includes(q));
+    }
+
+    filtered.sort((a: any, b: any) => {
+      switch (this.basePriceSortOption) {
+        case 'name-desc':
+          return (b.roomTypeName || '').localeCompare(a.roomTypeName || '');
+        case 'price-asc':
+          return (Number(a.pricePerNight) || 0) - (Number(b.pricePerNight) || 0);
+        case 'price-desc':
+          return (Number(b.pricePerNight) || 0) - (Number(a.pricePerNight) || 0);
+        case 'name-asc':
+        default:
+          return (a.roomTypeName || '').localeCompare(b.roomTypeName || '');
+      }
+    });
+
+    this.displayedBasePriceRooms = filtered;
+  }
+
+  onBasePriceSearchChange(): void {
+    this.refreshBasePriceListing();
+  }
+
+  onBasePriceSortChange(): void {
+    this.refreshBasePriceListing();
+  }
+
+  resetBasePriceSearch(): void {
+    this.basePriceSearchQuery = '';
+    this.refreshBasePriceListing();
+  }
+
+  getRoomSubtitle(room: any): string {
+    if (room.description) return room.description;
+    const name = (room.roomTypeName || '').toLowerCase();
+    if (name.includes('double')) return 'Spacious room with city view';
+    if (name.includes('twin')) return 'Comfortable twin beds with modern amenities';
+    if (name.includes('executive') || name.includes('suite')) return 'Large suite with a separate seating area';
+    if (name.includes('family')) return 'Ideal for families with extra space';
+    if (room.amenities) {
+      const list = room.amenities.split(',').map((s: string) => s.trim()).filter(Boolean);
+      if (list.length > 0) return list.slice(0, 3).join(' • ');
+    }
+    return `Spacious room configured for ${room.maxOccupancy || 2} guests`;
+  }
+
+  openEditBasePriceModal(room: any): void {
+    if (!room || (room.status && room.status.toUpperCase() === 'ARCHIVED')) return;
+    this.selectedRoomForPrice = { ...room };
+    this.activeEditPriceImage = room.imageUrl || '';
+    this.editBasePriceValue = room.pricePerNight !== undefined && room.pricePerNight !== null ? Number(room.pricePerNight) : 0;
+    this.editBasePriceInputError = '';
+    this.editBasePriceError = '';
+    this.isUpdatingBasePrice = false;
+    this.showEditBasePriceModal = true;
+    document.body.style.overflow = 'hidden';
+  }
+
+  closeEditBasePriceModal(): void {
+    this.showEditBasePriceModal = false;
+    this.selectedRoomForPrice = null;
+    this.activeEditPriceImage = '';
+    this.editBasePriceValue = null;
+    this.editBasePriceInputError = '';
+    this.editBasePriceError = '';
+    this.isUpdatingBasePrice = false;
+    document.body.style.overflow = '';
+  }
+
+  getBasePriceModalThumbnails(): string[] {
+    const images: string[] = [];
+    if (this.selectedRoomForPrice?.imageUrl) {
+      images.push(this.selectedRoomForPrice.imageUrl);
+    }
+    if (this.selectedHotel?.imageUrl && !images.includes(this.selectedHotel.imageUrl)) {
+      images.push(this.selectedHotel.imageUrl);
+    }
+    if (images.length === 1) {
+      images.push('https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80');
+    } else if (images.length === 0) {
+      images.push('https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80');
+      images.push('https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80');
+    }
+    return images.slice(0, 2);
+  }
+
+  validateBasePriceInput(): boolean {
+    if (this.editBasePriceValue === null || this.editBasePriceValue === undefined || (this.editBasePriceValue as any) === '') {
+      this.editBasePriceInputError = 'Base price is required.';
+      return false;
+    }
+    const val = Number(this.editBasePriceValue);
+    if (isNaN(val) || !isFinite(val) || val <= 0) {
+      this.editBasePriceInputError = 'Base price must be a valid positive number greater than zero.';
+      return false;
+    }
+    this.editBasePriceInputError = '';
+    return true;
+  }
+
+  submitUpdateBasePrice(): void {
+    if (!this.validateBasePriceInput()) return;
+    if (!this.selectedRoomForPrice || !this.selectedRoomForPrice.id) return;
+
+    this.isUpdatingBasePrice = true;
+    this.editBasePriceError = '';
+
+    const roomId = this.selectedRoomForPrice.id;
+    const newPrice = Number(this.editBasePriceValue);
+
+    this.hotelService.updateBasePrice(roomId, newPrice).subscribe({
+      next: (updatedRoom: any) => {
+        this.isUpdatingBasePrice = false;
+
+        // Update local room type in roomTypes list
+        const target = this.roomTypes.find((r: any) => r.id === roomId);
+        if (target) {
+          target.pricePerNight = updatedRoom.pricePerNight !== undefined ? updatedRoom.pricePerNight : newPrice;
+        }
+
+        const roomName = updatedRoom.roomTypeName || this.selectedRoomForPrice.roomTypeName || 'Room';
+        const formattedPrice = this.formatCurrency(newPrice);
+
+        this.closeEditBasePriceModal();
+        this.refreshBasePriceListing();
+
+        this.basePriceUpdateSuccess = `Base price for "${roomName}" successfully updated to ${formattedPrice} / night.`;
+        setTimeout(() => {
+          this.basePriceUpdateSuccess = '';
+        }, 4000);
+      },
+      error: (err: any) => {
+        this.isUpdatingBasePrice = false;
+        this.editBasePriceError = err.error?.message || 'Failed to update base price. Please verify your inputs and try again.';
+      }
+    });
+  }
+
   openAddRoomModal(hotel?: any): void {
     this.selectedHotelForRoom = hotel || this.selectedHotel;
     if (!this.selectedHotelForRoom && this.myHotels.length > 0) {
@@ -2232,51 +2547,535 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  openBlockRoomModal(): void {
+  // ==================== WP-07.3: ROOM BLOCKS MANAGEMENT IMPLEMENTATION ====================
+
+  selectInventorySubNav(tab: 'inventory-calendar' | 'pricing-calendar' | 'base-price' | 'room-blocks'): void {
+    this.inventorySubNav = tab;
+    if (tab === 'room-blocks') {
+      this.refreshRoomBlocksListing();
+    } else if (tab === 'base-price') {
+      this.refreshBasePriceListing();
+    }
+  }
+
+  refreshRoomBlocksListing(): void {
+    const blocks = this.roomBlocks || [];
+    this.roomBlocksList = blocks;
+
+    // Property-wide summary counts
+    this.totalBlocksCount = blocks.length;
+    this.activeBlocksCount = blocks.filter(b => (b.status || '').toUpperCase() === 'ACTIVE').length;
+    this.releasedBlocksCount = blocks.filter(b => (b.status || '').toUpperCase() === 'RELEASED').length;
+
+    this.applyRoomBlockFilters();
+  }
+
+  applyRoomBlockFilters(): void {
+    let filtered = [...this.roomBlocksList];
+
+    // 1. Search Query (Block ID, reason, notes, room type name)
+    if (this.blockSearchQuery && this.blockSearchQuery.trim()) {
+      const q = this.blockSearchQuery.trim().toLowerCase();
+      filtered = filtered.filter(b => {
+        const blockCode = (b.blockCode || this.formatBlockId(b.id)).toLowerCase();
+        const reason = (b.reason || '').toLowerCase();
+        const reasonDisplay = this.getReasonDisplay(b.reason).toLowerCase();
+        const notes = (b.notes || '').toLowerCase();
+        const roomName = this.getRoomNameForBlock(b).toLowerCase();
+        return blockCode.includes(q) ||
+               reason.includes(q) ||
+               reasonDisplay.includes(q) ||
+               notes.includes(q) ||
+               roomName.includes(q);
+      });
+    }
+
+    // 2. Room Type Filter
+    if (this.selectedBlockRoomTypeFilter && this.selectedBlockRoomTypeFilter !== 'all') {
+      const rId = Number(this.selectedBlockRoomTypeFilter);
+      filtered = filtered.filter(b => Number(b.roomId) === rId);
+    }
+
+    // 3. Status Filter
+    if (this.selectedBlockStatusFilter && this.selectedBlockStatusFilter !== 'all') {
+      filtered = filtered.filter(b => (b.status || '').toUpperCase() === this.selectedBlockStatusFilter.toUpperCase());
+    }
+
+    // 4. Date Range Overlap Filter [filterStart, filterEnd)
+    // Overlap condition: blockStart < filterEnd && blockEnd > filterStart
+    if (this.blockDateFilterStart && this.blockDateFilterEnd) {
+      try {
+        const fStart = new Date(this.blockDateFilterStart);
+        const fEnd = new Date(this.blockDateFilterEnd);
+        filtered = filtered.filter(b => {
+          if (!b.startDate || !b.endDate) return false;
+          const bStart = new Date(b.startDate);
+          const bEnd = new Date(b.endDate);
+          return (bStart < fEnd && bEnd > fStart);
+        });
+      } catch (e) {
+        console.warn('Date filter error:', e);
+      }
+    }
+
+    this.totalMatchingBlocks = filtered.length;
+    this.totalBlocksPages = Math.max(1, Math.ceil(this.totalMatchingBlocks / this.blocksPageSize));
+
+    if (this.blocksCurrentPage > this.totalBlocksPages) {
+      this.blocksCurrentPage = 1;
+    }
+
+    const startIndex = (this.blocksCurrentPage - 1) * this.blocksPageSize;
+    this.displayedRoomBlocks = filtered.slice(startIndex, startIndex + this.blocksPageSize);
+  }
+
+  onBlockSearchChange(): void {
+    this.blocksCurrentPage = 1;
+    this.applyRoomBlockFilters();
+  }
+
+  onBlockRoomTypeFilterChange(): void {
+    this.blocksCurrentPage = 1;
+    this.applyRoomBlockFilters();
+  }
+
+  onBlockStatusFilterChange(): void {
+    this.blocksCurrentPage = 1;
+    this.applyRoomBlockFilters();
+  }
+
+  toggleBlockDateFilterDropdown(): void {
+    this.showBlockDateFilterDropdown = !this.showBlockDateFilterDropdown;
+  }
+
+  applyBlockDateFilter(): void {
+    this.showBlockDateFilterDropdown = false;
+    this.blocksCurrentPage = 1;
+    this.applyRoomBlockFilters();
+  }
+
+  clearBlockDateFilter(): void {
+    this.blockDateFilterStart = '';
+    this.blockDateFilterEnd = '';
+    this.showBlockDateFilterDropdown = false;
+    this.blocksCurrentPage = 1;
+    this.applyRoomBlockFilters();
+  }
+
+  hasActiveBlockDateFilter(): boolean {
+    return !!(this.blockDateFilterStart && this.blockDateFilterEnd);
+  }
+
+  getBlockDateFilterLabel(): string {
+    if (this.blockDateFilterStart && this.blockDateFilterEnd) {
+      return `${this.formatBlockDate(this.blockDateFilterStart)} - ${this.formatBlockDate(this.blockDateFilterEnd)}`;
+    }
+    return 'Select date range';
+  }
+
+  // Pagination controls
+  goToBlocksPage(page: number): void {
+    if (page >= 1 && page <= this.totalBlocksPages) {
+      this.blocksCurrentPage = page;
+      this.closeBlockMenu();
+      this.applyRoomBlockFilters();
+    }
+  }
+
+  prevBlocksPage(): void {
+    if (this.blocksCurrentPage > 1) {
+      this.goToBlocksPage(this.blocksCurrentPage - 1);
+    }
+  }
+
+  nextBlocksPage(): void {
+    if (this.blocksCurrentPage < this.totalBlocksPages) {
+      this.goToBlocksPage(this.blocksCurrentPage + 1);
+    }
+  }
+
+  getBlocksPaginationPages(): number[] {
+    const pages: number[] = [];
+    const maxVisible = 5;
+    let start = Math.max(1, this.blocksCurrentPage - Math.floor(maxVisible / 2));
+    let end = Math.min(this.totalBlocksPages, start + maxVisible - 1);
+    if (end - start + 1 < maxVisible) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
+  }
+
+  // Floating Action Menu controls
+  toggleBlockMenu(blockId: number, event: Event): void {
+    event.stopPropagation();
+    this.activeBlockMenuId = this.activeBlockMenuId === blockId ? null : blockId;
+  }
+
+  closeBlockMenu(): void {
+    this.activeBlockMenuId = null;
+  }
+
+  // Create Room Block Modal Workflow (Reference 2)
+  openCreateBlockModal(): void {
     if (!this.selectedHotel) {
       alert('Please select a hotel property first.');
       return;
     }
-    if (this.roomTypes.length === 0) {
-      alert('Please add at least one room category to this hotel before creating a block.');
+
+    // Only ACTIVE room types belonging to selected hotel are eligible (Global Business Rule 3.2)
+    this.activeRoomTypesForBlock = (this.roomTypes || []).filter(
+      rt => (!rt.status || rt.status.toUpperCase() === 'ACTIVE') &&
+            (!rt.hotelId || Number(rt.hotelId) === Number(this.selectedHotel.id))
+    );
+
+    // Initial state: no room type selected
+    this.createBlockSelectedRoomId = null;
+    this.selectedRoomTypeForBlock = null;
+    this.createBlockMainImage = '';
+    this.createBlockThumbnails = [];
+    this.createBlockActiveThumbIndex = 0;
+    this.createBlockCount = 1;
+    this.createBlockReason = 'OPERATIONAL';
+    this.createBlockNotes = '';
+    this.createBlockError = '';
+    this.isCreatingBlock = false;
+
+    // Date range initially empty for user selection matching mockup
+    this.createBlockStartDate = '';
+    this.createBlockEndDate = '';
+    this.showCreateBlockDateDropdown = false;
+
+    this.closeBlockMenu();
+    this.showCreateBlockModal = true;
+  }
+
+  closeCreateBlockModal(): void {
+    this.showCreateBlockModal = false;
+    this.showCreateBlockDateDropdown = false;
+    this.createBlockError = '';
+    this.isCreatingBlock = false;
+  }
+
+  toggleCreateBlockDateDropdown(): void {
+    this.showCreateBlockDateDropdown = !this.showCreateBlockDateDropdown;
+  }
+
+  applyCreateBlockDateRange(): void {
+    this.showCreateBlockDateDropdown = false;
+  }
+
+  clearCreateBlockDateRange(): void {
+    this.createBlockStartDate = '';
+    this.createBlockEndDate = '';
+    this.showCreateBlockDateDropdown = false;
+  }
+
+  getCreateBlockDateLabel(): string {
+    if (this.createBlockStartDate && this.createBlockEndDate) {
+      return `${this.formatBlockDate(this.createBlockStartDate)} - ${this.formatBlockDate(this.createBlockEndDate)}`;
+    }
+    if (this.createBlockStartDate) {
+      return `${this.formatBlockDate(this.createBlockStartDate)} - ...`;
+    }
+    return 'Select date ran...';
+  }
+
+  onSelectRoomTypeForBlock(event: any): void {
+    const val = event?.target?.value || event;
+    const roomId = Number(val);
+    if (!roomId) {
+      this.createBlockSelectedRoomId = null;
+      this.selectedRoomTypeForBlock = null;
+      this.createBlockMainImage = '';
+      this.createBlockThumbnails = [];
       return;
     }
-    this.blockRoomId = this.roomTypes[0].id;
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const dayAfter = new Date();
-    dayAfter.setDate(dayAfter.getDate() + 2);
-    this.blockStartDate = this.formatDateIso(tomorrow);
-    this.blockEndDate = this.formatDateIso(dayAfter);
-    this.showBlockRoomModal = true;
+
+    this.createBlockSelectedRoomId = roomId;
+    const rt = this.activeRoomTypesForBlock.find(r => r.id === roomId);
+    this.selectedRoomTypeForBlock = rt || null;
+
+    if (rt) {
+      this.createBlockMainImage = rt.imageUrl || 'https://images.unsplash.com/photo-1590490360182-c33d57733427';
+      if (rt.images && rt.images.length > 0) {
+        this.createBlockThumbnails = rt.images.map((img: any) => typeof img === 'string' ? img : img.imageUrl).filter(Boolean);
+      } else {
+        this.createBlockThumbnails = [this.createBlockMainImage];
+      }
+      this.createBlockActiveThumbIndex = 0;
+    }
+  }
+
+  selectCreateBlockThumb(index: number, imgUrl: string): void {
+    this.createBlockActiveThumbIndex = index;
+    this.createBlockMainImage = imgUrl;
+  }
+
+  incrementCreateBlockCount(): void {
+    this.createBlockCount = (Number(this.createBlockCount) || 1) + 1;
+  }
+
+  decrementCreateBlockCount(): void {
+    if (this.createBlockCount > 1) {
+      this.createBlockCount = (Number(this.createBlockCount) || 1) - 1;
+    }
+  }
+
+  submitCreateBlock(): void {
+    if (!this.selectedHotel || !this.createBlockSelectedRoomId) {
+      this.createBlockError = 'Please select an eligible active room type.';
+      return;
+    }
+
+    if (!this.createBlockStartDate || !this.createBlockEndDate) {
+      this.createBlockError = 'Please select both start date and end date.';
+      return;
+    }
+
+    if (new Date(this.createBlockEndDate) <= new Date(this.createBlockStartDate)) {
+      this.createBlockError = 'End date must be strictly after start date (exclusive end date).';
+      return;
+    }
+
+    if (!this.createBlockCount || this.createBlockCount < 1) {
+      this.createBlockError = 'Blocked room count must be at least 1.';
+      return;
+    }
+
+    if (!this.createBlockReason) {
+      this.createBlockError = 'A blocking reason is mandatory.';
+      return;
+    }
+
+    if (this.createBlockNotes && this.createBlockNotes.trim().length > 250) {
+      this.createBlockError = 'Notes cannot exceed 250 characters.';
+      return;
+    }
+
+    this.isCreatingBlock = true;
+    this.createBlockError = '';
+
+    const payload = {
+      blockedCount: Number(this.createBlockCount),
+      startDate: this.createBlockStartDate,
+      endDate: this.createBlockEndDate,
+      reason: this.createBlockReason,
+      notes: this.createBlockNotes ? this.createBlockNotes.trim() : null
+    };
+
+    this.hotelService.createRoomBlock(this.selectedHotel.id, this.createBlockSelectedRoomId, payload).subscribe({
+      next: (created) => {
+        this.isCreatingBlock = false;
+        this.showCreateBlockModal = false;
+        const code = this.formatBlockId(created.id);
+        this.roomBlocksSuccess = `Room block #${code} successfully created for ${this.createBlockCount} room(s).`;
+        setTimeout(() => this.roomBlocksSuccess = '', 4500);
+        this.reloadRoomBlocks();
+      },
+      error: (err: any) => {
+        this.isCreatingBlock = false;
+        console.error('Create room block error:', err);
+        this.createBlockError = err.error?.message || (err.status === 400 ? 'Insufficient available inventory for one or more dates in the selected period. Please review the quantity or date range.' : 'Failed to create room block. Please try again.');
+      }
+    });
+  }
+
+  // Room Block Details Modal Workflow (Reference 3)
+  openBlockDetailsModal(block: any): void {
+    if (!block) return;
+    this.selectedBlockForDetails = block;
+
+    const room = (this.roomTypes || []).find(rt => rt.id === block.roomId);
+    this.blockDetailsMainImage = block.imageUrl || room?.imageUrl || 'https://images.unsplash.com/photo-1590490360182-c33d57733427';
+    if (room?.images && room.images.length > 0) {
+      this.blockDetailsThumbnails = room.images.map((img: any) => typeof img === 'string' ? img : img.imageUrl).filter(Boolean);
+    } else {
+      this.blockDetailsThumbnails = [this.blockDetailsMainImage];
+    }
+    this.blockDetailsActiveThumbIndex = 0;
+
+    this.closeBlockMenu();
+    this.showBlockDetailsModal = true;
+  }
+
+  closeBlockDetailsModal(): void {
+    this.showBlockDetailsModal = false;
+    this.selectedBlockForDetails = null;
+  }
+
+  selectBlockDetailsThumb(index: number, imgUrl: string): void {
+    this.blockDetailsActiveThumbIndex = index;
+    this.blockDetailsMainImage = imgUrl;
+  }
+
+  openReleaseFromDetails(): void {
+    const block = this.selectedBlockForDetails;
+    this.closeBlockDetailsModal();
+    if (block && (block.status || '').toUpperCase() === 'ACTIVE') {
+      this.openReleaseBlockModal(block);
+    }
+  }
+
+  // Release Room Block Confirmation Modal Workflow (Reference 4)
+  openReleaseBlockModal(block: any): void {
+    if (!block || (block.status || '').toUpperCase() === 'RELEASED') return;
+    this.blockToRelease = block;
+    this.releaseBlockError = '';
+    this.isReleasingBlock = false;
+
+    this.closeBlockMenu();
+    this.showReleaseBlockModal = true;
+  }
+
+  closeReleaseBlockModal(): void {
+    this.showReleaseBlockModal = false;
+    this.blockToRelease = null;
+    this.releaseBlockError = '';
+    this.isReleasingBlock = false;
+  }
+
+  confirmReleaseBlock(): void {
+    if (!this.blockToRelease) return;
+
+    this.isReleasingBlock = true;
+    this.releaseBlockError = '';
+
+    const blockId = this.blockToRelease.id;
+    const count = this.blockToRelease.blockedCount;
+    const code = this.formatBlockId(blockId);
+
+    this.hotelService.releaseRoomBlock(blockId).subscribe({
+      next: (released) => {
+        this.isReleasingBlock = false;
+        this.showReleaseBlockModal = false;
+        this.blockToRelease = null;
+        this.roomBlocksSuccess = `Room block #${code} released successfully. ${count} room(s) restored to available inventory.`;
+        setTimeout(() => this.roomBlocksSuccess = '', 4500);
+        this.reloadRoomBlocks();
+      },
+      error: (err: any) => {
+        this.isReleasingBlock = false;
+        console.error('Release room block error:', err);
+        this.releaseBlockError = err.error?.message || 'Failed to release room block. Please try again.';
+      }
+    });
+  }
+
+  reloadRoomBlocks(): void {
+    if (!this.selectedHotel) return;
+    this.hotelService.getRoomBlocks(this.selectedHotel.id).subscribe({
+      next: (blocks) => {
+        this.roomBlocks = blocks || [];
+        this.refreshRoomBlocksListing();
+      },
+      error: (err) => {
+        console.warn('Failed to reload room blocks:', err);
+      }
+    });
+  }
+
+  // Display and format helpers
+  formatBlockId(id: any): string {
+    if (!id && id !== 0) return 'BLK-0000';
+    return `BLK-${String(id).padStart(4, '0')}`;
+  }
+
+  getRoomNameForBlock(block: any): string {
+    if (!block) return 'Room';
+    if (block.roomTypeName) return block.roomTypeName;
+    const found = (this.roomTypes || []).find(rt => rt.id === block.roomId);
+    if (found?.roomTypeName) return found.roomTypeName;
+    return `Room #${block.roomId}`;
+  }
+
+  getRoomImageForBlock(block: any): string {
+    if (block?.imageUrl) return block.imageUrl;
+    const found = (this.roomTypes || []).find(rt => rt.id === block?.roomId);
+    if (found?.imageUrl) return found.imageUrl;
+    return 'https://images.unsplash.com/photo-1590490360182-c33d57733427';
+  }
+
+  getRoomTotalForBlock(block: any): number | string {
+    if (block?.totalRooms !== undefined && block?.totalRooms !== null) return block.totalRooms;
+    const found = (this.roomTypes || []).find(rt => rt.id === block?.roomId);
+    return found?.totalRooms ?? '-';
+  }
+
+  getRoomOccupancyForBlock(block: any): number | string {
+    if (block?.maxOccupancy !== undefined && block?.maxOccupancy !== null) return block.maxOccupancy;
+    const found = (this.roomTypes || []).find(rt => rt.id === block?.roomId);
+    return found?.maxOccupancy ?? 2;
+  }
+
+  getReasonDisplay(reason: string): string {
+    if (!reason) return 'Operational';
+    switch (reason.toUpperCase()) {
+      case 'OPERATIONAL':
+        return 'Corporate group booking';
+      case 'MAINTENANCE':
+        return 'Maintenance (AC service)';
+      case 'RENOVATION':
+        return 'Renovation';
+      case 'OTHER':
+        return 'Other';
+      default:
+        return reason;
+    }
+  }
+
+  formatBlockDate(dateStr: string | null | undefined): string {
+    if (!dateStr) return '-';
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const m = parseInt(parts[1], 10) - 1;
+        const d = parseInt(parts[2], 10);
+        const y = parts[0];
+        return `${monthNames[m]} ${d < 10 ? '0' + d : d}, ${y}`;
+      }
+      return this.formatDate(dateStr);
+    } catch {
+      return dateStr;
+    }
+  }
+
+  formatBlockDateExclusiveMinusOne(dateStr: string | null | undefined): string {
+    if (!dateStr) return '-';
+    try {
+      const d = new Date(dateStr);
+      d.setDate(d.getDate() - 1);
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const day = d.getDate();
+      return `${monthNames[d.getMonth()]} ${day < 10 ? '0' + day : day}`;
+    } catch {
+      return dateStr;
+    }
+  }
+
+  getUniqueRoomTypesForBlockFilter(): { id: number; name: string }[] {
+    const map = new Map<number, string>();
+    (this.roomTypes || []).forEach(rt => {
+      if (rt.id) map.set(Number(rt.id), rt.roomTypeName || `Room #${rt.id}`);
+    });
+    (this.roomBlocksList || []).forEach(b => {
+      if (b.roomId && !map.has(Number(b.roomId))) {
+        map.set(Number(b.roomId), b.roomTypeName || `Room #${b.roomId}`);
+      }
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }
+
+  // Legacy fallback stubs
+  openBlockRoomModal(): void {
+    this.openCreateBlockModal();
   }
 
   submitBlockRoom(): void {
-    if (!this.selectedHotel || !this.blockRoomId) return;
-    if (!this.blockStartDate || !this.blockEndDate) {
-      alert('Please specify valid start and end dates.');
-      return;
-    }
-
-    const payload = {
-      blockedCount: this.blockCount,
-      startDate: this.blockStartDate,
-      endDate: this.blockEndDate,
-      reason: this.blockReason,
-      notes: this.blockNotes
-    };
-
-    this.hotelService.createRoomBlock(this.selectedHotel.id, this.blockRoomId, payload).subscribe({
-      next: () => {
-        alert('Room Block created successfully!');
-        this.showBlockRoomModal = false;
-        this.loadDashboardData();
-      },
-      error: (err) => {
-        console.error('Create room block error:', err);
-        alert(err.error?.message || 'Failed to create room block.');
-      }
-    });
+    this.submitCreateBlock();
   }
 
   openPriceOverrideModal(): void {

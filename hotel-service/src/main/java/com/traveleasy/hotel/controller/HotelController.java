@@ -468,6 +468,24 @@ public class HotelController {
         ));
     }
 
+    @RequestMapping(value = "/rooms/{roomId}/restore", method = {RequestMethod.PATCH, RequestMethod.PUT, RequestMethod.POST})
+    public ResponseEntity<?> restoreRoomType(
+            @PathVariable Long roomId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "restore room category");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        RoomType restored = roomTypeService.restoreRoomType(roomId, principal);
+        return ResponseEntity.ok(Map.of(
+                "message", "Room category restored successfully",
+                "roomId", roomId,
+                "status", restored.getStatus(),
+                "roomTypeName", restored.getRoomTypeName()
+        ));
+    }
+
     @GetMapping("/{hotelId}/rooms")
     public ResponseEntity<List<RoomType>> getRoomTypes(
             @PathVariable Long hotelId,
@@ -903,8 +921,22 @@ public class HotelController {
     }
 
     // =========================================================================
-    // 5. DATE-SPECIFIC PRICING ENDPOINTS (WP-03)
+    // 5. DATE-SPECIFIC PRICING & BASE PRICE ENDPOINTS (WP-03 / WP-07.2)
     // =========================================================================
+
+    @PutMapping("/rooms/{roomId}/base-price")
+    public ResponseEntity<?> updateBasePrice(
+            @PathVariable Long roomId,
+            @Valid @RequestBody BasePriceUpdateRequestDto dto,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "update room base price");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        RoomTypeDto result = pricingService.updateBasePrice(roomId, dto, principal);
+        return ResponseEntity.ok(result);
+    }
 
     @PostMapping("/rooms/{roomId}/pricing/override")
     public ResponseEntity<?> setPriceOverride(
@@ -982,7 +1014,7 @@ public class HotelController {
         return ResponseEntity.status(HttpStatus.CREATED).body(block);
     }
 
-    @PutMapping("/blocks/{blockId}/release")
+    @RequestMapping(value = "/blocks/{blockId}/release", method = {RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.POST})
     public ResponseEntity<?> releaseRoomBlock(
             @PathVariable Long blockId,
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
@@ -992,6 +1024,19 @@ public class HotelController {
 
         CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
         RoomBlockResponseDto block = roomBlockService.releaseBlock(blockId, principal);
+        return ResponseEntity.ok(block);
+    }
+
+    @GetMapping("/blocks/{blockId}")
+    public ResponseEntity<?> getBlockById(
+            @PathVariable Long blockId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "view operational room block details");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        RoomBlockResponseDto block = roomBlockService.getBlockById(blockId, principal);
         return ResponseEntity.ok(block);
     }
 

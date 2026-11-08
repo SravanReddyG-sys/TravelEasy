@@ -54,6 +54,10 @@ export class HotelService {
     return this.http.delete(`${this.apiUrl}/rooms/${roomId}`);
   }
 
+  restoreRoomType(roomId: number): Observable<any> {
+    return this.http.put(`${this.apiUrl}/rooms/${roomId}/restore`, {});
+  }
+
   searchHotels(city: string, checkIn?: string, checkOut?: string, rooms: number = 1): Observable<any[]> {
     let url = `${this.apiUrl}/search?city=${encodeURIComponent(city)}`;
     if (checkIn && checkOut) {
@@ -98,6 +102,10 @@ export class HotelService {
 
   checkRoomStayAvailability(roomId: number, checkIn: string, checkOut: string, rooms: number = 1): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/rooms/${roomId}/availability?checkIn=${encodeURIComponent(checkIn)}&checkOut=${encodeURIComponent(checkOut)}&rooms=${rooms}`);
+  }
+
+  updateBasePrice(roomId: number, basePrice: number): Observable<any> {
+    return this.http.put(`${this.apiUrl}/rooms/${roomId}/base-price`, { basePrice });
   }
 
   setPriceOverride(roomId: number, overrideData: { overrideDate: string; pricePerNight: number }): Observable<any> {

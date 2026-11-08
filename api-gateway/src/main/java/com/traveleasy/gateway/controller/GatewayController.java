@@ -43,7 +43,7 @@ public class GatewayController {
     @Value("${traveller.service.url:http://localhost:8088}")
     private String travellerServiceUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = new RestTemplate(new org.springframework.http.client.JdkClientHttpRequestFactory());
 
     @RequestMapping("/api/**")
     public ResponseEntity<byte[]> proxyRequest(@RequestBody(required = false) byte[] body,

@@ -2953,6 +2953,15 @@
             <button type="button" class="btn-close" (click)="archiveRoomSuccess = ''"></button>
           </div>
 
+          <!-- Restore Action Success Banner (WP-06) -->
+          <div *ngIf="restoreRoomSuccess" class="alert alert-success d-flex align-items-center justify-content-between p-3 mb-4 rounded-3 shadow-sm border-0 bg-success-subtle text-success">
+            <div class="d-flex align-items-center gap-2">
+              <i class="fa-solid fa-circle-check fs-5"></i>
+              <span class="fw-medium">{{ restoreRoomSuccess }}</span>
+            </div>
+            <button type="button" class="btn-close" (click)="restoreRoomSuccess = ''"></button>
+          </div>
+
           <!-- 2. Summary Metric Cards (3 Cards Row) -->
           <div class="row g-3 mb-4">
             <!-- Total Room Types -->
@@ -3164,6 +3173,7 @@
                       <span>View Details</span>
                     </button>
                     <button 
+                      *ngIf="(room.status || 'ACTIVE').toUpperCase() === 'ACTIVE'"
                       type="button" 
                       class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-semibold d-inline-flex align-items-center gap-1"
                       (click)="onEditRoom(room)">
@@ -3177,6 +3187,14 @@
                       (click)="openArchiveRoomModal(room)">
                       <i class="fa-solid fa-box-archive small"></i>
                       <span>Archive</span>
+                    </button>
+                    <button 
+                      *ngIf="(room.status || '').toUpperCase() === 'ARCHIVED'"
+                      type="button" 
+                      class="btn btn-sm btn-outline-teal rounded-pill px-3 py-1 fw-semibold d-inline-flex align-items-center gap-1"
+                      (click)="openRestoreRoomModal(room)">
+                      <i class="fa-solid fa-rotate-left small"></i>
+                      <span>Restore</span>
                     </button>
                   </div>
 
@@ -3247,6 +3265,7 @@
                           <i class="fa-solid fa-eye me-1"></i> Details
                         </button>
                         <button 
+                          *ngIf="(room.status || 'ACTIVE').toUpperCase() === 'ACTIVE'"
                           type="button" 
                           class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-semibold"
                           (click)="onEditRoom(room)">
@@ -3258,6 +3277,13 @@
                           class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-semibold"
                           (click)="openArchiveRoomModal(room)">
                           <i class="fa-solid fa-box-archive me-1"></i> Archive
+                        </button>
+                        <button 
+                          *ngIf="(room.status || '').toUpperCase() === 'ARCHIVED'"
+                          type="button" 
+                          class="btn btn-sm btn-outline-teal rounded-pill px-3 py-1 fw-semibold"
+                          (click)="openRestoreRoomModal(room)">
+                          <i class="fa-solid fa-rotate-left me-1"></i> Restore
                         </button>
                       </div>
                     </td>
@@ -3301,6 +3327,40 @@
                   <span *ngIf="isArchivingRoom" class="spinner-border spinner-border-sm" role="status"></span>
                   <i *ngIf="!isArchivingRoom" class="fa-solid fa-box-archive"></i>
                   <span>{{ isArchivingRoom ? 'Archiving...' : 'Confirm Archive' }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- RESTORE CONFIRMATION MODAL (WP-06) -->
+          <div *ngIf="showRestoreRoomModal" class="modal-backdrop-custom d-flex align-items-center justify-content-center">
+            <div class="modal-dialog-custom bg-white rounded-4 shadow-lg p-4" style="max-width: 520px; width: 92%;">
+              <div class="d-flex align-items-start gap-3 mb-3">
+                <div class="metric-icon-box bg-cyan-light text-cyan rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px;">
+                  <i class="fa-solid fa-rotate-left fs-5"></i>
+                </div>
+                <div class="flex-grow-1">
+                  <h5 class="fw-bold text-dark mb-1">Restore Room Type?</h5>
+                  <p class="text-muted small mb-0">
+                    Are you sure you want to restore <strong>"{{ roomToRestore?.roomTypeName }}"</strong>? This room type will become active again and may be included in room discovery and future reservations, subject to availability and pricing configuration.
+                  </p>
+                </div>
+                <button type="button" class="btn-close" (click)="cancelRestoreRoom()" [disabled]="isRestoringRoom"></button>
+              </div>
+
+              <div *ngIf="restoreRoomError" class="alert alert-danger py-2 px-3 small d-flex align-items-center gap-2 mb-3 rounded-2">
+                <i class="fa-solid fa-triangle-exclamation text-danger flex-shrink-0"></i>
+                <div>{{ restoreRoomError }}</div>
+              </div>
+
+              <div class="d-flex justify-content-end align-items-center gap-2 pt-2">
+                <button type="button" class="btn btn-light rounded-3 px-3 py-2 fw-semibold" (click)="cancelRestoreRoom()" [disabled]="isRestoringRoom">
+                  Cancel
+                </button>
+                <button type="button" class="btn btn-teal-submit px-3 py-2 fw-semibold d-inline-flex align-items-center gap-2" (click)="confirmRestoreRoom()" [disabled]="isRestoringRoom">
+                  <span *ngIf="isRestoringRoom" class="spinner-border spinner-border-sm" role="status"></span>
+                  <i *ngIf="!isRestoringRoom" class="fa-solid fa-rotate-left"></i>
+                  <span>{{ isRestoringRoom ? 'Restoring...' : 'Restore Room Type' }}</span>
                 </button>
               </div>
             </div>
@@ -3439,9 +3499,19 @@
                 <button type="button" class="btn btn-outline-secondary rounded-3 px-4 py-2 fw-semibold" (click)="closeRoomDetailsModal()">
                   Close
                 </button>
-                <button type="button" class="btn btn-teal-submit rounded-3 px-4 py-2 fw-semibold d-inline-flex align-items-center gap-2" (click)="onEditRoomFromModal(selectedRoomDetails)">
+                <button *ngIf="(selectedRoomDetails.status || 'ACTIVE').toUpperCase() === 'ACTIVE'"
+                        type="button" 
+                        class="btn btn-teal-submit rounded-3 px-4 py-2 fw-semibold d-inline-flex align-items-center gap-2" 
+                        (click)="onEditRoomFromModal(selectedRoomDetails)">
                   <i class="fa-solid fa-pen-to-square"></i>
                   <span>Edit Room Type</span>
+                </button>
+                <button *ngIf="(selectedRoomDetails.status || '').toUpperCase() === 'ARCHIVED'"
+                        type="button" 
+                        class="btn btn-teal-submit rounded-3 px-4 py-2 fw-semibold d-inline-flex align-items-center gap-2" 
+                        (click)="onRestoreRoomFromModal(selectedRoomDetails)">
+                  <i class="fa-solid fa-rotate-left"></i>
+                  <span>Restore Room Type</span>
                 </button>
               </div>
 
@@ -4147,53 +4217,1243 @@
 
       <!-- ==================== TAB: INVENTORY & PRICING ==================== -->
       <div *ngIf="activeNav === 'inventory'">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-          <div>
-            <h3 class="fw-bold text-dark mb-1">Date-Wise Inventory &amp; Rate Overrides</h3>
-            <p class="text-muted small mb-0">Manage seasonal pricing rules and operational maintenance room blocks for <strong>{{ selectedHotel?.name }}</strong></p>
+        
+        <!-- Header & 4 Sub-navigation Tabs (WP-07.2) -->
+        <div class="mb-4">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+              <h3 class="fw-bold text-dark mb-1">Inventory &amp; Pricing</h3>
+              <p class="text-muted small mb-0">Manage availability calendars, price overrides, default nightly rates, and maintenance blocks for <strong>{{ selectedHotel?.name || 'Selected Property' }}</strong></p>
+            </div>
           </div>
-          <div class="d-flex gap-2">
-            <button class="btn btn-outline-info rounded-pill fw-bold" (click)="openBlockRoomModal()">
-              <i class="fa-solid fa-ban me-1"></i> Block Rooms
+
+          <!-- Inventory Subnav Tabs matching Reference Image 1 -->
+          <div class="inventory-subnav-bar d-flex align-items-center gap-4 border-bottom border-light-subtle pb-1">
+            <button type="button" class="btn btn-link nav-tab-item text-decoration-none px-1 py-2 fw-semibold d-inline-flex align-items-center gap-2"
+                    [class.active-tab]="inventorySubNav === 'inventory-calendar'"
+                    (click)="selectInventorySubNav('inventory-calendar')">
+              <i class="fa-regular fa-calendar"></i>
+              <span>Inventory Calendar</span>
             </button>
-            <button class="btn btn-info text-white rounded-pill fw-bold" (click)="openPriceOverrideModal()">
-              <i class="fa-solid fa-tag me-1"></i> Set Price Override
+            <button type="button" class="btn btn-link nav-tab-item text-decoration-none px-1 py-2 fw-semibold d-inline-flex align-items-center gap-2"
+                    [class.active-tab]="inventorySubNav === 'pricing-calendar'"
+                    (click)="selectInventorySubNav('pricing-calendar')">
+              <i class="fa-solid fa-tags"></i>
+              <span>Pricing Calendar</span>
+            </button>
+            <button type="button" class="btn btn-link nav-tab-item text-decoration-none px-1 py-2 fw-semibold d-inline-flex align-items-center gap-2"
+                    [class.active-tab]="inventorySubNav === 'base-price'"
+                    (click)="selectInventorySubNav('base-price')">
+              <i class="fa-solid fa-coins"></i>
+              <span>Base Price Management</span>
+            </button>
+            <button type="button" class="btn btn-link nav-tab-item text-decoration-none px-1 py-2 fw-semibold d-inline-flex align-items-center gap-2"
+                    [class.active-tab]="inventorySubNav === 'room-blocks'"
+                    (click)="selectInventorySubNav('room-blocks')">
+              <i class="fa-solid fa-ban"></i>
+              <span>Room Blocks</span>
             </button>
           </div>
         </div>
 
-        <!-- Room Blocks List -->
-        <div class="content-card mb-4">
-          <h5 class="fw-bold text-dark mb-3">Active Room Blocks</h5>
-          <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th>Block ID</th>
-                  <th>Room ID</th>
-                  <th>Blocked Count</th>
-                  <th>Start Date</th>
-                  <th>End Date</th>
-                  <th>Reason</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let b of roomBlocks">
-                  <td>#BLK-{{ b.id }}</td>
-                  <td>Room #{{ b.roomId }}</td>
-                  <td class="fw-bold">{{ b.blockedCount }} Rooms</td>
-                  <td>{{ formatDate(b.startDate) }}</td>
-                  <td>{{ formatDate(b.endDate) }}</td>
-                  <td><span class="badge bg-secondary">{{ b.reason }}</span></td>
-                  <td><span class="badge bg-warning text-dark">{{ b.status }}</span></td>
-                </tr>
-                <tr *ngIf="roomBlocks.length === 0">
-                  <td colspan="7" class="text-center py-4 text-muted small">No active room blocks currently in effect.</td>
-                </tr>
-              </tbody>
-            </table>
+        <!-- ==================== SUB-VIEW: BASE PRICE MANAGEMENT (WP-07.2) ==================== -->
+        <div *ngIf="inventorySubNav === 'base-price'">
+
+          <!-- Success Alert Toast Banner -->
+          <div *ngIf="basePriceUpdateSuccess" class="alert alert-success d-flex align-items-center justify-content-between rounded-3 py-2.5 px-3 mb-4 shadow-sm animate-fade-in border-0" style="background-color: #ecfdf5; color: #065f46;">
+            <div class="d-flex align-items-center gap-2">
+              <i class="fa-solid fa-circle-check fs-5 text-success"></i>
+              <span class="fw-medium small">{{ basePriceUpdateSuccess }}</span>
+            </div>
+            <button type="button" class="btn-close btn-close-sm" (click)="basePriceUpdateSuccess = ''" aria-label="Close"></button>
           </div>
+
+          <!-- Section Heading -->
+          <div class="mb-4">
+            <h4 class="fw-bold text-dark mb-1">Base Price Management</h4>
+            <p class="text-muted small mb-0">Set the default nightly price for each room type. This price will be used for dates without a price override.</p>
+          </div>
+
+          <!-- Summary Cards (3 Cards) -->
+          <div class="row g-3 mb-4">
+            <!-- Card 1: Active Room Types -->
+            <div class="col-12 col-md-4">
+              <div class="stat-metric-card p-3 rounded-4 d-flex align-items-center gap-3 border shadow-2xs" style="background-color: #f0fdfa; border-color: #99f6e4 !important;">
+                <div class="stat-metric-icon-square rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px; background-color: #ccfbf1; color: #0d9488;">
+                  <i class="fa-solid fa-bed fs-4"></i>
+                </div>
+                <div>
+                  <div class="text-secondary small fw-medium">Active Room Types</div>
+                  <div class="fs-3 fw-bold text-dark lh-1 mt-1">{{ activeRoomTypesCount }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 2: Highest Base Price -->
+            <div class="col-12 col-md-4">
+              <div class="stat-metric-card p-3 rounded-4 d-flex align-items-center gap-3 border shadow-2xs" style="background-color: #f0fdf4; border-color: #bbf7d0 !important;">
+                <div class="stat-metric-icon-square rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px; background-color: #dcfce7; color: #16a34a;">
+                  <i class="fa-solid fa-indian-rupee-sign fs-4"></i>
+                </div>
+                <div>
+                  <div class="text-secondary small fw-medium">Highest Base Price</div>
+                  <div class="fs-3 fw-bold text-dark lh-1 mt-1">
+                    <span *ngIf="activeRoomTypesCount > 0">{{ formatCurrency(highestBasePrice) }} <span class="fs-6 fw-normal text-muted">/ night</span></span>
+                    <span *ngIf="activeRoomTypesCount === 0" class="text-muted fs-5">—</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 3: Lowest Base Price -->
+            <div class="col-12 col-md-4">
+              <div class="stat-metric-card p-3 rounded-4 d-flex align-items-center gap-3 border shadow-2xs" style="background-color: #faf5ff; border-color: #e9d5ff !important;">
+                <div class="stat-metric-icon-square rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px; background-color: #f3e8ff; color: #9333ea;">
+                  <i class="fa-solid fa-indian-rupee-sign fs-4"></i>
+                </div>
+                <div>
+                  <div class="text-secondary small fw-medium">Lowest Base Price</div>
+                  <div class="fs-3 fw-bold text-dark lh-1 mt-1">
+                    <span *ngIf="activeRoomTypesCount > 0">{{ formatCurrency(lowestBasePrice) }} <span class="fs-6 fw-normal text-muted">/ night</span></span>
+                    <span *ngIf="activeRoomTypesCount === 0" class="text-muted fs-5">—</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Search & Sort Controls Bar -->
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+            <!-- Search by Name -->
+            <div class="search-input-wrapper position-relative" style="max-width: 360px; width: 100%;">
+              <i class="fa-solid fa-magnifying-glass position-absolute start-0 top-50 translate-middle-y ms-3 text-muted"></i>
+              <input type="text"
+                     class="form-control rounded-pill ps-5 py-2 small shadow-none border"
+                     placeholder="Search room type by name..."
+                     [(ngModel)]="basePriceSearchQuery"
+                     (input)="onBasePriceSearchChange()" />
+            </div>
+
+            <!-- Sort Dropdown -->
+            <div class="d-flex align-items-center gap-2">
+              <span class="text-secondary small fw-semibold text-nowrap">Sort by:</span>
+              <select class="form-select form-select-sm rounded-pill px-3 py-1.5 small fw-medium shadow-none border"
+                      [(ngModel)]="basePriceSortOption"
+                      (change)="onBasePriceSortChange()"
+                      style="min-width: 220px;">
+                <option value="name-asc">Room Type Name (A – Z)</option>
+                <option value="name-desc">Room Type Name (Z – A)</option>
+                <option value="price-asc">Base Price (Low to High)</option>
+                <option value="price-desc">Base Price (High to Low)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Room-Type Pricing Table Card -->
+          <div class="content-card rounded-4 border bg-white shadow-2xs overflow-hidden p-0 mb-4">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th class="ps-4 py-3 text-secondary fw-semibold small" style="width: 38%;">Room Type</th>
+                    <th class="text-center py-3 text-secondary fw-semibold small" style="width: 15%;">
+                      Total Rooms <i class="fa-regular fa-circle-info text-muted ms-1" title="This is the total physical room capacity for this room type (not daily availability)"></i>
+                    </th>
+                    <th class="py-3 text-secondary fw-semibold small" style="width: 17%;">Max Occupancy</th>
+                    <th class="py-3 text-secondary fw-semibold small" style="width: 18%;">Base Price (per night)</th>
+                    <th class="pe-4 py-3 text-end text-secondary fw-semibold small" style="width: 12%;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- Row for Each Active Room Type -->
+                  <tr *ngFor="let room of displayedBasePriceRooms">
+                    <!-- Room Type Details -->
+                    <td class="ps-4 py-3">
+                      <div class="d-flex align-items-center gap-3">
+                        <div class="room-thumb-box rounded-3 overflow-hidden border bg-light flex-shrink-0" style="width: 64px; height: 50px;">
+                          <img *ngIf="room.imageUrl"
+                               [src]="room.imageUrl"
+                               [alt]="room.roomTypeName"
+                               class="w-100 h-100 object-fit-cover"
+                               (error)="room.imageUrl = ''" />
+                          <div *ngIf="!room.imageUrl" class="w-100 h-100 d-flex align-items-center justify-content-center text-muted">
+                            <i class="fa-solid fa-bed text-secondary opacity-50"></i>
+                          </div>
+                        </div>
+                        <div>
+                          <div class="fw-bold text-dark text-truncate" style="max-width: 280px;" [title]="room.roomTypeName">
+                            {{ room.roomTypeName }}
+                          </div>
+                          <div class="text-muted small text-truncate" style="max-width: 280px;">
+                            {{ getRoomSubtitle(room) }}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+
+                    <!-- Total Rooms -->
+                    <td class="text-center py-3 fw-medium text-dark">
+                      {{ room.totalRooms }}
+                    </td>
+
+                    <!-- Max Occupancy -->
+                    <td class="py-3 small text-secondary">
+                      <i class="fa-solid fa-user me-1.5 text-muted"></i>
+                      <span>{{ room.maxOccupancy }} Guests</span>
+                    </td>
+
+                    <!-- Base Price (per night) -->
+                    <td class="py-3">
+                      <div class="fw-bold text-dark fs-6">
+                        {{ formatCurrency(room.pricePerNight) }}
+                      </div>
+                    </td>
+
+                    <!-- Actions -->
+                    <td class="pe-4 py-3 text-end">
+                      <button type="button"
+                              class="btn btn-outline-teal btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5"
+                              (click)="openEditBasePriceModal(room)">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                        <span>Edit Price</span>
+                      </button>
+                    </td>
+                  </tr>
+
+                  <!-- Empty State: No Active Room Types Configured -->
+                  <tr *ngIf="activeRoomTypesCount === 0 && !isLoading">
+                    <td colspan="5" class="text-center py-5">
+                      <div class="d-flex flex-column align-items-center justify-content-center text-muted">
+                        <div class="metric-icon-box bg-light text-secondary rounded-circle d-flex align-items-center justify-content-center mb-3" style="width: 56px; height: 56px;">
+                          <i class="fa-solid fa-bed fs-3 opacity-50"></i>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">No Active Room Types</h6>
+                        <p class="small text-muted mb-0">Add room types to this property in Room Management to configure base pricing.</p>
+                      </div>
+                    </td>
+                  </tr>
+
+                  <!-- Empty State: Search Query No Results -->
+                  <tr *ngIf="activeRoomTypesCount > 0 && displayedBasePriceRooms.length === 0">
+                    <td colspan="5" class="text-center py-5">
+                      <div class="d-flex flex-column align-items-center justify-content-center text-muted">
+                        <i class="fa-solid fa-magnifying-glass fs-3 text-secondary opacity-50 mb-3"></i>
+                        <h6 class="fw-bold text-dark mb-1">No Room Types Match Your Search</h6>
+                        <p class="small text-muted mb-3">No active room types found matching "{{ basePriceSearchQuery }}".</p>
+                        <button type="button" class="btn btn-sm btn-outline-teal rounded-pill px-3" (click)="resetBasePriceSearch()">
+                          Reset Search
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==================== SUB-VIEW: ROOM BLOCKS (WP-07.3) ==================== -->
+        <div *ngIf="inventorySubNav === 'room-blocks'" (click)="closeBlockMenu()">
+
+          <!-- Success Alert Toast Banner -->
+          <div *ngIf="roomBlocksSuccess" class="alert alert-success d-flex align-items-center justify-content-between rounded-3 py-2.5 px-3 mb-4 shadow-sm animate-fade-in border-0" style="background-color: #ecfdf5; color: #065f46;">
+            <div class="d-flex align-items-center gap-2">
+              <i class="fa-solid fa-circle-check fs-5 text-success"></i>
+              <span class="fw-medium small">{{ roomBlocksSuccess }}</span>
+            </div>
+            <button type="button" class="btn-close btn-close-sm" (click)="roomBlocksSuccess = ''" aria-label="Close"></button>
+          </div>
+
+          <!-- Section Heading (Reference 1) -->
+          <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
+            <div>
+              <h4 class="fw-bold text-dark mb-1">Room Blocks</h4>
+              <p class="text-muted small mb-0">Block a number of rooms for a specific period (e.g., group booking, maintenance, or hotel use).</p>
+            </div>
+            <button type="button"
+                    class="btn text-white fw-semibold rounded-3 px-3 py-2 d-inline-flex align-items-center gap-2 shadow-2xs"
+                    style="background-color: #0d9488;"
+                    (click)="openCreateBlockModal()">
+              <i class="fa-solid fa-plus"></i>
+              <span>Create Room Block</span>
+            </button>
+          </div>
+
+          <!-- Summary Cards (3 Cards matching Reference 1) -->
+          <div class="row g-3 mb-4">
+            <!-- Card 1: Total Blocks -->
+            <div class="col-12 col-md-4">
+              <div class="stat-metric-card p-3 rounded-4 d-flex align-items-center gap-3 border shadow-2xs" style="background-color: #f0fdfa; border-color: #99f6e4 !important;">
+                <div class="stat-metric-icon-square rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px; background-color: #ccfbf1; color: #0d9488;">
+                  <i class="fa-solid fa-bed fs-4"></i>
+                </div>
+                <div>
+                  <div class="text-secondary small fw-medium">Total Blocks</div>
+                  <div class="fs-3 fw-bold text-dark lh-1 mt-1">{{ totalBlocksCount }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 2: Active Blocks -->
+            <div class="col-12 col-md-4">
+              <div class="stat-metric-card p-3 rounded-4 d-flex align-items-center gap-3 border shadow-2xs" style="background-color: #f0fdf4; border-color: #bbf7d0 !important;">
+                <div class="stat-metric-icon-square rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px; background-color: #dcfce7; color: #16a34a;">
+                  <i class="fa-solid fa-bed fs-4"></i>
+                </div>
+                <div>
+                  <div class="text-secondary small fw-medium">Active Blocks</div>
+                  <div class="fs-3 fw-bold text-dark lh-1 mt-1">{{ activeBlocksCount }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Card 3: Released Blocks -->
+            <div class="col-12 col-md-4">
+              <div class="stat-metric-card p-3 rounded-4 d-flex align-items-center gap-3 border shadow-2xs" style="background-color: #faf5ff; border-color: #e9d5ff !important;">
+                <div class="stat-metric-icon-square rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px; background-color: #f3e8ff; color: #9333ea;">
+                  <i class="fa-solid fa-bed fs-4"></i>
+                </div>
+                <div>
+                  <div class="text-secondary small fw-medium">Released Blocks</div>
+                  <div class="fs-3 fw-bold text-dark lh-1 mt-1">{{ releasedBlocksCount }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Search & Filter Bar (Matching Reference 1) -->
+          <div class="content-card p-3 rounded-4 bg-white border mb-4 shadow-2xs">
+            <div class="row g-3 align-items-end">
+              <!-- Search -->
+              <div class="col-12 col-lg-4">
+                <div class="position-relative">
+                  <i class="fa-solid fa-magnifying-glass position-absolute top-50 translate-middle-y text-muted ms-3"></i>
+                  <input type="text"
+                         class="form-control rounded-pill ps-5 pe-3 py-2 small"
+                         placeholder="Search by Block ID, reason, or notes..."
+                         [(ngModel)]="blockSearchQuery"
+                         (ngModelChange)="onBlockSearchChange()" />
+                </div>
+              </div>
+
+              <!-- Room Type Filter -->
+              <div class="col-12 col-sm-6 col-lg-3">
+                <label class="form-label text-muted small fw-semibold mb-1">Room Type</label>
+                <select class="form-select rounded-3 py-2 small"
+                        [(ngModel)]="selectedBlockRoomTypeFilter"
+                        (change)="onBlockRoomTypeFilterChange()">
+                  <option value="all">All Room Types</option>
+                  <option *ngFor="let rt of getUniqueRoomTypesForBlockFilter()" [value]="rt.id">{{ rt.name }}</option>
+                </select>
+              </div>
+
+              <!-- Status Filter -->
+              <div class="col-12 col-sm-6 col-lg-2">
+                <label class="form-label text-muted small fw-semibold mb-1">Status</label>
+                <select class="form-select rounded-3 py-2 small"
+                        [(ngModel)]="selectedBlockStatusFilter"
+                        (change)="onBlockStatusFilterChange()">
+                  <option value="all">All Statuses</option>
+                  <option value="ACTIVE">Active</option>
+                  <option value="RELEASED">Released</option>
+                </select>
+              </div>
+
+              <!-- Date Range Filter -->
+              <div class="col-12 col-sm-9 col-lg-2 position-relative">
+                <label class="form-label text-muted small fw-semibold mb-1">Date Range</label>
+                <div class="input-group">
+                  <button type="button"
+                          class="btn btn-outline-secondary form-control text-start small d-flex align-items-center justify-content-between rounded-3 py-2 bg-white text-truncate"
+                          (click)="toggleBlockDateFilterDropdown(); $event.stopPropagation()">
+                    <span class="d-flex align-items-center gap-2 text-truncate">
+                      <i class="fa-regular fa-calendar text-muted"></i>
+                      <span class="text-truncate">{{ getBlockDateFilterLabel() }}</span>
+                    </span>
+                    <i class="fa-solid fa-chevron-down text-muted small ms-1"></i>
+                  </button>
+                  <button *ngIf="hasActiveBlockDateFilter()"
+                          type="button"
+                          class="btn btn-outline-secondary border-start-0"
+                          (click)="clearBlockDateFilter(); $event.stopPropagation()"
+                          title="Clear date filter">
+                    <i class="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+
+                <!-- Date Range Dropdown Popover -->
+                <div *ngIf="showBlockDateFilterDropdown"
+                     class="position-absolute bg-white rounded-3 shadow-lg border p-3 mt-1 z-3"
+                     style="width: 290px; right: 0; top: 100%;"
+                     (click)="$event.stopPropagation()">
+                  <div class="mb-2">
+                    <label class="form-label small fw-semibold text-secondary mb-1">Start Date</label>
+                    <input type="date" class="form-control form-control-sm" [(ngModel)]="blockDateFilterStart" />
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label small fw-semibold text-secondary mb-1">End Date (Exclusive)</label>
+                    <input type="date" class="form-control form-control-sm" [(ngModel)]="blockDateFilterEnd" />
+                  </div>
+                  <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" (click)="clearBlockDateFilter()">Clear</button>
+                    <button type="button" class="btn btn-sm text-white rounded-pill px-3" style="background-color: #0d9488;" (click)="applyBlockDateFilter()">Apply</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- List View Icon Toggle -->
+              <div class="col-12 col-sm-3 col-lg-1 d-flex justify-content-end">
+                <div class="btn btn-light rounded-3 p-2 text-muted" title="Table View">
+                  <i class="fa-solid fa-list-ul fs-5"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Room Blocks Table (Reference 1) -->
+          <div class="content-card bg-white rounded-4 border overflow-visible mb-4 shadow-2xs position-relative">
+            <div class="table-responsive" style="overflow: visible;">
+              <table class="table table-hover align-middle mb-0">
+                <thead style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                  <tr class="text-secondary small fw-bold">
+                    <th class="ps-4 py-3" style="width: 120px;">Block ID</th>
+                    <th class="py-3" style="min-width: 220px;">Room Type</th>
+                    <th class="py-3 text-center" style="width: 130px;">Blocked Rooms</th>
+                    <th class="py-3" style="width: 130px;">Start Date</th>
+                    <th class="py-3" style="width: 130px;">End Date</th>
+                    <th class="py-3" style="min-width: 180px;">Reason</th>
+                    <th class="py-3 text-center" style="width: 110px;">Status</th>
+                    <th class="pe-4 py-3 text-end" style="width: 80px;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let b of displayedRoomBlocks" class="position-relative">
+                    <!-- Block ID -->
+                    <td class="ps-4 py-3 fw-bold text-dark">{{ b.blockCode || formatBlockId(b.id) }}</td>
+
+                    <!-- Room Type with Thumbnail & Name -->
+                    <td class="py-3">
+                      <div class="d-flex align-items-center gap-3">
+                        <img [src]="getRoomImageForBlock(b)"
+                             [alt]="getRoomNameForBlock(b)"
+                             class="rounded-3 object-fit-cover flex-shrink-0 border"
+                             style="width: 52px; height: 38px;"
+                             (error)="$any($event.target).src = 'https://images.unsplash.com/photo-1590490360182-c33d57733427'" />
+                        <div class="fw-semibold text-dark text-truncate" style="max-width: 220px;">
+                          {{ getRoomNameForBlock(b) }}
+                        </div>
+                      </div>
+                    </td>
+
+                    <!-- Blocked Rooms Count -->
+                    <td class="py-3 text-center fw-bold text-dark fs-6">{{ b.blockedCount }}</td>
+
+                    <!-- Start Date -->
+                    <td class="py-3 text-secondary small">{{ formatBlockDate(b.startDate) }}</td>
+
+                    <!-- End Date -->
+                    <td class="py-3 text-secondary small">{{ formatBlockDate(b.endDate) }}</td>
+
+                    <!-- Reason -->
+                    <td class="py-3 text-dark small">{{ getReasonDisplay(b.reason) }}</td>
+
+                    <!-- Status Badge -->
+                    <td class="py-3 text-center">
+                      <span *ngIf="(b.status || '').toUpperCase() === 'ACTIVE'"
+                            class="badge rounded-pill px-3 py-1.5 fw-semibold"
+                            style="background-color: #dcfce7; color: #15803d; font-size: 0.78rem;">
+                        Active
+                      </span>
+                      <span *ngIf="(b.status || '').toUpperCase() === 'RELEASED'"
+                            class="badge rounded-pill px-3 py-1.5 fw-semibold"
+                            style="background-color: #f1f5f9; color: #64748b; font-size: 0.78rem;">
+                        Released
+                      </span>
+                    </td>
+
+                    <!-- Actions Three-dot Button with Floating Popover Menu -->
+                    <td class="pe-4 py-3 text-end position-relative">
+                      <button type="button"
+                              class="btn btn-sm btn-link text-muted p-1 rounded-2 block-action-btn"
+                              (click)="toggleBlockMenu(b.id, $event)"
+                              title="Actions">
+                        <i class="fa-solid fa-ellipsis fs-5"></i>
+                      </button>
+
+                      <!-- Floating popover menu -->
+                      <div *ngIf="activeBlockMenuId === b.id"
+                           class="position-absolute bg-white rounded-3 shadow-lg border p-1 text-start block-menu-popover"
+                           style="right: 20px; top: 85%; width: 160px; z-index: 1050;"
+                           (click)="$event.stopPropagation()">
+                        <button type="button"
+                                class="btn btn-sm btn-light w-100 text-start d-flex align-items-center gap-2 py-2 px-3 rounded-2 text-dark"
+                                (click)="openBlockDetailsModal(b)">
+                          <i class="fa-regular fa-eye text-muted"></i>
+                          <span>View Details</span>
+                        </button>
+                        <button *ngIf="(b.status || '').toUpperCase() === 'ACTIVE'"
+                                type="button"
+                                class="btn btn-sm btn-light w-100 text-start d-flex align-items-center gap-2 py-2 px-3 rounded-2 text-dark mt-1"
+                                (click)="openReleaseBlockModal(b)">
+                          <i class="fa-solid fa-rotate text-muted"></i>
+                          <span>Release Block</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+
+                  <!-- Empty State -->
+                  <tr *ngIf="displayedRoomBlocks.length === 0">
+                    <td colspan="8" class="text-center py-5 text-muted">
+                      <div class="py-4">
+                        <div class="metric-icon-box bg-light text-muted rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" style="width: 56px; height: 56px;">
+                          <i class="fa-solid fa-ban fs-3 text-muted"></i>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">No Room Blocks Found</h6>
+                        <p class="small text-muted mb-3" *ngIf="blockSearchQuery || selectedBlockRoomTypeFilter !== 'all' || selectedBlockStatusFilter !== 'all' || hasActiveBlockDateFilter()">
+                          No room blocks match the current search or filter criteria.
+                        </p>
+                        <p class="small text-muted mb-3" *ngIf="!blockSearchQuery && selectedBlockRoomTypeFilter === 'all' && selectedBlockStatusFilter === 'all' && !hasActiveBlockDateFilter()">
+                          No room blocks configured for this property yet.
+                        </p>
+                        <button *ngIf="blockSearchQuery || selectedBlockRoomTypeFilter !== 'all' || selectedBlockStatusFilter !== 'all' || hasActiveBlockDateFilter()"
+                                type="button"
+                                class="btn btn-outline-teal btn-sm rounded-pill px-3"
+                                (click)="blockSearchQuery = ''; selectedBlockRoomTypeFilter = 'all'; selectedBlockStatusFilter = 'all'; clearBlockDateFilter();">
+                          Reset Filters
+                        </button>
+                        <button *ngIf="!blockSearchQuery && selectedBlockRoomTypeFilter === 'all' && selectedBlockStatusFilter === 'all' && !hasActiveBlockDateFilter()"
+                                type="button"
+                                class="btn text-white btn-sm rounded-pill px-4"
+                                style="background-color: #0d9488;"
+                                (click)="openCreateBlockModal()">
+                          + Create Room Block
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Pagination Footer -->
+            <div *ngIf="displayedRoomBlocks.length > 0"
+                 class="d-flex flex-column flex-sm-row justify-content-between align-items-center gap-3 p-3 border-top"
+                 style="background-color: #ffffff;">
+              <div class="text-muted small ps-2">
+                Showing {{ (blocksCurrentPage - 1) * blocksPageSize + 1 }} - {{ Math.min(blocksCurrentPage * blocksPageSize, totalMatchingBlocks) }} of {{ totalMatchingBlocks }} blocks
+              </div>
+              <div class="d-flex align-items-center gap-1 pe-2">
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary rounded-2 px-2 py-1"
+                        [disabled]="blocksCurrentPage <= 1"
+                        (click)="prevBlocksPage()">
+                  <i class="fa-solid fa-chevron-left small"></i>
+                </button>
+                <button *ngFor="let p of getBlocksPaginationPages()"
+                        type="button"
+                        class="btn btn-sm rounded-2 px-2.5 py-1 fw-semibold"
+                        [style.background-color]="p === blocksCurrentPage ? '#0d9488' : 'transparent'"
+                        [style.color]="p === blocksCurrentPage ? '#ffffff' : '#64748b'"
+                        [class.border]="p !== blocksCurrentPage"
+                        (click)="goToBlocksPage(p)">
+                  {{ p }}
+                </button>
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary rounded-2 px-2 py-1"
+                        [disabled]="blocksCurrentPage >= totalBlocksPages"
+                        (click)="nextBlocksPage()">
+                  <i class="fa-solid fa-chevron-right small"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ==================== SUB-VIEW: CALENDARS PLACEHOLDER ==================== -->
+        <div *ngIf="inventorySubNav === 'inventory-calendar' || inventorySubNav === 'pricing-calendar'" class="content-card p-5 text-center mb-4">
+          <div class="metric-icon-box bg-cyan-light text-cyan rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" style="width: 60px; height: 60px;">
+            <i [class]="inventorySubNav === 'inventory-calendar' ? 'fa-regular fa-calendar fs-3' : 'fa-solid fa-tags fs-3'"></i>
+          </div>
+          <h5 class="fw-bold text-dark mb-1">
+            {{ inventorySubNav === 'inventory-calendar' ? 'Inventory Calendar' : 'Pricing Calendar' }}
+          </h5>
+          <p class="text-muted small mb-3">Calendar grid scheduling and date-wise controls will be available in the upcoming calendar package.</p>
+          <button type="button" class="btn btn-outline-teal rounded-pill px-4 btn-sm" (click)="inventorySubNav = 'base-price'">
+            Go to Base Price Management
+          </button>
+        </div>
+
+      </div>
+
+      <!-- ==================== CENTERED EDIT BASE PRICE MODAL (WP-07.2) ==================== -->
+      <div *ngIf="showEditBasePriceModal"
+           class="modal-backdrop-custom d-flex align-items-center justify-content-center"
+           (click)="closeEditBasePriceModal()"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="editBasePriceModalTitle">
+
+        <div class="modal-dialog-custom room-details-modal-card bg-white rounded-4 shadow-lg p-4 p-md-5"
+             style="max-width: 880px; width: 92%; max-height: 90vh; overflow-y: auto;"
+             (click)="$event.stopPropagation()">
+
+          <!-- Modal Header -->
+          <div class="d-flex align-items-start justify-content-between pb-3 mb-4 border-bottom border-light-subtle">
+            <div class="d-flex align-items-center gap-3">
+              <div class="metric-icon-box bg-cyan-light text-cyan rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px;">
+                <i class="fa-solid fa-coins fs-4"></i>
+              </div>
+              <div>
+                <h4 class="fw-bold text-dark mb-0" id="editBasePriceModalTitle">Edit Base Price</h4>
+                <p class="text-muted small mb-0">Update the default nightly price for this room type.</p>
+              </div>
+            </div>
+            <button type="button" class="btn-close ms-2" (click)="closeEditBasePriceModal()" aria-label="Close" title="Close modal (Esc)"></button>
+          </div>
+
+          <!-- Main Content: Two-Column Layout -->
+          <div *ngIf="selectedRoomForPrice" class="row g-4 align-items-stretch">
+
+            <!-- Left Column: Room Images -->
+            <div class="col-12 col-md-5 d-flex flex-column">
+              <!-- Main Room Image -->
+              <div class="room-details-hero-image-wrapper rounded-3 overflow-hidden border bg-light shadow-2xs position-relative" style="min-height: 250px; max-height: 320px; height: 260px;">
+                <img *ngIf="activeEditPriceImage || selectedRoomForPrice.imageUrl"
+                     [src]="activeEditPriceImage || selectedRoomForPrice.imageUrl"
+                     [alt]="selectedRoomForPrice.roomTypeName"
+                     class="w-100 h-100 object-fit-cover"
+                     (error)="activeEditPriceImage = ''" />
+                <div *ngIf="!activeEditPriceImage && !selectedRoomForPrice.imageUrl" class="w-100 h-100 d-flex flex-column align-items-center justify-content-center text-muted p-4">
+                  <i class="fa-solid fa-bed fs-1 text-secondary opacity-40 mb-2"></i>
+                  <span class="small fw-medium text-secondary">No image available for this room type</span>
+                </div>
+              </div>
+
+              <!-- Thumbnails Underneath (Matching Reference Image 2) -->
+              <div class="d-flex gap-2 mt-2.5">
+                <div *ngFor="let thumb of getBasePriceModalThumbnails()"
+                     class="room-thumb-preview rounded-3 overflow-hidden border position-relative"
+                     [class.border-cyan]="activeEditPriceImage === thumb"
+                     [class.border-2]="activeEditPriceImage === thumb"
+                     style="width: 80px; height: 60px; cursor: pointer;"
+                     (click)="activeEditPriceImage = thumb">
+                  <img [src]="thumb" class="w-100 h-100 object-fit-cover" alt="Room Angle" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: Room Information and Pricing -->
+            <div class="col-12 col-md-7 d-flex flex-column">
+
+              <!-- Room Title & Active Status Badge -->
+              <div class="d-flex align-items-center justify-content-between gap-3 mb-3 pb-1">
+                <h4 class="fw-bold text-dark mb-0 text-truncate" [title]="selectedRoomForPrice.roomTypeName">
+                  {{ selectedRoomForPrice.roomTypeName }}
+                </h4>
+                <span class="badge-status-active">
+                  Active
+                </span>
+              </div>
+
+              <!-- Section 1: Basic Information Card -->
+              <div class="room-detail-info-card bg-white rounded-3 border p-3 mb-3 shadow-2xs">
+                <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom border-light-subtle">
+                  <i class="fa-solid fa-bed text-cyan"></i>
+                  <span class="fw-bold text-dark small">Basic Information</span>
+                </div>
+                <div class="detail-info-rows">
+                  <div class="detail-info-row d-flex align-items-center justify-content-between py-2 border-bottom border-light-subtle small">
+                    <span class="text-secondary d-inline-flex align-items-center">
+                      <i class="fa-solid fa-tag me-2 text-muted"></i>
+                      Room Type ID
+                    </span>
+                    <span class="fw-semibold text-dark">{{ formatRoomTypeId(selectedRoomForPrice.id) }}</span>
+                  </div>
+                  <div class="detail-info-row d-flex align-items-center justify-content-between py-2 border-bottom border-light-subtle small">
+                    <span class="text-secondary d-inline-flex align-items-center">
+                      <i class="fa-solid fa-door-closed me-2 text-muted"></i>
+                      Total Rooms
+                    </span>
+                    <span class="fw-semibold text-dark">{{ selectedRoomForPrice.totalRooms }}</span>
+                  </div>
+                  <div class="detail-info-row d-flex align-items-center justify-content-between py-2 small">
+                    <span class="text-secondary d-inline-flex align-items-center">
+                      <i class="fa-solid fa-users me-2 text-muted"></i>
+                      Maximum Occupancy
+                    </span>
+                    <span class="fw-semibold text-dark">{{ selectedRoomForPrice.maxOccupancy }} Guests</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 2: Base Price Card -->
+              <div class="room-detail-info-card bg-white rounded-3 border p-3 mb-3 shadow-2xs">
+                <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom border-light-subtle">
+                  <i class="fa-solid fa-tag text-cyan"></i>
+                  <span class="fw-bold text-dark small">Base Price</span>
+                </div>
+                <div class="pt-1">
+                  <label class="form-label text-dark fw-semibold small mb-1.5">
+                    Base Price (per night) <span class="text-danger">*</span>
+                  </label>
+                  <div class="input-group">
+                    <span class="input-group-text bg-light text-dark fw-bold px-3">₹</span>
+                    <input type="number"
+                           class="form-control form-control-lg fw-semibold shadow-none"
+                           [(ngModel)]="editBasePriceValue"
+                           (input)="validateBasePriceInput()"
+                           placeholder="4500"
+                           min="1"
+                           step="0.01" />
+                  </div>
+                  <div *ngIf="editBasePriceInputError" class="text-danger small mt-1.5 d-flex align-items-center gap-1">
+                    <i class="fa-solid fa-circle-exclamation"></i>
+                    <span>{{ editBasePriceInputError }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section 3: Informational Note Panel -->
+              <div class="rounded-3 p-3 shadow-2xs" style="background-color: #f0fdfa; border: 1px solid #99f6e4;">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                  <i class="fa-solid fa-circle-info text-cyan"></i>
+                  <span class="fw-bold small" style="color: #0f766e;">Note</span>
+                </div>
+                <ul class="mb-0 ps-3 small text-secondary" style="font-size: 0.85rem; line-height: 1.55;">
+                  <li>This is the default nightly price for this room type.</li>
+                  <li>Date-specific price overrides (if any) will continue to take precedence.</li>
+                  <li>Existing bookings will not be affected.</li>
+                </ul>
+              </div>
+
+              <!-- Backend Submission Error Banner -->
+              <div *ngIf="editBasePriceError" class="alert alert-danger small py-2 px-3 mt-3 mb-0 border-0 d-flex align-items-center gap-2" style="background-color: #fef2f2; color: #991b1b;">
+                <i class="fa-solid fa-circle-xmark fs-6 text-danger"></i>
+                <span>{{ editBasePriceError }}</span>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Modal Footer -->
+          <div class="d-flex align-items-center justify-content-end gap-2 pt-4 mt-3 border-top border-light-subtle">
+            <button type="button"
+                    class="btn btn-outline-secondary rounded-pill px-4 fw-semibold"
+                    (click)="closeEditBasePriceModal()">
+              Cancel
+            </button>
+            <button type="button"
+                    class="btn btn-teal-submit text-white rounded-pill px-4 fw-semibold d-inline-flex align-items-center gap-2"
+                    [disabled]="isUpdatingBasePrice"
+                    (click)="submitUpdateBasePrice()">
+              <i *ngIf="!isUpdatingBasePrice" class="fa-solid fa-pen-to-square"></i>
+              <span *ngIf="isUpdatingBasePrice" class="spinner-border spinner-border-sm"></span>
+              <span>Update Price</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ==================== MODAL 1: CREATE ROOM BLOCK OVERLAY (WP-07.3 / REF 2) ==================== -->
+      <div *ngIf="showCreateBlockModal"
+           class="modal-backdrop-custom d-flex align-items-center justify-content-center"
+           (click)="closeCreateBlockModal()"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="createBlockModalTitle">
+
+        <div class="modal-dialog-custom room-details-modal-card bg-white rounded-4 shadow-lg p-4 p-md-5"
+             style="max-width: 900px; width: 92%; max-height: 90vh; overflow-y: auto;"
+             (click)="showCreateBlockDateDropdown = false; $event.stopPropagation()">
+
+          <!-- Header -->
+          <div class="d-flex align-items-start justify-content-between pb-3 mb-4 border-bottom border-light-subtle">
+            <div class="d-flex align-items-center gap-3">
+              <div class="metric-icon-box bg-cyan-light text-cyan rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px;">
+                <i class="fa-regular fa-calendar-plus fs-4"></i>
+              </div>
+              <div>
+                <h4 class="fw-bold text-dark mb-0" id="createBlockModalTitle">Create Room Block</h4>
+                <p class="text-muted small mb-0">Block a number of rooms for a specific period.</p>
+              </div>
+            </div>
+            <button type="button" class="btn-close ms-2" (click)="closeCreateBlockModal()" aria-label="Close" title="Close modal (Esc)"></button>
+          </div>
+
+          <!-- Two-Column Layout -->
+          <div class="row g-4 align-items-stretch mb-4">
+            <!-- Left Column: Room Images -->
+            <div class="col-12 col-md-5 d-flex flex-column">
+              <!-- Main Image -->
+              <div class="rounded-4 overflow-hidden border bg-light shadow-2xs position-relative" style="min-height: 250px; max-height: 320px; height: 260px;">
+                <img *ngIf="createBlockMainImage"
+                     [src]="createBlockMainImage"
+                     alt="Room Type"
+                     class="w-100 h-100 object-fit-cover"
+                     (error)="createBlockMainImage = 'https://images.unsplash.com/photo-1590490360182-c33d57733427'" />
+                <div *ngIf="!createBlockMainImage" class="w-100 h-100 d-flex flex-column align-items-center justify-content-center text-muted p-4 text-center">
+                  <i class="fa-regular fa-image fs-1 mb-2 opacity-50"></i>
+                  <span class="small">Select a room type to view room images</span>
+                </div>
+              </div>
+
+              <!-- Thumbnails -->
+              <div *ngIf="createBlockThumbnails.length > 1" class="d-flex align-items-center gap-2 mt-3 overflow-x-auto pb-1">
+                <div *ngFor="let thumb of createBlockThumbnails; let idx = index"
+                     class="rounded-3 overflow-hidden border flex-shrink-0 cursor-pointer room-thumb-preview"
+                     [class.border-cyan]="idx === createBlockActiveThumbIndex"
+                     [style.border-width.px]="idx === createBlockActiveThumbIndex ? 2 : 1"
+                     style="width: 70px; height: 50px;"
+                     (click)="selectCreateBlockThumb(idx, thumb)">
+                  <img [src]="thumb" alt="Thumbnail" class="w-100 h-100 object-fit-cover" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: Form Configuration -->
+            <div class="col-12 col-md-7 d-flex flex-column gap-3">
+              <!-- Error Banner -->
+              <div *ngIf="createBlockError" class="alert alert-danger d-flex align-items-center gap-2 py-2.5 px-3 rounded-3 small mb-0 border-0" style="background-color: #fef2f2; color: #991b1b;">
+                <i class="fa-solid fa-circle-exclamation flex-shrink-0 fs-5"></i>
+                <span>{{ createBlockError }}</span>
+              </div>
+
+              <!-- Section A: Room Type Selection -->
+              <div class="card p-3 rounded-4 border bg-white shadow-2xs">
+                <div class="d-flex align-items-center gap-2 mb-2 text-dark fw-bold small">
+                  <i class="fa-solid fa-bed text-cyan"></i>
+                  <span>Room Type Selection</span>
+                </div>
+                <div>
+                  <label class="form-label small fw-semibold text-secondary mb-1">Room Type <span class="text-danger">*</span></label>
+                  <select class="form-select rounded-3 py-2 small"
+                          [ngModel]="createBlockSelectedRoomId"
+                          (change)="onSelectRoomTypeForBlock($event)">
+                    <option [ngValue]="null" disabled selected>Select Room Type...</option>
+                    <option *ngFor="let rt of activeRoomTypesForBlock" [value]="rt.id">{{ rt.roomTypeName }}</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Section B: Room Information (Restyled to match user screenshot) -->
+              <div class="card p-3 rounded-4 border bg-white shadow-2xs">
+                <div class="d-flex align-items-center gap-2 mb-3 text-dark fw-bold small">
+                  <i class="fa-solid fa-bed text-cyan fs-5"></i>
+                  <span class="fs-6">Room Information</span>
+                </div>
+                <div class="d-flex align-items-center">
+                  <!-- Left: Total Rooms -->
+                  <div class="d-flex align-items-center gap-3 flex-grow-1 pe-3">
+                    <i class="fa-solid fa-bed fs-4" style="color: #475569;"></i>
+                    <div class="d-flex flex-column">
+                      <span class="small fw-medium" style="color: #475569; font-size: 0.85rem;">Total Rooms</span>
+                      <span class="fw-bold fs-5 text-dark lh-1 mt-1">{{ selectedRoomTypeForBlock?.totalRooms || '-' }}</span>
+                    </div>
+                  </div>
+
+                  <!-- Vertical Divider -->
+                  <div class="vr" style="height: 38px; color: #cbd5e1; opacity: 1;"></div>
+
+                  <!-- Right: Maximum Occupancy -->
+                  <div class="d-flex align-items-center gap-3 flex-grow-1 ps-4">
+                    <i class="fa-solid fa-users fs-4" style="color: #475569;"></i>
+                    <div class="d-flex flex-column">
+                      <span class="small fw-medium" style="color: #475569; font-size: 0.85rem;">Maximum Occupancy</span>
+                      <span class="fw-bold fs-5 text-dark lh-1 mt-1">{{ selectedRoomTypeForBlock?.maxOccupancy ? (selectedRoomTypeForBlock.maxOccupancy + ' Guests') : '-' }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Section C: Block Details -->
+              <div class="card p-3 rounded-4 border bg-white shadow-2xs">
+                <div class="d-flex align-items-center gap-2 mb-3 text-dark fw-bold small">
+                  <i class="fa-solid fa-ban text-cyan"></i>
+                  <span>Block Details</span>
+                </div>
+
+                <!-- Blocked Rooms and Date Range Row -->
+                <div class="row g-3 mb-3">
+                  <div class="col-12 col-sm-5">
+                    <label class="form-label small fw-semibold text-secondary mb-1">Blocked Rooms <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                      <button type="button" class="btn btn-outline-secondary btn-sm px-2.5" (click)="decrementCreateBlockCount()">-</button>
+                      <input type="number" class="form-control form-control-sm text-center fw-bold" min="1" [(ngModel)]="createBlockCount" />
+                      <button type="button" class="btn btn-outline-secondary btn-sm px-2.5" (click)="incrementCreateBlockCount()">+</button>
+                    </div>
+                  </div>
+                  <div class="col-12 col-sm-7 position-relative">
+                    <label class="form-label small fw-semibold text-secondary mb-1">Date Range <span class="text-danger">*</span></label>
+                    <button type="button"
+                            class="form-control form-control-sm text-start d-flex align-items-center justify-content-between rounded-3 py-2 bg-white"
+                            [ngStyle]="showCreateBlockDateDropdown ? {'border': '1.5px solid #93c5fd', 'box-shadow': '0 0 0 3px rgba(147, 197, 253, 0.45)'} : {'border': '1px solid #cbd5e1'}"
+                            (click)="toggleCreateBlockDateDropdown(); $event.stopPropagation()">
+                      <span class="d-flex align-items-center gap-2 text-truncate">
+                        <i class="fa-regular fa-calendar text-muted"></i>
+                        <span class="text-truncate small text-dark">{{ getCreateBlockDateLabel() }}</span>
+                      </span>
+                      <i class="fa-solid fa-chevron-down text-muted small ms-1"></i>
+                    </button>
+
+                    <!-- Dropdown Popover matching user screenshot -->
+                    <div *ngIf="showCreateBlockDateDropdown"
+                         class="position-absolute bg-white rounded-3 border p-3 mt-1 z-3"
+                         style="width: 290px; right: 0; top: 100%; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1); z-index: 1060;"
+                         (click)="$event.stopPropagation()">
+                      <div class="mb-2">
+                        <label class="form-label small fw-semibold text-secondary mb-1">Start Date</label>
+                        <input type="date"
+                               class="form-control form-control-sm rounded-2"
+                               [(ngModel)]="createBlockStartDate" />
+                      </div>
+                      <div class="mb-3">
+                        <label class="form-label small fw-semibold text-secondary mb-1">End Date (Exclusive)</label>
+                        <input type="date"
+                               class="form-control form-control-sm rounded-2"
+                               [(ngModel)]="createBlockEndDate" />
+                      </div>
+                      <div class="d-flex justify-content-end gap-2 pt-1">
+                        <button type="button"
+                                class="btn btn-sm rounded-pill px-3 py-1 bg-white"
+                                style="border: 1px solid #cbd5e1; color: #475569;"
+                                (click)="clearCreateBlockDateRange()">
+                          Clear
+                        </button>
+                        <button type="button"
+                                class="btn btn-sm text-white rounded-pill px-3 py-1 fw-medium"
+                                style="background-color: #0d9488; border: none;"
+                                (click)="applyCreateBlockDateRange()">
+                          Apply
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Reason Row -->
+                <div class="mb-3">
+                  <label class="form-label small fw-semibold text-secondary mb-1">Reason <span class="text-danger">*</span></label>
+                  <select class="form-select form-select-sm rounded-3" [(ngModel)]="createBlockReason">
+                    <option value="OPERATIONAL">Corporate group booking</option>
+                    <option value="MAINTENANCE">Maintenance (AC service)</option>
+                    <option value="RENOVATION">Renovation</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+
+                <!-- Notes Row with 250 Char Limit -->
+                <div>
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label small fw-semibold text-secondary mb-0">Notes (Optional)</label>
+                    <span class="text-muted" style="font-size: 0.75rem;">{{ (createBlockNotes || '').length }} / 250</span>
+                  </div>
+                  <textarea class="form-control form-control-sm rounded-3"
+                            rows="2"
+                            maxlength="250"
+                            placeholder="Add any additional details about this block..."
+                            [(ngModel)]="createBlockNotes"></textarea>
+                </div>
+              </div>
+
+              <!-- Section D: Informational Note Panel -->
+              <div class="p-3 rounded-3 d-flex align-items-start gap-2" style="background-color: #f0fdfa; border: 1px solid #99f6e4;">
+                <i class="fa-solid fa-circle-info text-cyan mt-0.5"></i>
+                <div class="small" style="color: #0f766e;">
+                  <div class="fw-bold mb-1">Note</div>
+                  <ul class="mb-0 ps-3">
+                    <li>Blocked rooms will not be available for new bookings during the selected period.</li>
+                    <li>The end date is exclusive (e.g., Apr 10 – Apr 15 blocks Apr 10 to Apr 14).</li>
+                  </ul>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Footer Actions -->
+          <div class="d-flex justify-content-end gap-2 pt-3 border-top border-light-subtle">
+            <button type="button" class="btn btn-outline-secondary rounded-pill px-4 fw-medium" (click)="closeCreateBlockModal()">
+              Cancel
+            </button>
+            <button type="button"
+                    class="btn text-white rounded-pill px-4 fw-semibold d-inline-flex align-items-center gap-2"
+                    style="background-color: #0d9488;"
+                    [disabled]="isCreatingBlock"
+                    (click)="submitCreateBlock()">
+              <i *ngIf="!isCreatingBlock" class="fa-solid fa-plus"></i>
+              <span *ngIf="isCreatingBlock" class="spinner-border spinner-border-sm"></span>
+              <span>Create Block</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ==================== MODAL 2: ROOM BLOCK DETAILS OVERLAY (WP-07.3 / REF 3) ==================== -->
+      <div *ngIf="showBlockDetailsModal"
+           class="modal-backdrop-custom d-flex align-items-center justify-content-center"
+           (click)="closeBlockDetailsModal()"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="blockDetailsModalTitle">
+
+        <div class="modal-dialog-custom room-details-modal-card bg-white rounded-4 shadow-lg p-4 p-md-5"
+             style="max-width: 880px; width: 92%; max-height: 90vh; overflow-y: auto;"
+             (click)="$event.stopPropagation()">
+
+          <!-- Header -->
+          <div class="d-flex align-items-start justify-content-between pb-3 mb-4 border-bottom border-light-subtle">
+            <div class="d-flex align-items-center gap-3">
+              <div class="metric-icon-box bg-cyan-light text-cyan rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px;">
+                <i class="fa-regular fa-eye fs-4"></i>
+              </div>
+              <div>
+                <h4 class="fw-bold text-dark mb-0" id="blockDetailsModalTitle">Room Block Details</h4>
+                <p class="text-muted small mb-0">View the complete details of this room block.</p>
+              </div>
+            </div>
+            <button type="button" class="btn-close ms-2" (click)="closeBlockDetailsModal()" aria-label="Close" title="Close modal (Esc)"></button>
+          </div>
+
+          <!-- Two-Column Layout -->
+          <div *ngIf="selectedBlockForDetails" class="row g-4 align-items-stretch mb-4">
+            <!-- Left Column: Room Images -->
+            <div class="col-12 col-md-5 d-flex flex-column">
+              <!-- Main Image -->
+              <div class="rounded-4 overflow-hidden border bg-light shadow-2xs position-relative" style="min-height: 250px; max-height: 320px; height: 260px;">
+                <img [src]="blockDetailsMainImage"
+                     [alt]="getRoomNameForBlock(selectedBlockForDetails)"
+                     class="w-100 h-100 object-fit-cover"
+                     (error)="blockDetailsMainImage = 'https://images.unsplash.com/photo-1590490360182-c33d57733427'" />
+              </div>
+
+              <!-- Thumbnails -->
+              <div *ngIf="blockDetailsThumbnails.length > 1" class="d-flex align-items-center gap-2 mt-3 overflow-x-auto pb-1">
+                <div *ngFor="let thumb of blockDetailsThumbnails; let idx = index"
+                     class="rounded-3 overflow-hidden border flex-shrink-0 cursor-pointer room-thumb-preview"
+                     [class.border-cyan]="idx === blockDetailsActiveThumbIndex"
+                     [style.border-width.px]="idx === blockDetailsActiveThumbIndex ? 2 : 1"
+                     style="width: 70px; height: 50px;"
+                     (click)="selectBlockDetailsThumb(idx, thumb)">
+                  <img [src]="thumb" alt="Thumbnail" class="w-100 h-100 object-fit-cover" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: Details Information -->
+            <div class="col-12 col-md-7 d-flex flex-column gap-3">
+              <!-- Block ID & Status Banner -->
+              <div class="d-flex align-items-center justify-content-between">
+                <div class="fw-bold text-dark fs-5">
+                  Block ID: {{ selectedBlockForDetails.blockCode || formatBlockId(selectedBlockForDetails.id) }}
+                </div>
+                <span *ngIf="(selectedBlockForDetails.status || '').toUpperCase() === 'ACTIVE'"
+                      class="badge rounded-pill px-3 py-1.5 fw-semibold"
+                      style="background-color: #dcfce7; color: #15803d; font-size: 0.8rem;">
+                  Active
+                </span>
+                <span *ngIf="(selectedBlockForDetails.status || '').toUpperCase() === 'RELEASED'"
+                      class="badge rounded-pill px-3 py-1.5 fw-semibold"
+                      style="background-color: #f1f5f9; color: #64748b; font-size: 0.8rem;">
+                  Released
+                </span>
+              </div>
+
+              <!-- Room Information Card -->
+              <div class="card p-3 rounded-4 border bg-white shadow-2xs">
+                <div class="d-flex align-items-center gap-2 mb-2 text-dark fw-bold small">
+                  <i class="fa-solid fa-bed text-cyan"></i>
+                  <span>Room Information</span>
+                </div>
+                <div class="d-flex flex-column gap-2 small text-secondary">
+                  <div class="d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-bed text-muted" style="width: 16px;"></i>
+                    <span class="text-muted">Room Type:</span>
+                    <strong class="text-dark">{{ getRoomNameForBlock(selectedBlockForDetails) }}</strong>
+                  </div>
+                  <div class="row g-2 pt-1">
+                    <div class="col-6 d-flex align-items-center gap-2">
+                      <i class="fa-solid fa-border-all text-muted" style="width: 16px;"></i>
+                      <span class="text-muted">Total Rooms:</span>
+                      <strong class="text-dark">{{ getRoomTotalForBlock(selectedBlockForDetails) }}</strong>
+                    </div>
+                    <div class="col-6 d-flex align-items-center gap-2">
+                      <i class="fa-solid fa-users text-muted" style="width: 16px;"></i>
+                      <span class="text-muted">Max Occupancy:</span>
+                      <strong class="text-dark">{{ getRoomOccupancyForBlock(selectedBlockForDetails) }} Guests</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Block Details Card -->
+              <div class="card p-3 rounded-4 border bg-white shadow-2xs">
+                <div class="d-flex align-items-center gap-2 mb-2 text-dark fw-bold small">
+                  <i class="fa-solid fa-ban text-cyan"></i>
+                  <span>Block Details</span>
+                </div>
+                <div class="d-flex flex-column gap-2 small text-secondary">
+                  <div class="d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-bed text-muted" style="width: 16px;"></i>
+                    <span class="text-muted">Blocked Rooms:</span>
+                    <strong class="text-dark fs-6">{{ selectedBlockForDetails.blockedCount }}</strong>
+                  </div>
+                  <div class="row g-2">
+                    <div class="col-6 d-flex align-items-center gap-2">
+                      <i class="fa-regular fa-calendar text-muted" style="width: 16px;"></i>
+                      <span class="text-muted">Start Date:</span>
+                      <strong class="text-dark">{{ formatBlockDate(selectedBlockForDetails.startDate) }}</strong>
+                    </div>
+                    <div class="col-6 d-flex align-items-center gap-2">
+                      <i class="fa-regular fa-calendar-check text-muted" style="width: 16px;"></i>
+                      <span class="text-muted">End Date:</span>
+                      <strong class="text-dark">{{ formatBlockDate(selectedBlockForDetails.endDate) }}</strong>
+                    </div>
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-tag text-muted" style="width: 16px;"></i>
+                    <span class="text-muted">Reason:</span>
+                    <strong class="text-dark">{{ getReasonDisplay(selectedBlockForDetails.reason) }}</strong>
+                  </div>
+                  <div class="d-flex align-items-start gap-2">
+                    <i class="fa-solid fa-note-sticky text-muted mt-1" style="width: 16px;"></i>
+                    <span class="text-muted">Notes:</span>
+                    <span class="text-dark">{{ selectedBlockForDetails.notes || 'No additional notes' }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Informational Note Panel -->
+              <div class="p-3 rounded-3 d-flex align-items-start gap-2"
+                   [style.background-color]="(selectedBlockForDetails.status || '').toUpperCase() === 'ACTIVE' ? '#f0fdfa' : '#f8fafc'"
+                   [style.border]="(selectedBlockForDetails.status || '').toUpperCase() === 'ACTIVE' ? '1px solid #99f6e4' : '1px solid #e2e8f0'">
+                <i class="fa-solid fa-circle-info text-cyan mt-0.5"></i>
+                <div class="small" [style.color]="(selectedBlockForDetails.status || '').toUpperCase() === 'ACTIVE' ? '#0f766e' : '#64748b'">
+                  <div class="fw-bold mb-1">Note</div>
+                  <div *ngIf="(selectedBlockForDetails.status || '').toUpperCase() === 'ACTIVE'">
+                    <div>The blocked rooms are not available for new bookings during this period.</div>
+                    <div>The end date is exclusive ({{ formatBlockDate(selectedBlockForDetails.startDate) }} – {{ formatBlockDate(selectedBlockForDetails.endDate) }} blocks {{ formatBlockDate(selectedBlockForDetails.startDate) }} to {{ formatBlockDateExclusiveMinusOne(selectedBlockForDetails.endDate) }}).</div>
+                  </div>
+                  <div *ngIf="(selectedBlockForDetails.status || '').toUpperCase() === 'RELEASED'">
+                    This block has been released. Its historical record is retained for reference.
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Footer Actions -->
+          <div class="d-flex justify-content-end gap-2 pt-3 border-top border-light-subtle">
+            <button type="button" class="btn btn-outline-secondary rounded-pill px-4 fw-medium" (click)="closeBlockDetailsModal()">
+              Close
+            </button>
+            <button *ngIf="selectedBlockForDetails && (selectedBlockForDetails.status || '').toUpperCase() === 'ACTIVE'"
+                    type="button"
+                    class="btn text-white rounded-pill px-4 fw-semibold d-inline-flex align-items-center gap-2"
+                    style="background-color: #0d9488;"
+                    (click)="openReleaseFromDetails()">
+              <i class="fa-solid fa-rotate"></i>
+              <span>Release Block</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ==================== MODAL 3: RELEASE ROOM BLOCK CONFIRMATION (WP-07.3 / REF 4) ==================== -->
+      <div *ngIf="showReleaseBlockModal"
+           class="modal-backdrop-custom d-flex align-items-center justify-content-center"
+           (click)="closeReleaseBlockModal()"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="releaseBlockModalTitle">
+
+        <div class="modal-dialog-custom room-details-modal-card bg-white rounded-4 shadow-lg p-4 p-md-5"
+             style="max-width: 650px; width: 92%; max-height: 90vh; overflow-y: auto;"
+             (click)="$event.stopPropagation()">
+
+          <!-- Header -->
+          <div class="d-flex align-items-start justify-content-between pb-3 mb-4 border-bottom border-light-subtle">
+            <div class="d-flex align-items-center gap-3">
+              <div class="metric-icon-box bg-cyan-light text-cyan rounded-3 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px;">
+                <i class="fa-solid fa-rotate fs-4"></i>
+              </div>
+              <div>
+                <h4 class="fw-bold text-dark mb-0" id="releaseBlockModalTitle">Release Room Block</h4>
+                <p class="text-muted small mb-0">Are you sure you want to release this room block?</p>
+              </div>
+            </div>
+            <button type="button" class="btn-close ms-2" (click)="closeReleaseBlockModal()" aria-label="Close" title="Close modal (Esc)"></button>
+          </div>
+
+          <!-- Content: Block Info Card -->
+          <div *ngIf="blockToRelease" class="mb-4">
+            <!-- Error Banner -->
+            <div *ngIf="releaseBlockError" class="alert alert-danger d-flex align-items-center gap-2 py-2.5 px-3 rounded-3 small mb-3 border-0" style="background-color: #fef2f2; color: #991b1b;">
+              <i class="fa-solid fa-circle-exclamation flex-shrink-0 fs-5"></i>
+              <span>{{ releaseBlockError }}</span>
+            </div>
+
+            <!-- Block Info Row -->
+            <div class="card p-3 rounded-4 border bg-white mb-3 shadow-2xs">
+              <div class="row g-3 align-items-center">
+                <!-- Thumbnail -->
+                <div class="col-12 col-sm-4">
+                  <img [src]="getRoomImageForBlock(blockToRelease)"
+                       [alt]="getRoomNameForBlock(blockToRelease)"
+                       class="w-100 rounded-3 object-fit-cover border"
+                       style="height: 100px;"
+                       (error)="$any($event.target).src = 'https://images.unsplash.com/photo-1590490360182-c33d57733427'" />
+                </div>
+                <!-- Details -->
+                <div class="col-12 col-sm-8 d-flex flex-column gap-2 small">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <span class="fw-bold text-dark fs-6">Block ID: {{ blockToRelease.blockCode || formatBlockId(blockToRelease.id) }}</span>
+                    <span class="badge rounded-pill px-2.5 py-1 fw-semibold" style="background-color: #dcfce7; color: #15803d; font-size: 0.75rem;">Active</span>
+                  </div>
+                  <div class="d-flex align-items-center justify-content-between text-secondary">
+                    <span class="d-flex align-items-center gap-1.5"><i class="fa-solid fa-bed text-muted"></i> {{ getRoomNameForBlock(blockToRelease) }}</span>
+                    <span class="d-flex align-items-center gap-1.5 fw-bold text-dark"><i class="fa-solid fa-users text-muted"></i> {{ blockToRelease.blockedCount }} Blocked Rooms</span>
+                  </div>
+                  <div class="d-flex align-items-center justify-content-between text-muted" style="font-size: 0.8rem;">
+                    <span><i class="fa-regular fa-calendar text-muted"></i> {{ formatBlockDate(blockToRelease.startDate) }} – {{ formatBlockDate(blockToRelease.endDate) }}</span>
+                    <span><i class="fa-solid fa-tag text-muted"></i> {{ getReasonDisplay(blockToRelease.reason) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Warning Box (Amber) -->
+            <div class="p-3 rounded-3 d-flex align-items-start gap-3 border shadow-2xs"
+                 style="background-color: #fffbeb; border-color: #fde68a !important; color: #92400e;">
+              <i class="fa-solid fa-triangle-exclamation fs-4 flex-shrink-0 mt-0.5" style="color: #d97706;"></i>
+              <div>
+                <div class="fw-bold fs-6 mb-1">Releasing this block will make {{ blockToRelease.blockedCount }} rooms available for new bookings</div>
+                <div class="small">The rooms will be restored to the available inventory for the period {{ formatBlockDate(blockToRelease.startDate) }} – {{ formatBlockDate(blockToRelease.endDate) }}.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer Actions -->
+          <div class="d-flex justify-content-end gap-2 pt-3 border-top border-light-subtle">
+            <button type="button" class="btn btn-outline-secondary rounded-pill px-4 fw-medium" (click)="closeReleaseBlockModal()">
+              Cancel
+            </button>
+            <button type="button"
+                    class="btn text-white rounded-pill px-4 fw-semibold d-inline-flex align-items-center gap-2"
+                    style="background-color: #0d9488;"
+                    [disabled]="isReleasingBlock"
+                    (click)="confirmReleaseBlock()">
+              <i *ngIf="!isReleasingBlock" class="fa-solid fa-rotate"></i>
+              <span *ngIf="isReleasingBlock" class="spinner-border spinner-border-sm"></span>
+              <span>Release Block</span>
+            </button>
+          </div>
+
         </div>
       </div>
 

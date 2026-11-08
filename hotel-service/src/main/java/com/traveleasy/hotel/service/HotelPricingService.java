@@ -1,8 +1,10 @@
 package com.traveleasy.hotel.service;
 
+import com.traveleasy.hotel.dto.BasePriceUpdateRequestDto;
 import com.traveleasy.hotel.dto.PriceCalendarEntryDto;
 import com.traveleasy.hotel.dto.PriceOverrideRequestDto;
 import com.traveleasy.hotel.dto.PriceRangeOverrideRequestDto;
+import com.traveleasy.hotel.dto.RoomTypeDto;
 import com.traveleasy.hotel.dto.StayAvailabilityResponseDto.NightlyRateDto;
 import com.traveleasy.hotel.exception.DomainValidationException;
 import com.traveleasy.hotel.exception.OwnershipAccessDeniedException;
@@ -200,6 +202,35 @@ public class HotelPricingService {
             cur = cur.plusDays(1);
         }
         return calendar;
+    }
+
+    @Transactional
+    public RoomTypeDto updateBasePrice(Long roomId, BasePriceUpdateRequestDto dto, CallerPrincipal principal) {
+        if (principal == null) {
+            throw new OwnershipAccessDeniedException("Access denied: Authentication required");
+        }
+
+        RoomType roomType = validateOwnershipAndGetRoom(roomId, principal);
+
+        if (dto == null || dto.getBasePrice() == null) {
+            throw new DomainValidationException("Base price is mandatory");
+        }
+        if (dto.getBasePrice() <= 0 || Double.isNaN(dto.getBasePrice()) || Double.isInfinite(dto.getBasePrice())) {
+            throw new DomainValidationException("Base price must be a valid positive number greater than zero");
+        }
+
+        if ("ARCHIVED".equalsIgnoreCase(roomType.getStatus())) {
+            throw new DomainValidationException("Cannot update base price for an archived room category");
+        }
+
+        double roundedPrice = Math.round(dto.getBasePrice() * 100.0) / 100.0;
+        roomType.setPricePerNight(roundedPrice);
+        RoomType saved = roomTypeRepository.save(roomType);
+
+        log.info("Updated base price for roomId {} to {} by user {}",
+                roomId, roundedPrice, principal.userId());
+
+        return RoomTypeDto.fromEntity(saved);
     }
 
     private RoomType validateOwnershipAndGetRoom(Long roomId, CallerPrincipal principal) {

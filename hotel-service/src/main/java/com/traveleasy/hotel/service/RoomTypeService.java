@@ -214,6 +214,38 @@ public class RoomTypeService {
         return archived;
     }
 
+    @Transactional
+    public RoomType restoreRoomType(Long roomId, CallerPrincipal principal) {
+        validatePrincipal(principal);
+
+        RoomType roomType = roomTypeRepository.findById(roomId)
+                .orElseThrow(() -> new ResourceNotFoundException("Room category not found with ID: " + roomId));
+
+        HotelProperty hotel = hotelRepository.findById(roomType.getHotelId())
+                .orElseThrow(() -> new ResourceNotFoundException("Parent hotel property not found with ID: " + roomType.getHotelId()));
+
+        enforcePropertyOwnership(hotel, principal);
+
+        if (!"ARCHIVED".equalsIgnoreCase(roomType.getStatus())) {
+            throw new DomainValidationException("Room category is not archived (current status: " + roomType.getStatus() + ")");
+        }
+
+        // Check if an active room category with the same name already exists in this property
+        Optional<RoomType> existingActive = roomTypeRepository.findByHotelIdAndRoomTypeNameIgnoreCaseAndStatus(
+                roomType.getHotelId(), roomType.getRoomTypeName().trim(), "ACTIVE");
+        if (existingActive.isPresent() && !existingActive.get().getId().equals(roomId)) {
+            throw new DomainValidationException("Cannot restore room category: an active room category with name '"
+                    + roomType.getRoomTypeName().trim() + "' already exists for this property");
+        }
+
+        roomType.setStatus("ACTIVE");
+        roomType.setAvailableRooms(roomType.getTotalRooms() != null ? roomType.getTotalRooms() : 0);
+
+        RoomType restored = roomTypeRepository.save(roomType);
+        log.info("Room category ID {} restored to ACTIVE by user ID: {}", roomId, principal.userId());
+        return restored;
+    }
+
     @Transactional(readOnly = true)
     public List<RoomType> getRoomTypesByHotel(Long hotelId, CallerPrincipal principal) {
         boolean isOwnerOrAdmin = false;

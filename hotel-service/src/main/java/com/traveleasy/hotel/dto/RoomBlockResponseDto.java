@@ -23,4 +23,8 @@ public class RoomBlockResponseDto {
     private String status;
     private LocalDateTime createdAt;
     private LocalDateTime releasedAt;
+    private String imageUrl;
+    private Integer totalRooms;
+    private Integer maxOccupancy;
+    private String blockCode;
 }
