@@ -1082,6 +1082,258 @@ public class HotelPropertyService {
         return updated;
     }
 
+    @Transactional
+    public HotelManageDto updatePropertyFull(Long hotelId, HotelManageUpdateRequestDto request, CallerPrincipal principal) {
+        validatePrincipal(principal);
+        if (request == null) {
+            throw new DomainValidationException("Property update payload cannot be null");
+        }
+
+        HotelProperty property = hotelRepository.findById(hotelId)
+                .orElseThrow(() -> new ResourceNotFoundException("Hotel property not found with ID: " + hotelId));
+
+        enforcePropertyOwnership(property, principal);
+
+        // 1. Validate Step 1 fields
+        if (request.getName() == null || request.getName().trim().isEmpty()) {
+            throw new DomainValidationException("Property name is required");
+        }
+        if (request.getPropertyType() == null || request.getPropertyType().trim().isEmpty()) {
+            throw new DomainValidationException("Property type is required");
+        }
+        if (request.getPropertySegment() == null || request.getPropertySegment().trim().isEmpty()) {
+            throw new DomainValidationException("Property segment is required");
+        }
+        if (request.getDescription() == null || request.getDescription().trim().isEmpty()) {
+            throw new DomainValidationException("Property description is required");
+        }
+
+        // Validate images (between 1 and 4 images, exactly one cover)
+        List<HotelImageDto> imageDtos = request.getImages() != null ? request.getImages() : Collections.emptyList();
+        if (imageDtos.isEmpty() || imageDtos.size() > 4) {
+            throw new DomainValidationException("Between 1 and 4 images must be provided");
+        }
+        for (HotelImageDto img : imageDtos) {
+            if (img.getImageUrl() == null || img.getImageUrl().trim().isEmpty()) {
+                throw new DomainValidationException("Each image must have a valid image URL");
+            }
+        }
+        long coverCount = imageDtos.stream().filter(HotelImageDto::isCover).count();
+        if (coverCount == 0) {
+            imageDtos.get(0).setCover(true);
+        } else if (coverCount > 1) {
+            boolean firstCoverSet = false;
+            for (HotelImageDto img : imageDtos) {
+                if (img.isCover()) {
+                    if (!firstCoverSet) {
+                        firstCoverSet = true;
+                    } else {
+                        img.setCover(false);
+                    }
+                }
+            }
+        }
+
+        // 2. Validate Step 2 fields
+        if (request.getAddressLine1() == null || request.getAddressLine1().trim().isEmpty()) {
+            throw new DomainValidationException("Address Line 1 is required");
+        }
+        if (request.getCountry() == null || request.getCountry().trim().isEmpty()) {
+            throw new DomainValidationException("Country is required");
+        }
+        if (request.getState() == null || request.getState().trim().isEmpty()) {
+            throw new DomainValidationException("State is required");
+        }
+        if (request.getCity() == null || request.getCity().trim().isEmpty()) {
+            throw new DomainValidationException("City is required");
+        }
+        if (request.getPostalCode() == null || request.getPostalCode().trim().isEmpty()) {
+            throw new DomainValidationException("Postal Code is required");
+        }
+
+        // 3. Validate Step 3 fields
+        if (request.getPropertyContactNumber() == null || request.getPropertyContactNumber().trim().isEmpty()) {
+            throw new DomainValidationException("Property Contact Number is required");
+        }
+        if (request.getPropertyEmail() == null || request.getPropertyEmail().trim().isEmpty()) {
+            throw new DomainValidationException("Property Email Address is required");
+        }
+        if (request.getRegisteredBusinessName() == null || request.getRegisteredBusinessName().trim().isEmpty()) {
+            throw new DomainValidationException("Registered Business Name is required");
+        }
+        if (request.getBusinessRegistrationType() == null || request.getBusinessRegistrationType().trim().isEmpty()) {
+            throw new DomainValidationException("Business Registration Type is required");
+        }
+        if (request.getBusinessRegistrationNumber() == null || request.getBusinessRegistrationNumber().trim().isEmpty()) {
+            throw new DomainValidationException("Business Registration Number is required");
+        }
+        if (request.getPropertyManagerName() == null || request.getPropertyManagerName().trim().isEmpty()) {
+            throw new DomainValidationException("Property Manager Full Name is required");
+        }
+        if (request.getPropertyManagerDesignation() == null || request.getPropertyManagerDesignation().trim().isEmpty()) {
+            throw new DomainValidationException("Property Manager Designation is required");
+        }
+        if (request.getPropertyManagerContactNumber() == null || request.getPropertyManagerContactNumber().trim().isEmpty()) {
+            throw new DomainValidationException("Property Manager Contact Number is required");
+        }
+        if (request.getPropertyManagerEmail() == null || request.getPropertyManagerEmail().trim().isEmpty()) {
+            throw new DomainValidationException("Property Manager Email Address is required");
+        }
+        if (request.getCheckInTime() == null || request.getCheckInTime().trim().isEmpty()) {
+            throw new DomainValidationException("Check-in Time is required");
+        }
+        if (request.getCheckOutTime() == null || request.getCheckOutTime().trim().isEmpty()) {
+            throw new DomainValidationException("Check-out Time is required");
+        }
+        if (request.getReceptionAvailability() == null || request.getReceptionAvailability().trim().isEmpty()) {
+            throw new DomainValidationException("Reception Availability is required");
+        }
+
+        // 4. Validate Step 4 fields
+        if (request.getChildrenPolicy() == null || request.getChildrenPolicy().trim().isEmpty()) {
+            throw new DomainValidationException("Children policy is required");
+        }
+        if (request.getPetPolicy() == null || request.getPetPolicy().trim().isEmpty()) {
+            throw new DomainValidationException("Pet policy is required");
+        }
+        if (request.getSmokingPolicy() == null || request.getSmokingPolicy().trim().isEmpty()) {
+            throw new DomainValidationException("Smoking policy is required");
+        }
+        if (request.getExtraBedPolicy() == null || request.getExtraBedPolicy().trim().isEmpty()) {
+            throw new DomainValidationException("Extra bed policy is required");
+        }
+        if (request.getAcceptedIdentificationTypes() == null || request.getAcceptedIdentificationTypes().isEmpty()) {
+            throw new DomainValidationException("At least one accepted identification type is required");
+        }
+
+        // Apply Step 1 updates
+        property.setName(request.getName().trim());
+        property.setPropertyType(request.getPropertyType().trim());
+        property.setPropertyClassification(request.getPropertyClassification() != null ? request.getPropertyClassification().trim() : null);
+        property.setCustomClassification(request.getCustomClassification() != null ? request.getCustomClassification().trim() : null);
+        property.setPropertySegment(request.getPropertySegment().trim());
+        property.setBrandName(request.getBrandName() != null ? request.getBrandName().trim() : null);
+        property.setDescription(request.getDescription().trim());
+
+        // Derive starRating if applicable
+        if (request.getPropertyClassification() != null) {
+            String pc = request.getPropertyClassification().toUpperCase();
+            if (pc.contains("5_STAR")) property.setStarRating(5);
+            else if (pc.contains("4_STAR")) property.setStarRating(4);
+            else if (pc.contains("3_STAR")) property.setStarRating(3);
+            else if (pc.contains("2_STAR")) property.setStarRating(2);
+            else if (pc.contains("1_STAR")) property.setStarRating(1);
+        }
+
+        // Apply Step 2 updates
+        property.setAddressLine1(request.getAddressLine1().trim());
+        property.setAddressLine2(request.getAddressLine2() != null ? request.getAddressLine2().trim() : null);
+        property.setCountry(request.getCountry().trim());
+        property.setState(request.getState().trim());
+        property.setCity(request.getCity().trim());
+        property.setPostalCode(request.getPostalCode().trim());
+        property.setLandmark(request.getLandmark() != null ? request.getLandmark().trim() : null);
+        property.setAddress(buildLegacyAddress(property));
+
+        // Apply Step 3 updates
+        property.setPropertyContactNumber(request.getPropertyContactNumber().trim());
+        property.setAlternateContactNumber(request.getAlternateContactNumber() != null ? request.getAlternateContactNumber().trim() : null);
+        property.setPropertyEmail(request.getPropertyEmail().trim().toLowerCase());
+        property.setWebsiteUrl(request.getWebsiteUrl() != null ? request.getWebsiteUrl().trim() : null);
+        property.setRegisteredBusinessName(request.getRegisteredBusinessName().trim());
+        property.setBusinessRegistrationType(request.getBusinessRegistrationType().trim());
+        property.setOtherBusinessRegistrationType(request.getOtherBusinessRegistrationType() != null ? request.getOtherBusinessRegistrationType().trim() : null);
+        property.setBusinessRegistrationNumber(request.getBusinessRegistrationNumber().trim());
+        property.setRegisteredBusinessAddress(request.getRegisteredBusinessAddress() != null ? request.getRegisteredBusinessAddress().trim() : null);
+        property.setIsGstRegistered(Boolean.TRUE.equals(request.getIsGstRegistered()));
+        property.setGstin(request.getGstin() != null ? request.getGstin().trim() : null);
+        property.setGstLegalName(request.getGstLegalName() != null ? request.getGstLegalName().trim() : null);
+        property.setGstState(request.getGstState() != null ? request.getGstState().trim() : null);
+
+        property.setPropertyManagerName(request.getPropertyManagerName().trim());
+        property.setPropertyManagerDesignation(request.getPropertyManagerDesignation().trim());
+        property.setPropertyManagerContactNumber(request.getPropertyManagerContactNumber().trim());
+        property.setPropertyManagerEmail(request.getPropertyManagerEmail().trim().toLowerCase());
+
+        property.setCheckInTime(request.getCheckInTime().trim());
+        property.setCheckOutTime(request.getCheckOutTime().trim());
+        property.setReceptionAvailability(request.getReceptionAvailability().trim());
+        property.setReceptionOpeningTime(request.getReceptionOpeningTime() != null ? request.getReceptionOpeningTime().trim() : null);
+        property.setReceptionClosingTime(request.getReceptionClosingTime() != null ? request.getReceptionClosingTime().trim() : null);
+
+        // Apply Step 4 updates
+        try {
+            property.setPredefinedAmenities(OBJECT_MAPPER.writeValueAsString(request.getPredefinedAmenities() != null ? request.getPredefinedAmenities() : Collections.emptyList()));
+            property.setCustomAmenities(OBJECT_MAPPER.writeValueAsString(request.getCustomAmenities() != null ? request.getCustomAmenities() : Collections.emptyList()));
+            property.setAcceptedIdentificationTypes(OBJECT_MAPPER.writeValueAsString(request.getAcceptedIdentificationTypes() != null ? request.getAcceptedIdentificationTypes() : Collections.emptyList()));
+        } catch (Exception e) {
+            log.error("Failed to serialize policies or amenities to JSON for hotel ID: {}", hotelId, e);
+        }
+        property.setChildrenPolicy(request.getChildrenPolicy().trim());
+        property.setPetPolicy(request.getPetPolicy().trim());
+        property.setSmokingPolicy(request.getSmokingPolicy().trim());
+        property.setExtraBedPolicy(request.getExtraBedPolicy().trim());
+        property.setCustomIdentificationType(request.getCustomIdentificationType() != null ? request.getCustomIdentificationType().trim() : null);
+        property.setAdditionalRules(request.getAdditionalRules() != null ? request.getAdditionalRules().trim() : null);
+
+        // Update legacy amenities comma-separated string for backward compatibility
+        List<String> combinedAmenities = new ArrayList<>();
+        if (request.getPredefinedAmenities() != null) combinedAmenities.addAll(request.getPredefinedAmenities());
+        if (request.getCustomAmenities() != null) combinedAmenities.addAll(request.getCustomAmenities());
+        if (!combinedAmenities.isEmpty()) {
+            property.setAmenities(String.join(", ", combinedAmenities));
+        }
+
+        // Set cover image URL on property
+        HotelImageDto coverDto = imageDtos.stream()
+                .filter(HotelImageDto::isCover)
+                .findFirst()
+                .orElse(imageDtos.get(0));
+        property.setImageUrl(coverDto.getImageUrl());
+
+        // Process image changes and file cleanup
+        List<HotelImage> oldImages = hotelImageRepository.findByHotelIdOrderByDisplayOrderAsc(hotelId);
+        Set<String> newUrls = imageDtos.stream()
+                .map(HotelImageDto::getImageUrl)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .collect(Collectors.toSet());
+
+        for (HotelImage oldImg : oldImages) {
+            if (oldImg.getImageUrl() != null && !newUrls.contains(oldImg.getImageUrl().trim())) {
+                String filename = HotelImageStorageService.extractFilenameFromUrl(oldImg.getImageUrl());
+                if (filename != null) {
+                    imageStorageService.deleteImage(filename);
+                    log.info("Cleaned up removed hotel image file: {}", filename);
+                }
+            }
+        }
+
+        // Delete previous image records and re-persist the updated collection
+        hotelImageRepository.deleteByHotelId(hotelId);
+
+        List<HotelImage> imageEntities = new ArrayList<>();
+        for (int i = 0; i < imageDtos.size(); i++) {
+            HotelImageDto imgDto = imageDtos.get(i);
+            HotelImage img = HotelImage.builder()
+                    .hotelId(hotelId)
+                    .imageUrl(imgDto.getImageUrl().trim())
+                    .originalFileName(imgDto.getOriginalFileName())
+                    .isCover(imgDto.isCover())
+                    .displayOrder(imgDto.getDisplayOrder() >= 0 ? imgDto.getDisplayOrder() : i)
+                    .build();
+            imageEntities.add(img);
+        }
+        List<HotelImage> savedImages = hotelImageRepository.saveAll(imageEntities);
+
+        // Save property - protected data (status, managerId, registrationStep, submittedAt, activatedAt) are preserved!
+        HotelProperty savedProperty = hotelRepository.save(property);
+        log.info("Full property management update completed for hotel ID: {} by user ID: {}", hotelId, principal.userId());
+
+        List<RoomType> rooms = roomTypeRepository.findByHotelId(hotelId);
+        return HotelManageDto.fromEntity(savedProperty, rooms, savedImages);
+    }
+
     @Transactional(readOnly = true)
     public HotelManageDto getPropertyForManagement(Long hotelId, CallerPrincipal principal) {
         validatePrincipal(principal);

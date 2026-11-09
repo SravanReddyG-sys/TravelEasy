@@ -51,6 +51,7 @@ export interface HotelImage {
   file?: File;         // Local selected file before upload
   uploading?: boolean;
   error?: string;
+  isNew?: boolean;
 }
 
 export interface HotelStep1Request {

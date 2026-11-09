@@ -18,6 +18,10 @@ export class HotelService {
     return this.http.put(`${this.apiUrl}/${hotelId}`, hotelData);
   }
 
+  updateHotelFull(hotelId: number, updateData: any): Observable<any> {
+    return this.http.put(`${this.apiUrl}/${hotelId}/manage`, updateData);
+  }
+
   getHotelForManagement(hotelId: number): Observable<any> {
     return this.http.get(`${this.apiUrl}/manage/${hotelId}`);
   }

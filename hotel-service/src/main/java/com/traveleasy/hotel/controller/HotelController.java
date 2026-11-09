@@ -367,6 +367,20 @@ public class HotelController {
         return ResponseEntity.ok(updated);
     }
 
+    @PutMapping("/{hotelId}/manage")
+    public ResponseEntity<?> updatePropertyManage(
+            @PathVariable Long hotelId,
+            @Valid @RequestBody HotelManageUpdateRequestDto request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        ResponseEntity<?> authError = validateManagerOrAdminAuth(authHeader, "update complete property details");
+        if (authError != null) return authError;
+
+        CallerPrincipal principal = securityService.resolvePrincipal(authHeader);
+        HotelManageDto dto = hotelPropertyService.updatePropertyFull(hotelId, request, principal);
+        return ResponseEntity.ok(dto);
+    }
+
     @GetMapping("/manage/{hotelId}")
     public ResponseEntity<?> getHotelForManagement(
             @PathVariable Long hotelId,

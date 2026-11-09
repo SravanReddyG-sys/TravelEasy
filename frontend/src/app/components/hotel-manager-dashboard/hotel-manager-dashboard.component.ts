@@ -55,7 +55,171 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   isMobileSidebarOpen: boolean = false;
 
   // ==================== PROPERTY REGISTRATION WIZARD STATE (WP-05 STEP 1) ====================
-  propertyViewMode: 'list' | 'wizard' | 'details' = 'list';
+  propertyViewMode: 'list' | 'wizard' | 'details' | 'edit' = 'list';
+  propertyUpdateSuccessMessage: string = '';
+
+  // ==================== DEDICATED PROPERTY EDIT CONTEXT STATE ====================
+  editContext: {
+    hotelId: number | null;
+    originalData: any;
+    currentStep: number;
+    isLoading: boolean;
+    isSubmitting: boolean;
+    errorMessage: string | null;
+    successMessage: string | null;
+    isDirty: boolean;
+    showDiscardModal: boolean;
+    returnTo: 'details' | 'list';
+    step1: {
+      name: string;
+      propertyType: string;
+      propertyClassification: string;
+      customClassification: string;
+      propertySegment: string;
+      brandName: string;
+      description: string;
+    };
+    images: (HotelImage | null)[];
+    imageUploading: boolean[];
+    imageUploadErrors: string[];
+    step2: {
+      addressLine1: string;
+      addressLine2: string;
+      country: string;
+      state: string;
+      city: string;
+      postalCode: string;
+      landmark: string;
+    };
+    step3: {
+      propertyContactNumber: string;
+      alternateContactNumber: string;
+      propertyEmail: string;
+      websiteUrl: string;
+      registeredBusinessName: string;
+      businessRegistrationType: string;
+      otherBusinessRegistrationType: string;
+      businessRegistrationNumber: string;
+      registeredBusinessAddress: string;
+      isGstRegistered: boolean;
+      gstin: string;
+      gstLegalName: string;
+      gstState: string;
+      propertyManagerName: string;
+      propertyManagerDesignation: string;
+      propertyManagerContactNumber: string;
+      propertyManagerEmail: string;
+      checkInTime: string;
+      checkOutTime: string;
+      receptionAvailability: string;
+      receptionOpeningTime: string;
+      receptionClosingTime: string;
+    };
+    expandedStep3Section: string;
+    step4: {
+      predefinedAmenities: string[];
+      customAmenities: string[];
+      childrenPolicy: string;
+      petPolicy: string;
+      smokingPolicy: string;
+      extraBedPolicy: string;
+      acceptedIdentificationTypes: string[];
+      customIdentificationType: string;
+      additionalRules: string;
+    };
+    expandedStep4Section: 'amenities' | 'policies' | 'rules' | null;
+    showCustomAmenityInput: boolean;
+    newCustomAmenityName: string;
+    customAmenityError: string;
+    reviewSectionsExpanded: {
+      basic: boolean;
+      address: boolean;
+      propertyInfo: boolean;
+      facilities: boolean;
+    };
+    stepErrors: { [key: number]: string | null };
+    stepSubmitted: { [key: number]: boolean };
+  } = {
+    hotelId: null,
+    originalData: null,
+    currentStep: 1,
+    isLoading: false,
+    isSubmitting: false,
+    errorMessage: null,
+    successMessage: null,
+    isDirty: false,
+    showDiscardModal: false,
+    returnTo: 'details',
+    step1: {
+      name: '',
+      propertyType: 'Hotel',
+      propertyClassification: '3 Star',
+      customClassification: '',
+      propertySegment: 'Midscale',
+      brandName: '',
+      description: ''
+    },
+    images: [null, null, null, null],
+    imageUploading: [false, false, false, false],
+    imageUploadErrors: ['', '', '', ''],
+    step2: {
+      addressLine1: '',
+      addressLine2: '',
+      country: 'India',
+      state: '',
+      city: '',
+      postalCode: '',
+      landmark: ''
+    },
+    step3: {
+      propertyContactNumber: '',
+      alternateContactNumber: '',
+      propertyEmail: '',
+      websiteUrl: '',
+      registeredBusinessName: '',
+      businessRegistrationType: 'Private Limited Company',
+      otherBusinessRegistrationType: '',
+      businessRegistrationNumber: '',
+      registeredBusinessAddress: '',
+      isGstRegistered: false,
+      gstin: '',
+      gstLegalName: '',
+      gstState: '',
+      propertyManagerName: '',
+      propertyManagerDesignation: 'General Manager',
+      propertyManagerContactNumber: '',
+      propertyManagerEmail: '',
+      checkInTime: '14:00',
+      checkOutTime: '11:00',
+      receptionAvailability: '24-hour Reception',
+      receptionOpeningTime: '',
+      receptionClosingTime: ''
+    },
+    expandedStep3Section: 'contact',
+    step4: {
+      predefinedAmenities: [],
+      customAmenities: [],
+      childrenPolicy: 'Children Allowed',
+      petPolicy: 'Pets Not Allowed',
+      smokingPolicy: 'Smoking Prohibited',
+      extraBedPolicy: 'Extra Bed Available',
+      acceptedIdentificationTypes: ['Passport', 'Aadhaar Card'],
+      customIdentificationType: '',
+      additionalRules: ''
+    },
+    expandedStep4Section: 'amenities',
+    showCustomAmenityInput: false,
+    newCustomAmenityName: '',
+    customAmenityError: '',
+    reviewSectionsExpanded: {
+      basic: true,
+      address: false,
+      propertyInfo: false,
+      facilities: false
+    },
+    stepErrors: { 1: null, 2: null, 3: null, 4: null, 5: null },
+    stepSubmitted: { 1: false, 2: false, 3: false, 4: false, 5: false }
+  };
   currentWizardStep: number = 1;
   managerDrafts: any[] = [];
 
@@ -755,7 +919,11 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
 
   @HostListener('document:keydown.escape', ['$event'])
   onEscapeKeyDown(event: KeyboardEvent): void {
-    if (this.showDetailsMoreActions) {
+    if (this.editContext.showDiscardModal) {
+      this.cancelDiscardEdit();
+    } else if (this.propertyViewMode === 'edit') {
+      this.closePropertyEditor();
+    } else if (this.showDetailsMoreActions) {
       this.showDetailsMoreActions = false;
     } else if (this.activePropertyMenuId !== null) {
       this.activePropertyMenuId = null;
@@ -4672,6 +4840,925 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
       list = ['Aadhaar', 'PAN', 'Passport', 'Driving License'];
     }
     return list;
+  }
+
+  
+  // ==================== DEDICATED FULL-PAGE PROPERTY EDITOR METHODS ====================
+
+  openPropertyEditor(hotel: any): void {
+    if (!hotel || !hotel.id) return;
+    this.closePropertyMenu();
+    this.showDetailsMoreActions = false;
+    this.editContext.hotelId = hotel.id;
+    this.editContext.returnTo = this.propertyViewMode === 'details' ? 'details' : 'details';
+    this.editContext.currentStep = 1;
+    this.editContext.isDirty = false;
+    this.editContext.errorMessage = null;
+    this.editContext.successMessage = null;
+    this.editContext.showDiscardModal = false;
+    this.editContext.isLoading = true;
+    this.editContext.stepSubmitted = { 1: false, 2: false, 3: false, 4: false, 5: false };
+    this.editContext.stepErrors = { 1: null, 2: null, 3: null, 4: null, 5: null };
+
+    this.propertyViewMode = 'edit';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    this.hotelService.getHotelForManagement(hotel.id).subscribe({
+      next: (dto) => {
+        this.editContext.isLoading = false;
+        this.hydrateEditContext(dto || hotel);
+      },
+      error: (err) => {
+        this.editContext.isLoading = false;
+        console.warn('Could not load extra management details for editor, using existing data:', err);
+        this.hydrateEditContext(hotel);
+      }
+    });
+  }
+
+  hydrateEditContext(dto: any): void {
+    this.editContext.originalData = { ...dto };
+    this.editContext.hotelId = dto.id;
+
+    // Step 1: Basic details
+    this.editContext.step1 = {
+      name: dto.name || '',
+      propertyType: dto.propertyType || 'Hotel',
+      propertyClassification: dto.propertyClassification || (dto.starRating ? `${dto.starRating} Star` : '3 Star'),
+      customClassification: dto.customClassification || '',
+      propertySegment: dto.propertySegment || 'Midscale',
+      brandName: dto.brandName || '',
+      description: dto.description || ''
+    };
+
+    // Images (4 slots)
+    this.editContext.images = [null, null, null, null];
+    this.editContext.imageUploading = [false, false, false, false];
+    this.editContext.imageUploadErrors = ['', '', '', ''];
+
+    if (dto.images && Array.isArray(dto.images) && dto.images.length > 0) {
+      dto.images.slice(0, 4).forEach((img: any, idx: number) => {
+        this.editContext.images[idx] = {
+          id: img.id,
+          imageUrl: img.imageUrl,
+          previewUrl: img.imageUrl,
+          isCover: img.isCover ?? img.cover ?? (idx === 0),
+          displayOrder: img.displayOrder !== undefined ? img.displayOrder : idx,
+          originalFileName: img.originalFileName || `image_${idx + 1}.jpg`,
+          file: undefined,
+          uploading: false,
+          isNew: false
+        };
+      });
+      if (!this.editContext.images.some(img => img && img.isCover)) {
+        const first = this.editContext.images.find(img => img !== null);
+        if (first) first.isCover = true;
+      }
+    } else if (dto.imageUrl) {
+      this.editContext.images[0] = {
+        imageUrl: dto.imageUrl,
+        previewUrl: dto.imageUrl,
+        isCover: true,
+        displayOrder: 0,
+        originalFileName: 'cover_image.jpg',
+        isNew: false
+      };
+    }
+
+    // Step 2: Location & Address
+    this.editContext.step2 = {
+      addressLine1: dto.addressLine1 || dto.address || '',
+      addressLine2: dto.addressLine2 || '',
+      country: dto.country || 'India',
+      state: dto.state || '',
+      city: dto.city || '',
+      postalCode: dto.postalCode || '',
+      landmark: dto.landmark || ''
+    };
+
+    // Step 3: Property Information & Business details
+    this.editContext.step3 = {
+      propertyContactNumber: dto.propertyContactNumber || '',
+      alternateContactNumber: dto.alternateContactNumber || '',
+      propertyEmail: dto.propertyEmail || '',
+      websiteUrl: dto.websiteUrl || '',
+      registeredBusinessName: dto.registeredBusinessName || dto.name || '',
+      businessRegistrationType: dto.businessRegistrationType || 'Private Limited Company',
+      otherBusinessRegistrationType: dto.otherBusinessRegistrationType || '',
+      businessRegistrationNumber: dto.businessRegistrationNumber || '',
+      registeredBusinessAddress: dto.registeredBusinessAddress || '',
+      isGstRegistered: !!dto.isGstRegistered,
+      gstin: dto.gstin || '',
+      gstLegalName: dto.gstLegalName || '',
+      gstState: dto.gstState || '',
+      propertyManagerName: dto.propertyManagerName || '',
+      propertyManagerDesignation: dto.propertyManagerDesignation || 'General Manager',
+      propertyManagerContactNumber: dto.propertyManagerContactNumber || '',
+      propertyManagerEmail: dto.propertyManagerEmail || '',
+      checkInTime: dto.checkInTime || '14:00',
+      checkOutTime: dto.checkOutTime || '11:00',
+      receptionAvailability: dto.receptionAvailability || '24-hour Reception',
+      receptionOpeningTime: dto.receptionOpeningTime || '',
+      receptionClosingTime: dto.receptionClosingTime || ''
+    };
+    this.editContext.expandedStep3Section = 'contact';
+
+    // Step 4: Facilities & Policies
+    let predefinedAmenities: string[] = [];
+    if (dto.predefinedAmenities && Array.isArray(dto.predefinedAmenities)) {
+      predefinedAmenities = [...dto.predefinedAmenities];
+    } else if (dto.amenities && typeof dto.amenities === 'string') {
+      predefinedAmenities = dto.amenities.split(',').map((s: string) => s.trim()).filter((s: string) => s);
+    }
+    const customAmenities = dto.customAmenities && Array.isArray(dto.customAmenities) ? [...dto.customAmenities] : [];
+
+    let acceptedIds: string[] = ['Passport', 'Aadhaar Card'];
+    if (dto.acceptedIdentificationTypes && Array.isArray(dto.acceptedIdentificationTypes) && dto.acceptedIdentificationTypes.length > 0) {
+      acceptedIds = [...dto.acceptedIdentificationTypes];
+    }
+
+    this.editContext.step4 = {
+      predefinedAmenities: predefinedAmenities,
+      customAmenities: customAmenities,
+      childrenPolicy: dto.childrenPolicy || 'Children Allowed',
+      petPolicy: dto.petPolicy || 'Pets Not Allowed',
+      smokingPolicy: dto.smokingPolicy || 'Smoking Prohibited',
+      extraBedPolicy: dto.extraBedPolicy || 'Extra Bed Available',
+      acceptedIdentificationTypes: acceptedIds,
+      customIdentificationType: dto.customIdentificationType || '',
+      additionalRules: dto.additionalRules || ''
+    };
+    this.editContext.expandedStep4Section = 'amenities';
+    this.editContext.showCustomAmenityInput = false;
+    this.editContext.newCustomAmenityName = '';
+    this.editContext.customAmenityError = '';
+
+    // Step 5: Review sections
+    this.editContext.reviewSectionsExpanded = {
+      basic: true,
+      address: false,
+      propertyInfo: false,
+      facilities: false
+    };
+
+    this.editContext.isDirty = false;
+  }
+
+  closePropertyEditor(force: boolean = false): void {
+    if (!force && this.editContext.isDirty) {
+      this.editContext.showDiscardModal = true;
+      return;
+    }
+    this.confirmDiscardEdit();
+  }
+
+  cancelDiscardEdit(): void {
+    this.editContext.showDiscardModal = false;
+  }
+
+  confirmDiscardEdit(): void {
+    this.editContext.showDiscardModal = false;
+    this.editContext.isDirty = false;
+    if (this.editContext.returnTo === 'details' && (this.selectedPropertyForDetails || this.propertyDetailsData)) {
+      this.propertyViewMode = 'details';
+    } else {
+      this.propertyViewMode = 'list';
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  goToEditStep(step: number): void {
+    if (step === this.editContext.currentStep) return;
+    if (step > this.editContext.currentStep) {
+      for (let s = this.editContext.currentStep; s < step; s++) {
+        if (!this.validateEditStep(s)) {
+          return;
+        }
+      }
+    }
+    this.editContext.currentStep = step;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  nextEditStep(current: number): void {
+    if (this.validateEditStep(current)) {
+      this.editContext.currentStep = current + 1;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  prevEditStep(current: number): void {
+    if (current > 1) {
+      this.editContext.currentStep = current - 1;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  onEditFieldChange(): void {
+    this.editContext.isDirty = true;
+  }
+
+  onEditCountryChange(): void {
+    this.editContext.isDirty = true;
+    const states = this.countryStatesMap[this.editContext.step2.country] || [];
+    if (states.length > 0 && !states.includes(this.editContext.step2.state)) {
+      this.editContext.step2.state = '';
+    }
+  }
+
+  getEditAvailableStates(): string[] {
+    return this.countryStatesMap[this.editContext.step2.country] || [];
+  }
+
+  // --- Step 1 Image Handlers ---
+  onEditImageSelected(event: any, slotIndex: number): void {
+    const file = event.target?.files?.[0];
+    if (!file) return;
+
+    this.editContext.imageUploadErrors[slotIndex] = '';
+
+    if (file.size > 1048576) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      this.editContext.imageUploadErrors[slotIndex] = `File exceeds 1 MB limit (${sizeMb} MB). Please choose a smaller image.`;
+      event.target.value = '';
+      return;
+    }
+
+    const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png', 'image/webp'];
+    const fileName = (file.name || '').toLowerCase();
+    const hasAllowedExt = fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') || fileName.endsWith('.png') || fileName.endsWith('.webp');
+    const isMimeOk = file.type && allowedMimeTypes.includes(file.type.toLowerCase());
+
+    if (!isMimeOk && !hasAllowedExt) {
+      this.editContext.imageUploadErrors[slotIndex] = 'Unsupported format. Allowed formats are JPG, JPEG, PNG, or WebP.';
+      event.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e: any) => {
+      const previewUrl = e.target.result;
+      const isCover = slotIndex === 0 || !this.editContext.images.some(img => img !== null && img.isCover);
+
+      this.editContext.images[slotIndex] = {
+        imageUrl: '',
+        previewUrl: previewUrl,
+        originalFileName: file.name,
+        isCover: isCover,
+        displayOrder: slotIndex,
+        file: file,
+        uploading: true,
+        isNew: true
+      };
+      this.editContext.isDirty = true;
+      this.editContext.imageUploading[slotIndex] = true;
+
+      this.hotelService.uploadHotelImage(file, isCover ? 'cover' : 'gallery').subscribe({
+        next: (res) => {
+          this.editContext.imageUploading[slotIndex] = false;
+          if (this.editContext.images[slotIndex]) {
+            this.editContext.images[slotIndex]!.imageUrl = res.imageUrl;
+            this.editContext.images[slotIndex]!.uploading = false;
+          }
+        },
+        error: (err) => {
+          this.editContext.imageUploading[slotIndex] = false;
+          if (this.editContext.images[slotIndex]) {
+            this.editContext.images[slotIndex]!.uploading = false;
+          }
+          this.editContext.imageUploadErrors[slotIndex] = err.error?.message || 'Failed to upload image. Please try again.';
+        }
+      });
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  }
+
+  removeEditImage(slotIndex: number, event: MouseEvent): void {
+    event.stopPropagation();
+    const img = this.editContext.images[slotIndex];
+    const wasCover = img?.isCover;
+
+    this.editContext.images[slotIndex] = null;
+    this.editContext.imageUploadErrors[slotIndex] = '';
+    this.editContext.isDirty = true;
+
+    if (wasCover) {
+      const nextImg = this.editContext.images.find(i => i !== null);
+      if (nextImg) {
+        nextImg.isCover = true;
+      }
+    }
+  }
+
+  setEditCoverImage(slotIndex: number, event: MouseEvent): void {
+    event.stopPropagation();
+    const current = this.editContext.images[slotIndex];
+    if (!current) return;
+
+    this.editContext.images.forEach(img => {
+      if (img) img.isCover = false;
+    });
+    current.isCover = true;
+    this.editContext.isDirty = true;
+  }
+
+  getEditCoverImageUrl(): string {
+    const cover = this.editContext.images.find(img => img !== null && img.isCover);
+    if (cover) {
+      return cover.previewUrl || cover.imageUrl;
+    }
+    const first = this.editContext.images.find(img => img !== null);
+    if (first) {
+      return first.previewUrl || first.imageUrl;
+    }
+    return 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80';
+  }
+
+  getEditActiveImagesCount(): number {
+    return this.editContext.images.filter(img => img !== null).length;
+  }
+
+  // --- Step 4 Amenities & Policies Helpers ---
+  toggleEditPredefinedAmenity(amenity: string): void {
+    const idx = this.editContext.step4.predefinedAmenities.indexOf(amenity);
+    if (idx === -1) {
+      this.editContext.step4.predefinedAmenities.push(amenity);
+    } else {
+      this.editContext.step4.predefinedAmenities.splice(idx, 1);
+    }
+    this.editContext.isDirty = true;
+  }
+
+  isEditPredefinedAmenitySelected(amenity: string): boolean {
+    return this.editContext.step4.predefinedAmenities.includes(amenity);
+  }
+
+  addPropertyEditCustomAmenity(): void {
+    const trimmed = (this.editContext.newCustomAmenityName || '').trim();
+    if (!trimmed) {
+      this.editContext.customAmenityError = 'Please enter an amenity name.';
+      return;
+    }
+    if (
+      this.editContext.step4.predefinedAmenities.includes(trimmed) ||
+      this.editContext.step4.customAmenities.includes(trimmed)
+    ) {
+      this.editContext.customAmenityError = 'This amenity is already added.';
+      return;
+    }
+    this.editContext.step4.customAmenities.push(trimmed);
+    this.editContext.newCustomAmenityName = '';
+    this.editContext.customAmenityError = '';
+    this.editContext.showCustomAmenityInput = false;
+    this.editContext.isDirty = true;
+  }
+
+  removePropertyEditCustomAmenity(index: number): void {
+    this.editContext.step4.customAmenities.splice(index, 1);
+    this.editContext.isDirty = true;
+  }
+
+  toggleEditAcceptedId(idType: string): void {
+    const idx = this.editContext.step4.acceptedIdentificationTypes.indexOf(idType);
+    if (idx === -1) {
+      this.editContext.step4.acceptedIdentificationTypes.push(idType);
+    } else {
+      this.editContext.step4.acceptedIdentificationTypes.splice(idx, 1);
+    }
+    this.editContext.isDirty = true;
+  }
+
+  isEditAcceptedIdSelected(idType: string): boolean {
+    return this.editContext.step4.acceptedIdentificationTypes.includes(idType);
+  }
+
+  getAllEditSelectedAmenities(): string[] {
+    return [...this.editContext.step4.predefinedAmenities, ...this.editContext.step4.customAmenities];
+  }
+
+  getEditFormattedFullAddress(): string {
+    const parts = [
+      this.editContext.step2.addressLine1,
+      this.editContext.step2.addressLine2,
+      this.editContext.step2.landmark ? `Near ${this.editContext.step2.landmark}` : '',
+      this.editContext.step2.city,
+      this.editContext.step2.state,
+      this.editContext.step2.postalCode,
+      this.editContext.step2.country
+    ].filter(p => p && p.trim().length > 0);
+    return parts.join(', ');
+  }
+
+  getEditFormattedIdentification(): string {
+    const ids = [...this.editContext.step4.acceptedIdentificationTypes];
+    if (this.editContext.step4.customIdentificationType && this.editContext.step4.customIdentificationType.trim()) {
+      ids.push(this.editContext.step4.customIdentificationType.trim());
+    }
+    return ids.length > 0 ? ids.join(', ') : 'Not specified';
+  }
+
+  getEditFormattedRulesList(): string[] {
+    if (!this.editContext.step4.additionalRules || !this.editContext.step4.additionalRules.trim()) {
+      return ['Standard hotel rules apply. Valid government-issued ID required at check-in.'];
+    }
+    return this.editContext.step4.additionalRules
+      .split('\n')
+      .map(r => r.trim())
+      .filter(r => r.length > 0);
+  }
+
+  toggleEditReviewSection(section: 'basic' | 'address' | 'propertyInfo' | 'facilities'): void {
+    this.editContext.reviewSectionsExpanded[section] = !this.editContext.reviewSectionsExpanded[section];
+  }
+
+  jumpToEditStep(step: number, event?: Event): void {
+    if (event) event.stopPropagation();
+    this.editContext.currentStep = step;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // --- Step Validation ---
+  
+  // --- Step 4 Accordion & Custom Amenity Helpers for Property Editor ---
+  toggleEditStep4Section(section: 'amenities' | 'policies' | 'rules'): void {
+    if (this.editContext.expandedStep4Section === section) {
+      this.editContext.expandedStep4Section = null;
+    } else {
+      this.editContext.expandedStep4Section = section;
+    }
+  }
+
+  isEditStep4SectionExpanded(section: 'amenities' | 'policies' | 'rules'): boolean {
+    return this.editContext.expandedStep4Section === section;
+  }
+
+  openEditAddCustomAmenity(): void {
+    this.editContext.showCustomAmenityInput = true;
+    this.editContext.newCustomAmenityName = '';
+    this.editContext.customAmenityError = '';
+  }
+
+  cancelEditAddCustomAmenity(): void {
+    this.editContext.showCustomAmenityInput = false;
+    this.editContext.newCustomAmenityName = '';
+    this.editContext.customAmenityError = '';
+  }
+
+  submitEditAddCustomAmenity(): void {
+    const trimmed = (this.editContext.newCustomAmenityName || '').trim();
+    if (!trimmed) {
+      this.editContext.customAmenityError = 'Please enter an amenity name.';
+      return;
+    }
+    if (
+      this.editContext.step4.predefinedAmenities.includes(trimmed) ||
+      this.editContext.step4.customAmenities.includes(trimmed)
+    ) {
+      this.editContext.customAmenityError = 'This amenity is already added.';
+      return;
+    }
+    this.editContext.step4.customAmenities.push(trimmed);
+    this.editContext.newCustomAmenityName = '';
+    this.editContext.customAmenityError = '';
+    this.editContext.showCustomAmenityInput = false;
+    this.editContext.isDirty = true;
+  }
+
+  removeEditCustomAmenity(custom: string): void {
+    const idx = this.editContext.step4.customAmenities.indexOf(custom);
+    if (idx !== -1) {
+      this.editContext.step4.customAmenities.splice(idx, 1);
+      this.editContext.isDirty = true;
+    }
+  }
+
+  // --- Step 3 Accordion & Validation Helpers for Property Editor ---
+  toggleEditStep3Section(section: string): void {
+    if (this.editContext.expandedStep3Section === section) {
+      this.editContext.expandedStep3Section = '';
+    } else {
+      this.editContext.expandedStep3Section = section;
+    }
+  }
+
+  isEditStep3SectionExpanded(section: string): boolean {
+    return this.editContext.expandedStep3Section === section;
+  }
+
+  onEditGstToggle(val: boolean): void {
+    this.editContext.step3.isGstRegistered = val;
+    this.editContext.isDirty = true;
+  }
+
+  isEditPropertyContactNumberValid(): boolean {
+    if (!this.editContext.step3.propertyContactNumber || !this.editContext.step3.propertyContactNumber.trim()) return false;
+    const phone = this.editContext.step3.propertyContactNumber.trim();
+    return /^[+]?[0-9\s-]{7,20}$/.test(phone);
+  }
+
+  isEditAlternateContactNumberValid(): boolean {
+    if (!this.editContext.step3.alternateContactNumber || !this.editContext.step3.alternateContactNumber.trim()) return true;
+    const phone = this.editContext.step3.alternateContactNumber.trim();
+    return /^[+]?[0-9\s-]{7,20}$/.test(phone);
+  }
+
+  isEditPropertyEmailValid(): boolean {
+    if (!this.editContext.step3.propertyEmail || !this.editContext.step3.propertyEmail.trim()) return false;
+    const email = this.editContext.step3.propertyEmail.trim();
+    return /^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(email);
+  }
+
+  isEditWebsiteUrlValid(): boolean {
+    if (!this.editContext.step3.websiteUrl || !this.editContext.step3.websiteUrl.trim()) return true;
+    const url = this.editContext.step3.websiteUrl.trim();
+    return /^https?:\/\/.+/i.test(url);
+  }
+
+  isEditRegisteredBusinessNameValid(): boolean {
+    return !!(this.editContext.step3.registeredBusinessName && this.editContext.step3.registeredBusinessName.trim().length > 0 && this.editContext.step3.registeredBusinessName.trim().length <= 255);
+  }
+
+  isEditBusinessRegistrationTypeValid(): boolean {
+    return !!(this.editContext.step3.businessRegistrationType && this.editContext.step3.businessRegistrationType.trim().length > 0);
+  }
+
+  isEditOtherBusinessRegistrationTypeValid(): boolean {
+    if (this.editContext.step3.businessRegistrationType !== 'Other') return true;
+    return !!(this.editContext.step3.otherBusinessRegistrationType && this.editContext.step3.otherBusinessRegistrationType.trim().length > 0);
+  }
+
+  isEditBusinessRegistrationNumberValid(): boolean {
+    return !!(this.editContext.step3.businessRegistrationNumber && this.editContext.step3.businessRegistrationNumber.trim().length > 0 && this.editContext.step3.businessRegistrationNumber.trim().length <= 100);
+  }
+
+  isEditGstinValid(): boolean {
+    if (!this.editContext.step3.isGstRegistered) return true;
+    if (!this.editContext.step3.gstin || !this.editContext.step3.gstin.trim()) return false;
+    return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(this.editContext.step3.gstin.trim());
+  }
+
+  isEditGstLegalNameValid(): boolean {
+    if (!this.editContext.step3.isGstRegistered) return true;
+    return !!(this.editContext.step3.gstLegalName && this.editContext.step3.gstLegalName.trim().length > 0);
+  }
+
+  isEditGstStateValid(): boolean {
+    if (!this.editContext.step3.isGstRegistered) return true;
+    return !!(this.editContext.step3.gstState && this.editContext.step3.gstState.trim().length > 0);
+  }
+
+  isEditPropertyManagerNameValid(): boolean {
+    return !!(this.editContext.step3.propertyManagerName && this.editContext.step3.propertyManagerName.trim().length > 0 && this.editContext.step3.propertyManagerName.trim().length <= 255);
+  }
+
+  isEditPropertyManagerDesignationValid(): boolean {
+    return !!(this.editContext.step3.propertyManagerDesignation && this.editContext.step3.propertyManagerDesignation.trim().length > 0);
+  }
+
+  isEditPropertyManagerContactNumberValid(): boolean {
+    if (!this.editContext.step3.propertyManagerContactNumber || !this.editContext.step3.propertyManagerContactNumber.trim()) return false;
+    return /^[+]?[0-9\s-]{7,20}$/.test(this.editContext.step3.propertyManagerContactNumber.trim());
+  }
+
+  isEditPropertyManagerEmailValid(): boolean {
+    if (!this.editContext.step3.propertyManagerEmail || !this.editContext.step3.propertyManagerEmail.trim()) return false;
+    return /^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(this.editContext.step3.propertyManagerEmail.trim());
+  }
+
+  isEditCheckInTimeValid(): boolean {
+    return !!(this.editContext.step3.checkInTime && this.editContext.step3.checkInTime.trim().length > 0);
+  }
+
+  isEditCheckOutTimeValid(): boolean {
+    return !!(this.editContext.step3.checkOutTime && this.editContext.step3.checkOutTime.trim().length > 0);
+  }
+
+  validateEditStep(step: number): boolean {
+    this.editContext.stepSubmitted[step] = true;
+    this.editContext.stepErrors[step] = null;
+
+    if (step === 1) {
+      if (!this.editContext.step1.name || !this.editContext.step1.name.trim()) {
+        this.editContext.stepErrors[1] = 'Property name is required.';
+        return false;
+      }
+      if (!this.editContext.step1.propertyType || !this.editContext.step1.propertyType.trim()) {
+        this.editContext.stepErrors[1] = 'Property type is required.';
+        return false;
+      }
+      if (!this.editContext.step1.propertySegment || !this.editContext.step1.propertySegment.trim()) {
+        this.editContext.stepErrors[1] = 'Property segment is required.';
+        return false;
+      }
+      if (!this.editContext.step1.description || !this.editContext.step1.description.trim()) {
+        this.editContext.stepErrors[1] = 'Property description is required.';
+        return false;
+      }
+      const activeImgs = this.editContext.images.filter(img => img !== null && (img.imageUrl || img.previewUrl));
+      if (activeImgs.length === 0) {
+        this.editContext.stepErrors[1] = 'At least one property image is required.';
+        return false;
+      }
+      if (!this.editContext.images.some(img => img !== null && img.isCover)) {
+        this.editContext.stepErrors[1] = 'Please designate one image as the cover image.';
+        return false;
+      }
+      if (this.editContext.imageUploading.some(u => u)) {
+        this.editContext.stepErrors[1] = 'Please wait for images to finish uploading.';
+        return false;
+      }
+      return true;
+    }
+
+    if (step === 2) {
+      if (!this.editContext.step2.addressLine1 || !this.editContext.step2.addressLine1.trim()) {
+        this.editContext.stepErrors[2] = 'Address Line 1 is required.';
+        return false;
+      }
+      if (!this.editContext.step2.country || !this.editContext.step2.country.trim()) {
+        this.editContext.stepErrors[2] = 'Country is required.';
+        return false;
+      }
+      if (!this.editContext.step2.state || !this.editContext.step2.state.trim()) {
+        this.editContext.stepErrors[2] = 'State is required.';
+        return false;
+      }
+      if (!this.editContext.step2.city || !this.editContext.step2.city.trim()) {
+        this.editContext.stepErrors[2] = 'City is required.';
+        return false;
+      }
+      if (!this.editContext.step2.postalCode || !this.editContext.step2.postalCode.trim()) {
+        this.editContext.stepErrors[2] = 'Postal Code is required.';
+        return false;
+      }
+      return true;
+    }
+
+    if (step === 3) {
+      if (!this.isEditPropertyContactNumberValid()) {
+        this.editContext.stepErrors[3] = 'Please enter a valid property contact number (7-20 digits).';
+        this.editContext.expandedStep3Section = 'contact';
+        return false;
+      }
+      if (!this.isEditAlternateContactNumberValid()) {
+        this.editContext.stepErrors[3] = 'Please enter a valid alternate contact number.';
+        this.editContext.expandedStep3Section = 'contact';
+        return false;
+      }
+      if (!this.isEditPropertyEmailValid()) {
+        this.editContext.stepErrors[3] = 'A valid property email address is required.';
+        this.editContext.expandedStep3Section = 'contact';
+        return false;
+      }
+      if (!this.isEditWebsiteUrlValid()) {
+        this.editContext.stepErrors[3] = 'Please enter a valid website URL starting with http:// or https://.';
+        this.editContext.expandedStep3Section = 'contact';
+        return false;
+      }
+      if (!this.isEditRegisteredBusinessNameValid()) {
+        this.editContext.stepErrors[3] = 'Registered business name is required.';
+        this.editContext.expandedStep3Section = 'business';
+        return false;
+      }
+      if (!this.isEditBusinessRegistrationTypeValid()) {
+        this.editContext.stepErrors[3] = 'Business registration type is required.';
+        this.editContext.expandedStep3Section = 'business';
+        return false;
+      }
+      if (!this.isEditOtherBusinessRegistrationTypeValid()) {
+        this.editContext.stepErrors[3] = 'Please specify the custom business registration type.';
+        this.editContext.expandedStep3Section = 'business';
+        return false;
+      }
+      if (!this.isEditBusinessRegistrationNumberValid()) {
+        this.editContext.stepErrors[3] = 'Business registration number is required.';
+        this.editContext.expandedStep3Section = 'business';
+        return false;
+      }
+      if (this.editContext.step3.isGstRegistered) {
+        if (!this.isEditGstinValid()) {
+          this.editContext.stepErrors[3] = 'Please enter a valid 15-character GSTIN (e.g. 36AAAAA0000A1Z5).';
+          this.editContext.expandedStep3Section = 'gst';
+          return false;
+        }
+        if (!this.isEditGstLegalNameValid()) {
+          this.editContext.stepErrors[3] = 'GST Legal Name is required when GST registered.';
+          this.editContext.expandedStep3Section = 'gst';
+          return false;
+        }
+        if (!this.isEditGstStateValid()) {
+          this.editContext.stepErrors[3] = 'Please select a valid GST State.';
+          this.editContext.expandedStep3Section = 'gst';
+          return false;
+        }
+      }
+      if (!this.isEditPropertyManagerNameValid()) {
+        this.editContext.stepErrors[3] = 'Property manager name is required.';
+        this.editContext.expandedStep3Section = 'manager';
+        return false;
+      }
+      if (!this.isEditPropertyManagerContactNumberValid()) {
+        this.editContext.stepErrors[3] = 'Please enter a valid manager telephone number (7-20 digits).';
+        this.editContext.expandedStep3Section = 'manager';
+        return false;
+      }
+      if (!this.isEditPropertyManagerEmailValid()) {
+        this.editContext.stepErrors[3] = 'A valid property manager email is required.';
+        this.editContext.expandedStep3Section = 'manager';
+        return false;
+      }
+      if (!this.isEditCheckInTimeValid()) {
+        this.editContext.stepErrors[3] = 'Check-in time is required.';
+        this.editContext.expandedStep3Section = 'operating';
+        return false;
+      }
+      if (!this.isEditCheckOutTimeValid()) {
+        this.editContext.stepErrors[3] = 'Check-out time is required.';
+        this.editContext.expandedStep3Section = 'operating';
+        return false;
+      }
+      if (this.editContext.step3.receptionAvailability === 'Limited Operating Hours') {
+        if (!this.editContext.step3.receptionOpeningTime || !this.editContext.step3.receptionClosingTime) {
+          this.editContext.stepErrors[3] = 'Reception opening and closing times are required for limited hours.';
+          this.editContext.expandedStep3Section = 'operating';
+          return false;
+        }
+      }
+      return true;
+    }
+
+    if (step === 4) {
+      if (!this.editContext.step4.childrenPolicy) {
+        this.editContext.stepErrors[4] = 'Children policy is required.';
+        this.editContext.expandedStep4Section = 'policies';
+        return false;
+      }
+      if (!this.editContext.step4.petPolicy) {
+        this.editContext.stepErrors[4] = 'Pet policy is required.';
+        this.editContext.expandedStep4Section = 'policies';
+        return false;
+      }
+      if (!this.editContext.step4.smokingPolicy) {
+        this.editContext.stepErrors[4] = 'Smoking policy is required.';
+        this.editContext.expandedStep4Section = 'policies';
+        return false;
+      }
+      if (!this.editContext.step4.extraBedPolicy) {
+        this.editContext.stepErrors[4] = 'Extra bed policy is required.';
+        this.editContext.expandedStep4Section = 'policies';
+        return false;
+      }
+      if (!this.editContext.step4.acceptedIdentificationTypes || this.editContext.step4.acceptedIdentificationTypes.length === 0) {
+        this.editContext.stepErrors[4] = 'At least one accepted identification type is required.';
+        this.editContext.expandedStep4Section = 'policies';
+        return false;
+      }
+      if (
+        this.editContext.step4.acceptedIdentificationTypes.includes('Other') &&
+        (!this.editContext.step4.customIdentificationType || !this.editContext.step4.customIdentificationType.trim())
+      ) {
+        this.editContext.stepErrors[4] = 'Please specify the custom accepted identification document.';
+        this.editContext.expandedStep4Section = 'policies';
+        return false;
+      }
+      return true;
+    }
+
+    return true;
+  }
+
+  // --- Final Save Changes ---
+  savePropertyChanges(): void {
+    this.editContext.errorMessage = null;
+
+    for (let s = 1; s <= 4; s++) {
+      if (!this.validateEditStep(s)) {
+        this.editContext.currentStep = s;
+        this.editContext.errorMessage = `Please fix the errors in Step ${s} before saving.`;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+    }
+
+    if (this.editContext.imageUploading.some(u => u)) {
+      this.editContext.errorMessage = 'Please wait for images to finish uploading.';
+      return;
+    }
+
+    const activeImages = this.editContext.images
+      .filter(img => img !== null && (img.imageUrl || img.previewUrl))
+      .map((img, idx) => ({
+        id: img!.id,
+        imageUrl: img!.imageUrl || img!.previewUrl || '',
+        isCover: !!img!.isCover,
+        cover: !!img!.isCover,
+        displayOrder: idx,
+        originalFileName: img!.originalFileName || `image_${idx + 1}.jpg`
+      }));
+
+    if (activeImages.length === 0) {
+      this.editContext.errorMessage = 'At least one property image is required.';
+      this.editContext.currentStep = 1;
+      return;
+    }
+
+    if (!activeImages.some(img => img.isCover)) {
+      activeImages[0].isCover = true;
+      activeImages[0].cover = true;
+    }
+
+    this.editContext.isSubmitting = true;
+    const hotelId = this.editContext.hotelId!;
+
+    const payload = {
+      name: this.editContext.step1.name.trim(),
+      propertyType: this.editContext.step1.propertyType.trim(),
+      propertyClassification: this.editContext.step1.propertyClassification || '3 Star',
+      customClassification: this.editContext.step1.customClassification?.trim() || null,
+      propertySegment: this.editContext.step1.propertySegment.trim(),
+      brandName: this.editContext.step1.brandName?.trim() || null,
+      description: this.editContext.step1.description.trim(),
+      images: activeImages,
+
+      addressLine1: this.editContext.step2.addressLine1.trim(),
+      addressLine2: this.editContext.step2.addressLine2?.trim() || null,
+      country: this.editContext.step2.country.trim(),
+      state: this.editContext.step2.state.trim(),
+      city: this.editContext.step2.city.trim(),
+      postalCode: this.editContext.step2.postalCode.trim(),
+      landmark: this.editContext.step2.landmark?.trim() || null,
+
+      propertyContactNumber: this.editContext.step3.propertyContactNumber.trim(),
+      alternateContactNumber: this.editContext.step3.alternateContactNumber?.trim() || null,
+      propertyEmail: this.editContext.step3.propertyEmail.trim(),
+      websiteUrl: this.editContext.step3.websiteUrl?.trim() || null,
+      registeredBusinessName: this.editContext.step3.registeredBusinessName.trim(),
+      businessRegistrationType: this.editContext.step3.businessRegistrationType.trim(),
+      otherBusinessRegistrationType: this.editContext.step3.otherBusinessRegistrationType?.trim() || null,
+      businessRegistrationNumber: this.editContext.step3.businessRegistrationNumber.trim(),
+      registeredBusinessAddress: this.editContext.step3.registeredBusinessAddress?.trim() || null,
+      isGstRegistered: !!this.editContext.step3.isGstRegistered,
+      gstin: this.editContext.step3.isGstRegistered ? (this.editContext.step3.gstin?.trim() || null) : null,
+      gstLegalName: this.editContext.step3.isGstRegistered ? (this.editContext.step3.gstLegalName?.trim() || null) : null,
+      gstState: this.editContext.step3.isGstRegistered ? (this.editContext.step3.gstState?.trim() || null) : null,
+      propertyManagerName: this.editContext.step3.propertyManagerName.trim(),
+      propertyManagerDesignation: this.editContext.step3.propertyManagerDesignation.trim(),
+      propertyManagerContactNumber: this.editContext.step3.propertyManagerContactNumber.trim(),
+      propertyManagerEmail: this.editContext.step3.propertyManagerEmail.trim(),
+      checkInTime: this.editContext.step3.checkInTime.trim(),
+      checkOutTime: this.editContext.step3.checkOutTime.trim(),
+      receptionAvailability: this.editContext.step3.receptionAvailability.trim(),
+      receptionOpeningTime: this.editContext.step3.receptionOpeningTime?.trim() || null,
+      receptionClosingTime: this.editContext.step3.receptionClosingTime?.trim() || null,
+
+      predefinedAmenities: this.editContext.step4.predefinedAmenities,
+      customAmenities: this.editContext.step4.customAmenities,
+      childrenPolicy: this.editContext.step4.childrenPolicy.trim(),
+      petPolicy: this.editContext.step4.petPolicy.trim(),
+      smokingPolicy: this.editContext.step4.smokingPolicy.trim(),
+      extraBedPolicy: this.editContext.step4.extraBedPolicy.trim(),
+      acceptedIdentificationTypes: this.editContext.step4.acceptedIdentificationTypes,
+      customIdentificationType: this.editContext.step4.customIdentificationType?.trim() || null,
+      additionalRules: this.editContext.step4.additionalRules?.trim() || null
+    };
+
+    this.hotelService.updateHotelFull(hotelId, payload).subscribe({
+      next: (res) => {
+        this.editContext.isSubmitting = false;
+        this.editContext.isDirty = false;
+
+        const updatedData = { ...this.editContext.originalData, ...res };
+        if (this.propertyDetailsData && this.propertyDetailsData.id === hotelId) {
+          this.propertyDetailsData = { ...this.propertyDetailsData, ...updatedData };
+          this.initPropertyGallery(this.propertyDetailsData);
+        }
+        if (this.selectedPropertyForDetails && this.selectedPropertyForDetails.id === hotelId) {
+          this.selectedPropertyForDetails = { ...this.selectedPropertyForDetails, ...updatedData };
+        }
+        const pIdx = this.myHotels.findIndex(h => h.id === hotelId);
+        if (pIdx !== -1) {
+          this.myHotels[pIdx] = { ...this.myHotels[pIdx], ...updatedData };
+        }
+        if (this.selectedHotel && this.selectedHotel.id === hotelId) {
+          this.selectedHotel = { ...this.selectedHotel, ...updatedData };
+        }
+
+        this.propertyViewMode = 'details';
+        this.propertyUpdateSuccessMessage = 'Property details updated successfully.';
+        this.loadAllPropertiesStats();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        setTimeout(() => {
+          this.propertyUpdateSuccessMessage = '';
+        }, 6000);
+      },
+      error: (err) => {
+        this.editContext.isSubmitting = false;
+        console.error('Failed to update property:', err);
+        this.editContext.errorMessage = err.error?.message || 'Failed to update property details. Please review your entries and try again.';
+      }
+    });
   }
 
   openEditPropertyModal(hotel: any): void {
