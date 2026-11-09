@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Subscription, forkJoin, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { catchError, map } from 'rxjs/operators';
 import { AuthService } from '../../services/auth.service';
 import { HotelService } from '../../services/hotel.service';
 import { Hotel, HotelRoom, HotelImage, HotelStep1Request, HotelStep1Response, HotelStep2Request, HotelStep2Response, HotelStep3Request, HotelStep3Response, HotelStep4Request, HotelStep4Response, HotelStep5SubmitRequest, HotelStep5Response, RoomTypeCreateRequest, RoomTypeDto } from '../../models/hotel.model';
@@ -55,7 +55,7 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   isMobileSidebarOpen: boolean = false;
 
   // ==================== PROPERTY REGISTRATION WIZARD STATE (WP-05 STEP 1) ====================
-  propertyViewMode: 'list' | 'wizard' = 'list';
+  propertyViewMode: 'list' | 'wizard' | 'details' = 'list';
   currentWizardStep: number = 1;
   managerDrafts: any[] = [];
 
@@ -326,6 +326,46 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
 
   // Data State
   myHotels: any[] = [];
+
+  // ==================== MY PROPERTIES (WP REDESIGN) STATE ====================
+  propertySearchQuery: string = '';
+  propertyStatusFilter: string = 'ALL';
+  propertyClassificationFilter: string = 'ALL';
+  propertyStatsMap: Map<number, { roomTypesCount: number, totalRoomsCount: number }> = new Map();
+  isPropertyStatsLoading: boolean = false;
+  activePropertyMenuId: number | null = null;
+
+  // View Details Modal State
+  showPropertyDetailsModal: boolean = false;
+  selectedPropertyForDetails: any = null;
+  propertyDetailsData: any = null;
+  isLoadingPropertyDetails: boolean = false;
+  propertyDetailsError: string = '';
+
+  // Property Details Page State
+  activePropertyDetailsSubNav: 'overview' | 'address-contact' | 'amenities' | 'policies' | 'registration' | 'room-types' = 'overview';
+  galleryImages: Array<{ id?: number; imageUrl: string; isCover?: boolean; displayOrder?: number; caption?: string }> = [];
+  activeGalleryIndex: number = 0;
+  activeGalleryImage: string = '';
+  showDetailsMoreActions: boolean = false;
+  propertyDetailsRooms: any[] = [];
+  isLoadingPropertyDetailsRooms: boolean = false;
+
+  // Edit Property Modal State
+  showEditPropertyModal: boolean = false;
+  editingProperty: any = null;
+  isUpdatingProperty: boolean = false;
+  editPropertyError: string = '';
+  editPropertyForm = {
+    name: '',
+    city: '',
+    address: '',
+    starRating: 3,
+    description: '',
+    amenities: '',
+    imageUrl: '',
+    status: 'ACTIVE'
+  };
   selectedHotel: any = null;
   roomTypes: any[] = [];
   roomBlocks: any[] = [];
@@ -715,7 +755,15 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
 
   @HostListener('document:keydown.escape', ['$event'])
   onEscapeKeyDown(event: KeyboardEvent): void {
-    if (this.showRoomDetailsModal) {
+    if (this.showDetailsMoreActions) {
+      this.showDetailsMoreActions = false;
+    } else if (this.activePropertyMenuId !== null) {
+      this.activePropertyMenuId = null;
+    } else if (this.showPropertyDetailsModal) {
+      this.closePropertyDetailsModal();
+    } else if (this.showEditPropertyModal) {
+      this.closeEditPropertyModal();
+    } else if (this.showRoomDetailsModal) {
       this.closeRoomDetailsModal();
     } else if (this.showArchiveRoomModal) {
       this.cancelArchiveRoom();
@@ -737,6 +785,12 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
     const target = event.target as HTMLElement;
+    if (!target.closest('.property-menu-container')) {
+      this.activePropertyMenuId = null;
+    }
+    if (!target.closest('.details-more-actions-container')) {
+      this.showDetailsMoreActions = false;
+    }
     if (!target.closest('.date-range-dropdown-container')) {
       this.showDateRangeDropdown = false;
     }
@@ -909,6 +963,7 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
     this.hotelService.getHotelsByManager(this.currentUser.id).subscribe({
       next: (hotels) => {
         this.myHotels = hotels || [];
+        this.loadAllPropertiesStats();
         if (this.myHotels.length > 0) {
           if (!this.selectedHotel || !this.myHotels.some(h => h.id === this.selectedHotel.id)) {
             this.selectedHotel = this.myHotels[0];
@@ -3482,13 +3537,18 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
 
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const firstWeekday = new Date(year, month, 1).getDay(); // 0 = Sun, 1 = Mon ... 6 = Sat
+    const prevMonthDays = new Date(year, month, 0).getDate();
 
     const totalCapacity = Number(this.selectedInventoryRoom?.totalRooms) || 0;
     const cells: any[] = [];
 
-    // Leading empty cells
-    for (let i = 0; i < firstWeekday; i++) {
-      cells.push({ isEmpty: true });
+    // Leading days from previous month
+    for (let i = firstWeekday - 1; i >= 0; i--) {
+      cells.push({
+        isEmpty: true,
+        isLeadingTrailing: true,
+        dayNumber: prevMonthDays - i
+      });
     }
 
     // Days in displayed month
@@ -3507,6 +3567,7 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
 
       cells.push({
         isEmpty: false,
+        isLeadingTrailing: false,
         dayNumber: d,
         dateStr: dateStr,
         headerLabel: `${d} ${shortMonth}`,
@@ -3527,9 +3588,14 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
       });
     }
 
-    // Trailing empty cells to complete full weeks of 7
+    // Trailing days from next month to complete full weeks of 7
+    let nextMonthDay = 1;
     while (cells.length % 7 !== 0) {
-      cells.push({ isEmpty: true });
+      cells.push({
+        isEmpty: true,
+        isLeadingTrailing: true,
+        dayNumber: nextMonthDay++
+      });
     }
 
     // Chunk into 7-day rows (weeks)
@@ -3541,7 +3607,7 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   }
 
   selectInventoryDate(cell: any): void {
-    if (!cell || cell.isEmpty) return;
+    if (!cell || cell.isEmpty || cell.isLeadingTrailing) return;
     this.selectedInventoryDateStr = cell.dateStr;
     this.selectedInventoryDateRecord = cell.record;
   }
@@ -4175,6 +4241,532 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
       case 'NO_SHOW': return 'No Show';
       default: return status || 'Unknown';
     }
+  }
+
+  // ==================== MY PROPERTIES (WP REDESIGN) METHODS ====================
+
+  loadAllPropertiesStats(): void {
+    if (!this.myHotels || this.myHotels.length === 0) {
+      this.propertyStatsMap.clear();
+      return;
+    }
+
+    this.isPropertyStatsLoading = true;
+    const reqs = this.myHotels.map(h =>
+      this.hotelService.getRoomTypes(h.id).pipe(
+        map((rooms: any[]) => ({
+          hotelId: h.id,
+          roomTypesCount: (rooms || []).length,
+          totalRoomsCount: (rooms || []).reduce((acc: number, r: any) => acc + (Number(r.totalRooms) || 0), 0)
+        })),
+        catchError(() => of({ hotelId: h.id, roomTypesCount: 0, totalRoomsCount: 0 }))
+      )
+    );
+
+    forkJoin(reqs).subscribe({
+      next: (results: any[]) => {
+        this.isPropertyStatsLoading = false;
+        this.propertyStatsMap.clear();
+        for (const res of (results || [])) {
+          if (res && res.hotelId != null) {
+            this.propertyStatsMap.set(res.hotelId, {
+              roomTypesCount: res.roomTypesCount,
+              totalRoomsCount: res.totalRoomsCount
+            });
+          }
+        }
+      },
+      error: () => {
+        this.isPropertyStatsLoading = false;
+      }
+    });
+  }
+
+  getPropertyRoomTypesCount(hotelId: number): number {
+    return this.propertyStatsMap.get(hotelId)?.roomTypesCount || 0;
+  }
+
+  getPropertyTotalRoomsCount(hotelId: number): number {
+    return this.propertyStatsMap.get(hotelId)?.totalRoomsCount || 0;
+  }
+
+  getTotalRoomTypesAcrossProperties(): number {
+    let sum = 0;
+    this.propertyStatsMap.forEach(stats => sum += stats.roomTypesCount);
+    return sum;
+  }
+
+  getTotalRoomsAcrossProperties(): number {
+    let sum = 0;
+    this.propertyStatsMap.forEach(stats => sum += stats.totalRoomsCount);
+    return sum;
+  }
+
+  getActivePropertiesCount(): number {
+    if (!this.myHotels) return 0;
+    return this.myHotels.filter(h => (h.status || 'ACTIVE').toUpperCase() === 'ACTIVE').length;
+  }
+
+  get filteredHotels(): any[] {
+    if (!this.myHotels) return [];
+
+    return this.myHotels.filter(h => {
+      // 1. Search filter (name, city, address)
+      if (this.propertySearchQuery && this.propertySearchQuery.trim()) {
+        const q = this.propertySearchQuery.trim().toLowerCase();
+        const name = (h.name || '').toLowerCase();
+        const city = (h.city || '').toLowerCase();
+        const address = (h.address || h.addressLine1 || '').toLowerCase();
+        if (!name.includes(q) && !city.includes(q) && !address.includes(q)) {
+          return false;
+        }
+      }
+
+      // 2. Status filter
+      if (this.propertyStatusFilter !== 'ALL') {
+        const status = (h.status || 'ACTIVE').toUpperCase();
+        if (status !== this.propertyStatusFilter.toUpperCase()) {
+          return false;
+        }
+      }
+
+      // 3. Classification filter
+      if (this.propertyClassificationFilter !== 'ALL') {
+        const star = String(h.starRating || '');
+        const filter = this.propertyClassificationFilter;
+        if (filter.includes('Star')) {
+          const starNum = filter.replace(/\D/g, '');
+          if (star !== starNum) return false;
+        } else {
+          const classification = (h.propertyClassification || '').toUpperCase();
+          if (!classification.includes(filter.toUpperCase())) return false;
+        }
+      }
+
+      return true;
+    });
+  }
+
+  clearPropertyFilters(): void {
+    this.propertySearchQuery = '';
+    this.propertyStatusFilter = 'ALL';
+    this.propertyClassificationFilter = 'ALL';
+  }
+
+  formatPropertyLocation(h: any): string {
+    if (!h) return '';
+    const parts = [h.addressLine1 || h.address, h.city, h.state].filter(p => p && p.trim().length > 0);
+    return parts.length > 0 ? parts.join(', ') : (h.city || 'Location not specified');
+  }
+
+  formatRating(starRating: any): string {
+    if (starRating === undefined || starRating === null) return '4.0';
+    const num = Number(starRating);
+    if (isNaN(num)) return '4.0';
+    return num.toFixed(1);
+  }
+
+  getPropertyAmenitiesList(h: any): { name: string, icon: string }[] {
+    let list: string[] = [];
+    if (h.predefinedAmenities) {
+      try {
+        const parsed = typeof h.predefinedAmenities === 'string' ? JSON.parse(h.predefinedAmenities) : h.predefinedAmenities;
+        if (Array.isArray(parsed)) list.push(...parsed);
+      } catch {}
+    }
+    if (h.amenities && list.length === 0) {
+      if (typeof h.amenities === 'string') {
+        list = h.amenities.split(',').map((a: string) => a.trim()).filter((a: string) => a.length > 0);
+      } else if (Array.isArray(h.amenities)) {
+        list = h.amenities;
+      }
+    }
+    if (h.customAmenities) {
+      try {
+        const parsed = typeof h.customAmenities === 'string' ? JSON.parse(h.customAmenities) : h.customAmenities;
+        if (Array.isArray(parsed)) list.push(...parsed);
+      } catch {}
+    }
+
+    const unique = Array.from(new Set(list));
+    return unique.map(name => ({
+      name: name,
+      icon: this.getAmenityIcon(name)
+    }));
+  }
+
+  getDraftStepName(step: number | undefined): string {
+    switch (step) {
+      case 1: return 'Basic Details';
+      case 2: return 'Address & Location';
+      case 3: return 'Property Details';
+      case 4: return 'Facilities & Policies';
+      case 5: return 'Review & Activate';
+      default: return 'Property Details';
+    }
+  }
+
+  togglePropertyMenu(hotelId: number, event: MouseEvent): void {
+    event.stopPropagation();
+    this.activePropertyMenuId = this.activePropertyMenuId === hotelId ? null : hotelId;
+  }
+
+  closePropertyMenu(): void {
+    this.activePropertyMenuId = null;
+  }
+
+  handleManageRooms(hotel: any): void {
+    this.closePropertyMenu();
+    this.selectHotel(hotel);
+    this.activeNav = 'rooms';
+  }
+
+  handleAddRoom(hotel: any): void {
+    this.closePropertyMenu();
+    this.selectHotel(hotel);
+    this.activeNav = 'rooms';
+    this.startAddRoomType(hotel);
+  }
+
+  openPropertyDetailsModal(hotel: any): void {
+    this.openPropertyDetailsPage(hotel);
+  }
+
+  openPropertyDetailsPage(hotel: any): void {
+    this.closePropertyMenu();
+    this.selectedPropertyForDetails = hotel;
+    this.propertyDetailsData = { ...hotel };
+    this.propertyViewMode = 'details';
+    this.activePropertyDetailsSubNav = 'overview';
+    this.showDetailsMoreActions = false;
+    this.isLoadingPropertyDetails = true;
+    this.propertyDetailsError = '';
+    this.initPropertyGallery(hotel);
+    this.propertyDetailsRooms = [];
+
+    this.hotelService.getHotelForManagement(hotel.id).subscribe({
+      next: (dto) => {
+        this.isLoadingPropertyDetails = false;
+        this.propertyDetailsData = { ...hotel, ...dto };
+        this.initPropertyGallery(this.propertyDetailsData);
+        if (dto.rooms && Array.isArray(dto.rooms) && dto.rooms.length > 0) {
+          this.propertyDetailsRooms = dto.rooms;
+        } else {
+          this.loadRoomsForDetails(hotel.id);
+        }
+      },
+      error: (err) => {
+        this.isLoadingPropertyDetails = false;
+        console.warn('Could not load extra management details:', err);
+        this.propertyDetailsData = { ...hotel };
+        this.initPropertyGallery(hotel);
+        this.loadRoomsForDetails(hotel.id);
+      }
+    });
+  }
+
+  loadRoomsForDetails(hotelId: number): void {
+    this.isLoadingPropertyDetailsRooms = true;
+    this.hotelService.getRoomTypes(hotelId).subscribe({
+      next: (rooms) => {
+        this.isLoadingPropertyDetailsRooms = false;
+        this.propertyDetailsRooms = rooms || [];
+      },
+      error: (err) => {
+        this.isLoadingPropertyDetailsRooms = false;
+        console.warn('Could not load rooms for property details:', err);
+        this.propertyDetailsRooms = [];
+      }
+    });
+  }
+
+  closePropertyDetailsPage(): void {
+    this.propertyViewMode = 'list';
+    this.showDetailsMoreActions = false;
+  }
+
+  closePropertyDetailsModal(): void {
+    this.closePropertyDetailsPage();
+  }
+
+  setPropertyDetailsSubNav(tab: 'overview' | 'address-contact' | 'amenities' | 'policies' | 'registration' | 'room-types'): void {
+    this.activePropertyDetailsSubNav = tab;
+  }
+
+  toggleDetailsMoreActions(event: MouseEvent): void {
+    event.stopPropagation();
+    this.showDetailsMoreActions = !this.showDetailsMoreActions;
+  }
+
+  initPropertyGallery(data: any): void {
+    const images: any[] = [];
+    if (data?.images && Array.isArray(data.images) && data.images.length > 0) {
+      const sorted = [...data.images].sort((a, b) => {
+        if (a.isCover && !b.isCover) return -1;
+        if (!a.isCover && b.isCover) return 1;
+        return (a.displayOrder || 0) - (b.displayOrder || 0);
+      });
+      sorted.forEach(img => {
+        if (img.imageUrl) {
+          images.push({
+            id: img.id,
+            imageUrl: img.imageUrl,
+            isCover: img.isCover,
+            displayOrder: img.displayOrder,
+            caption: img.caption
+          });
+        }
+      });
+    }
+
+    if (images.length === 0 && data?.imageUrl) {
+      images.push({
+        imageUrl: data.imageUrl,
+        isCover: true,
+        displayOrder: 1,
+        caption: data.name
+      });
+    }
+
+    if (images.length === 0) {
+      images.push({
+        imageUrl: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80',
+        isCover: true,
+        displayOrder: 1,
+        caption: 'Property Exterior'
+      });
+    }
+
+    this.galleryImages = images;
+    this.activeGalleryIndex = 0;
+    this.activeGalleryImage = this.galleryImages[0]?.imageUrl || '';
+  }
+
+  selectGalleryImage(index: number): void {
+    if (index >= 0 && index < this.galleryImages.length) {
+      this.activeGalleryIndex = index;
+      this.activeGalleryImage = this.galleryImages[index].imageUrl;
+    }
+  }
+
+  prevGalleryImage(): void {
+    if (this.galleryImages.length <= 1) return;
+    this.activeGalleryIndex = (this.activeGalleryIndex - 1 + this.galleryImages.length) % this.galleryImages.length;
+    this.activeGalleryImage = this.galleryImages[this.activeGalleryIndex].imageUrl;
+  }
+
+  nextGalleryImage(): void {
+    if (this.galleryImages.length <= 1) return;
+    this.activeGalleryIndex = (this.activeGalleryIndex + 1) % this.galleryImages.length;
+    this.activeGalleryImage = this.galleryImages[this.activeGalleryIndex].imageUrl;
+  }
+
+  getVisibleGalleryThumbnails(): any[] {
+    return this.galleryImages.slice(0, 4);
+  }
+
+  getRemainingGalleryImagesCount(): number {
+    return Math.max(0, this.galleryImages.length - 4);
+  }
+
+  getOperationalDetailsRooms(): any[] {
+    return (this.propertyDetailsRooms || []).filter(r => (r.status || 'ACTIVE').toUpperCase() !== 'ARCHIVED');
+  }
+
+  getOperationalRoomTypesCount(): number {
+    return this.getOperationalDetailsRooms().length;
+  }
+
+  getOperationalTotalRoomsCount(): number {
+    return this.getOperationalDetailsRooms().reduce((sum, r) => sum + (Number(r.totalRooms) || 0), 0);
+  }
+
+  getOperationalAvailableRoomsCount(): number {
+    return this.getOperationalDetailsRooms().reduce((sum, r) => {
+      const avl = r.availableRooms != null ? Number(r.availableRooms) : Number(r.totalRooms || 0);
+      return sum + avl;
+    }, 0);
+  }
+
+  getOperationalAllocatedRoomsCount(): number {
+    return this.getOperationalDetailsRooms().reduce((sum, r) => {
+      if (r.allocatedRooms != null) {
+        return sum + Number(r.allocatedRooms);
+      }
+      const total = Number(r.totalRooms) || 0;
+      const avl = r.availableRooms != null ? Number(r.availableRooms) : total;
+      return sum + Math.max(0, total - avl);
+    }, 0);
+  }
+
+  format12HourTime(timeStr?: string): string {
+    if (!timeStr) return '—';
+    const parts = timeStr.split(':');
+    if (parts.length < 2) return timeStr;
+    let hour = parseInt(parts[0], 10);
+    if (isNaN(hour)) return timeStr;
+    const min = parts[1];
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    hour = hour % 12;
+    if (hour === 0) hour = 12;
+    return `${hour}:${min} ${ampm}`;
+  }
+
+  formatUrl(url?: string): string {
+    if (!url) return '#';
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return `https://${url}`;
+    }
+    return url;
+  }
+
+  getPredefinedAmenitiesList(h: any): { name: string, icon: string }[] {
+    let list: string[] = [];
+    if (h?.predefinedAmenities) {
+      try {
+        const parsed = typeof h.predefinedAmenities === 'string' ? JSON.parse(h.predefinedAmenities) : h.predefinedAmenities;
+        if (Array.isArray(parsed)) list.push(...parsed);
+      } catch {}
+    }
+    if (list.length === 0 && h?.amenities) {
+      if (typeof h.amenities === 'string') {
+        list = h.amenities.split(',').map((a: string) => a.trim()).filter((a: string) => a.length > 0);
+      } else if (Array.isArray(h.amenities)) {
+        list = [...h.amenities];
+      }
+    }
+    const unique = Array.from(new Set(list));
+    return unique.map(name => ({
+      name,
+      icon: this.getAmenityIcon(name)
+    }));
+  }
+
+  getCustomAmenitiesList(h: any): string[] {
+    let list: string[] = [];
+    if (h?.customAmenities) {
+      try {
+        const parsed = typeof h.customAmenities === 'string' ? JSON.parse(h.customAmenities) : h.customAmenities;
+        if (Array.isArray(parsed)) list.push(...parsed);
+      } catch {}
+    }
+    return Array.from(new Set(list));
+  }
+
+  getAcceptedIdList(h: any): string[] {
+    let list: string[] = [];
+    if (h?.acceptedIdentificationTypes) {
+      try {
+        const parsed = typeof h.acceptedIdentificationTypes === 'string' ? JSON.parse(h.acceptedIdentificationTypes) : h.acceptedIdentificationTypes;
+        if (Array.isArray(parsed)) list.push(...parsed);
+      } catch {}
+    }
+    const otherIdx = list.indexOf('Other');
+    if (otherIdx !== -1) {
+      list.splice(otherIdx, 1);
+      if (h?.customIdentificationType && h.customIdentificationType.trim()) {
+        list.push(h.customIdentificationType.trim());
+      }
+    }
+    if (list.length === 0) {
+      list = ['Aadhaar', 'PAN', 'Passport', 'Driving License'];
+    }
+    return list;
+  }
+
+  openEditPropertyModal(hotel: any): void {
+    this.closePropertyMenu();
+    this.editingProperty = hotel;
+    this.showEditPropertyModal = true;
+    this.editPropertyError = '';
+
+    this.editPropertyForm = {
+      name: hotel.name || '',
+      city: hotel.city || '',
+      address: hotel.addressLine1 || hotel.address || '',
+      starRating: hotel.starRating || 3,
+      description: hotel.description || '',
+      amenities: hotel.amenities || '',
+      imageUrl: hotel.imageUrl || '',
+      status: (hotel.status || 'ACTIVE').toUpperCase()
+    };
+  }
+
+  closeEditPropertyModal(): void {
+    this.showEditPropertyModal = false;
+    this.editingProperty = null;
+    this.editPropertyError = '';
+  }
+
+  submitEditProperty(): void {
+    if (!this.editingProperty) return;
+
+    if (!this.editPropertyForm.name || !this.editPropertyForm.name.trim()) {
+      this.editPropertyError = 'Property name is required.';
+      return;
+    }
+    if (!this.editPropertyForm.city || !this.editPropertyForm.city.trim()) {
+      this.editPropertyError = 'City is required.';
+      return;
+    }
+    if (!this.editPropertyForm.address || !this.editPropertyForm.address.trim()) {
+      this.editPropertyError = 'Address is required.';
+      return;
+    }
+
+    this.isUpdatingProperty = true;
+    this.editPropertyError = '';
+
+    const hotelId = this.editingProperty.id;
+    const payload = {
+      name: this.editPropertyForm.name.trim(),
+      city: this.editPropertyForm.city.trim(),
+      address: this.editPropertyForm.address.trim(),
+      starRating: Number(this.editPropertyForm.starRating) || 3,
+      description: this.editPropertyForm.description ? this.editPropertyForm.description.trim() : '',
+      amenities: this.editPropertyForm.amenities ? this.editPropertyForm.amenities.trim() : '',
+      imageUrl: this.editPropertyForm.imageUrl ? this.editPropertyForm.imageUrl.trim() : ''
+    };
+
+    this.hotelService.updateHotel(hotelId, payload).subscribe({
+      next: (updated) => {
+        const newStatus = this.editPropertyForm.status;
+        if (newStatus && newStatus !== (this.editingProperty.status || 'ACTIVE').toUpperCase()) {
+          this.hotelService.updateHotelStatus(hotelId, newStatus).subscribe({
+            next: () => {
+              this.handlePostPropertyUpdate(hotelId, { ...updated, status: newStatus });
+            },
+            error: () => {
+              this.handlePostPropertyUpdate(hotelId, updated);
+            }
+          });
+        } else {
+          this.handlePostPropertyUpdate(hotelId, updated);
+        }
+      },
+      error: (err) => {
+        this.isUpdatingProperty = false;
+        console.error('Failed to update property:', err);
+        this.editPropertyError = err.error?.message || 'Failed to update property. Please check your inputs.';
+      }
+    });
+  }
+
+  handlePostPropertyUpdate(hotelId: number, updated: any): void {
+    this.isUpdatingProperty = false;
+    const idx = this.myHotels.findIndex(h => h.id === hotelId);
+    if (idx !== -1) {
+      this.myHotels[idx] = { ...this.myHotels[idx], ...updated };
+    }
+    if (this.selectedHotel && this.selectedHotel.id === hotelId) {
+      this.selectedHotel = { ...this.selectedHotel, ...updated };
+    }
+    if (this.propertyDetailsData && this.propertyDetailsData.id === hotelId) {
+      this.propertyDetailsData = { ...this.propertyDetailsData, ...updated };
+      this.initPropertyGallery(this.propertyDetailsData);
+    }
+    this.closeEditPropertyModal();
+    this.loadAllPropertiesStats();
   }
 
   // ==================== PROPERTY REGISTRATION WIZARD METHODS (WP-05 STEP 1) ====================

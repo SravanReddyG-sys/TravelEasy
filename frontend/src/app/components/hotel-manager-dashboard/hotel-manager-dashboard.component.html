@@ -742,86 +742,1311 @@
 
         <!-- 1. PROPERTIES LIST VIEW -->
         <div *ngIf="propertyViewMode === 'list'">
-          <div class="d-flex justify-content-between align-items-center mb-4">
+
+          <!-- 1. Page Header -->
+          <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
             <div>
-              <h3 class="fw-bold text-dark mb-1">My Hotel Properties</h3>
-              <p class="text-muted small mb-0">Manage registered hotels, addresses, classifications, and amenities.</p>
+              <h3 class="fw-bold text-dark mb-1" style="letter-spacing: -0.01em;">My Properties</h3>
+              <p class="text-secondary small mb-0">Manage registered hotels, addresses, classifications, and amenities.</p>
             </div>
-            <button class="btn btn-teal-primary text-white rounded-pill fw-bold px-3 py-2" (click)="startPropertyRegistration()">
-              <i class="fa-solid fa-plus me-1"></i> Register New Property
+            <button class="btn btn-teal-primary text-white rounded-3 fw-semibold px-3 py-2 d-inline-flex align-items-center gap-2 shadow-2xs"
+                    (click)="startPropertyRegistration()">
+              <i class="fa-solid fa-plus"></i>
+              <span>Register New Property</span>
             </button>
           </div>
 
-          <!-- Pending Drafts Banner if any -->
-          <div *ngIf="managerDrafts && managerDrafts.length > 0" class="card border-0 shadow-sm rounded-4 mb-4 p-3 bg-light-cyan">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <!-- 2. Pending Registration Draft Banner (if any) -->
+          <div *ngIf="managerDrafts && managerDrafts.length > 0"
+               class="card border rounded-4 mb-4 p-3.5 shadow-2xs"
+               style="background-color: #fffbeb; border-color: #fde68a !important;">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+              <!-- Left: Icon & message -->
               <div class="d-flex align-items-center gap-3">
-                <div class="draft-badge-icon">
-                  <i class="fa-solid fa-file-pen text-teal fs-5"></i>
+                <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
+                     style="width: 44px; height: 44px; background-color: #fef3c7; color: #d97706;">
+                  <i class="fa-solid fa-clipboard-list fs-5"></i>
                 </div>
                 <div>
-                  <h6 class="fw-bold text-dark mb-0">Draft Property Registration in Progress</h6>
-                  <p class="text-muted small mb-0">
-                    You have {{ managerDrafts.length }} unfinished property registration(s).
-                    <span *ngIf="managerDrafts[0]?.name">Latest: <strong>{{ managerDrafts[0].name }}</strong> (Step {{ managerDrafts[0].registrationStep || 1 }})</span>
+                  <h6 class="fw-bold text-dark mb-0.5">
+                    {{ managerDrafts.length }} unfinished registration{{ managerDrafts.length > 1 ? 's' : '' }}
+                  </h6>
+                  <p class="text-secondary small mb-0">
+                    Continue your property registration to make it available for operations.
                   </p>
                 </div>
               </div>
-              <button class="btn btn-outline-teal rounded-pill btn-sm fw-bold px-3" (click)="startPropertyRegistration(managerDrafts[0])">
-                Resume Registration <i class="fa-solid fa-arrow-right ms-1"></i>
-              </button>
+
+              <!-- Center/Right: Property name & step info -->
+              <div class="d-none d-lg-flex align-items-center gap-3 border-start ps-3" style="border-color: #fde68a !important;">
+                <div>
+                  <div class="fw-bold text-dark mb-0.5" style="font-size: 0.92rem;">
+                    {{ managerDrafts[0]?.name || 'Untitled Property' }}
+                  </div>
+                  <div class="text-secondary small" style="font-size: 0.8rem;">
+                    In progress • Step {{ managerDrafts[0]?.registrationStep || 1 }} of 5 – {{ getDraftStepName(managerDrafts[0]?.registrationStep) }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right: Resume button -->
+              <div class="ms-auto">
+                <button class="btn btn-outline-teal rounded-3 px-3.5 py-2 fw-semibold d-inline-flex align-items-center gap-1.5 bg-white shadow-2xs"
+                        (click)="startPropertyRegistration(managerDrafts[0])">
+                  <span>Resume Registration</span>
+                  <i class="fa-solid fa-chevron-right small"></i>
+                </button>
+              </div>
             </div>
           </div>
 
-          <!-- Property Cards Grid -->
-          <div class="row g-4" *ngIf="myHotels.length > 0; else noHotelsRegistered">
-            <div *ngFor="let h of myHotels" class="col-md-6 col-xl-4">
-              <div class="card shadow-sm h-100 rounded-4 overflow-hidden border-0">
-                <img [src]="h.imageUrl || 'https://images.unsplash.com/photo-1566073771259-6a8506099945'" 
-                     class="card-img-top" 
-                     style="height: 180px; object-fit: cover;">
-                <div class="card-body p-4 d-flex flex-column justify-content-between">
-                  <div>
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                      <h5 class="fw-bold mb-0 text-dark">{{ h.name }}</h5>
-                      <span class="badge bg-warning text-dark"><i class="fa-solid fa-star me-1"></i>{{ h.starRating }}★</span>
-                    </div>
-                    <p class="text-muted small mb-2"><i class="fa-solid fa-location-dot me-1 text-danger"></i> {{ h.address }}, {{ h.city }}</p>
-                    <p class="small text-secondary mb-3">{{ h.description || 'No description provided.' }}</p>
-                    <div class="mb-3">
-                      <span class="badge bg-light text-secondary border me-1 mb-1" *ngFor="let a of (h.amenities || '').split(',')">{{ a.trim() }}</span>
-                    </div>
+          <!-- 3. Property Overview Summary Cards (4 Cards across in a row) -->
+          <div class="row g-3 mb-4">
+            <!-- 1. Total Properties -->
+            <div class="col-6 col-lg-3">
+              <div class="card p-3 rounded-4 border bg-white shadow-2xs h-100 property-summary-card">
+                <div class="d-flex align-items-center gap-3">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
+                       style="width: 48px; height: 48px; background-color: #ccfbf1; color: #0d9488;">
+                    <i class="fa-solid fa-hotel fs-5"></i>
                   </div>
-                  <div class="d-flex gap-2 mt-auto">
-                    <button class="btn btn-outline-info btn-sm rounded-pill flex-grow-1 fw-bold" (click)="selectHotel(h); activeNav = 'rooms'">
-                      Manage Rooms
-                    </button>
-                    <button class="btn btn-info btn-sm text-white rounded-pill flex-grow-1 fw-bold" (click)="openAddRoomModal(h)">
-                      + Add Room
-                    </button>
+                  <div>
+                    <div class="fw-bold text-dark lh-1 mb-1" style="font-size: 1.55rem; letter-spacing: -0.02em;">
+                      {{ myHotels.length }}
+                    </div>
+                    <div class="text-secondary small" style="font-size: 0.82rem;">Total Properties</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Active Properties -->
+            <div class="col-6 col-lg-3">
+              <div class="card p-3 rounded-4 border bg-white shadow-2xs h-100 property-summary-card">
+                <div class="d-flex align-items-center gap-3">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
+                       style="width: 48px; height: 48px; background-color: #dcfce7; color: #16a34a;">
+                    <i class="fa-solid fa-circle-check fs-5"></i>
+                  </div>
+                  <div>
+                    <div class="fw-bold text-dark lh-1 mb-1" style="font-size: 1.55rem; letter-spacing: -0.02em;">
+                      {{ getActivePropertiesCount() }}
+                    </div>
+                    <div class="text-secondary small" style="font-size: 0.82rem;">Active Properties</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Total Room Types -->
+            <div class="col-6 col-lg-3">
+              <div class="card p-3 rounded-4 border bg-white shadow-2xs h-100 property-summary-card">
+                <div class="d-flex align-items-center gap-3">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
+                       style="width: 48px; height: 48px; background-color: #dbeafe; color: #2563eb;">
+                    <i class="fa-solid fa-bed fs-5"></i>
+                  </div>
+                  <div>
+                    <div class="fw-bold text-dark lh-1 mb-1" style="font-size: 1.55rem; letter-spacing: -0.02em;">
+                      {{ getTotalRoomTypesAcrossProperties() }}
+                    </div>
+                    <div class="text-secondary small" style="font-size: 0.82rem;">Total Room Types</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. Total Rooms -->
+            <div class="col-6 col-lg-3">
+              <div class="card p-3 rounded-4 border bg-white shadow-2xs h-100 property-summary-card">
+                <div class="d-flex align-items-center gap-3">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
+                       style="width: 48px; height: 48px; background-color: #f3e8ff; color: #9333ea;">
+                    <i class="fa-solid fa-door-open fs-5"></i>
+                  </div>
+                  <div>
+                    <div class="fw-bold text-dark lh-1 mb-1" style="font-size: 1.55rem; letter-spacing: -0.02em;">
+                      {{ getTotalRoomsAcrossProperties() }}
+                    </div>
+                    <div class="text-secondary small" style="font-size: 0.82rem;">Total Rooms</div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <ng-template #noHotelsRegistered>
-            <div class="card border-0 shadow-sm rounded-4 text-center p-5 bg-white">
-              <div class="mb-3">
-                <i class="fa-solid fa-hotel text-muted" style="font-size: 48px; opacity: 0.4;"></i>
+          <!-- 4. Search & Filtering Toolbar (Single Row with Proper Alignment, Spacing, and Labeling) -->
+          <div class="card p-3 rounded-4 border bg-white shadow-2xs mb-4">
+            <div class="d-flex flex-column flex-md-row align-items-stretch align-items-md-end gap-3">
+
+              <!-- 1. Search Properties -->
+              <div class="flex-grow-1" style="min-width: 240px;">
+                <label class="form-label small fw-semibold text-secondary mb-1.5">Search Properties</label>
+                <div class="property-search-input-wrap">
+                  <i class="fa-solid fa-magnifying-glass property-search-icon"></i>
+                  <input type="text"
+                         class="form-control property-search-control"
+                         placeholder="Search properties by name, city, or address..."
+                         [(ngModel)]="propertySearchQuery"
+                         aria-label="Search properties by name, city, or address">
+                  <button *ngIf="propertySearchQuery"
+                          type="button"
+                          class="btn btn-link property-search-clear"
+                          (click)="propertySearchQuery = ''"
+                          title="Clear search">
+                    <i class="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
               </div>
-              <h5 class="fw-bold text-dark">No Hotel Properties Registered Yet</h5>
-              <p class="text-muted small mx-auto" style="max-width: 420px;">
-                Add your hotel to TravelEasy to begin managing room categories, inventory, and bookings.
+
+              <!-- 2. Status Filter -->
+              <div class="property-filter-col" style="width: 200px; min-width: 170px;">
+                <label class="form-label small fw-semibold text-secondary mb-1.5">Status</label>
+                <div class="position-relative">
+                  <select class="form-select property-filter-select"
+                          [(ngModel)]="propertyStatusFilter"
+                          aria-label="Filter by status">
+                    <option value="ALL">All Statuses</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                    <option value="DRAFT">Draft</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- 3. Classification Filter -->
+              <div class="property-filter-col" style="width: 210px; min-width: 180px;">
+                <label class="form-label small fw-semibold text-secondary mb-1.5">Classification</label>
+                <div class="position-relative">
+                  <select class="form-select property-filter-select"
+                          [(ngModel)]="propertyClassificationFilter"
+                          aria-label="Filter by classification">
+                    <option value="ALL">All Classifications</option>
+                    <option value="5 Star">5 Star</option>
+                    <option value="4 Star">4 Star</option>
+                    <option value="3 Star">3 Star</option>
+                    <option value="2 Star">2 Star</option>
+                    <option value="1 Star">1 Star</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- 4. Reset Filters Action (Visible when any filter is active) -->
+              <div *ngIf="propertySearchQuery || propertyStatusFilter !== 'ALL' || propertyClassificationFilter !== 'ALL'"
+                   class="flex-shrink-0">
+                <button type="button"
+                        class="btn btn-outline-secondary btn-sm rounded-3 px-3 fw-semibold d-inline-flex align-items-center gap-1.5 text-nowrap"
+                        style="height: 42px;"
+                        (click)="clearPropertyFilters()"
+                        title="Reset all filters">
+                  <i class="fa-solid fa-rotate-left small"></i>
+                  <span>Reset</span>
+                </button>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- 5. Property Cards Grid Matching Approved Mockup -->
+          <div *ngIf="myHotels.length > 0; else noHotelsRegistered">
+            <div *ngIf="filteredHotels.length > 0; else noMatchingProperties" class="row g-4">
+              <div *ngFor="let h of filteredHotels" class="col-12 col-md-6 position-relative" [class.menu-open]="activePropertyMenuId === h.id">
+                <div class="card rounded-4 border bg-white shadow-sm d-flex flex-column h-100 property-card position-relative" [class.menu-open]="activePropertyMenuId === h.id">
+
+                  <!-- Top Image Section with Badges -->
+                  <div class="property-img-container position-relative">
+                    <img [src]="h.imageUrl || 'https://images.unsplash.com/photo-1566073771259-6a8506099945'"
+                         [alt]="h.name"
+                         class="w-100 h-100 object-fit-cover"
+                         (error)="$any($event.target).src = 'https://images.unsplash.com/photo-1566073771259-6a8506099945'">
+
+                    <!-- Status Badge Overlay (Top Left) -->
+                    <span class="property-status-badge shadow-sm rounded-pill px-2.5 py-1.5 d-inline-flex align-items-center gap-1.5 fw-semibold">
+                      <span class="rounded-circle"
+                            [style.background-color]="(h.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? '#22c55e' : ((h.status || '').toUpperCase() === 'DRAFT' ? '#f59e0b' : '#64748b')"
+                            style="width: 8px; height: 8px;"></span>
+                      <span>{{ (h.status || 'Active') | titlecase }}</span>
+                    </span>
+
+                    <!-- Rating Badge Overlay (Top Right) -->
+                    <span class="property-rating-badge shadow-sm rounded-pill px-2.5 py-1.5 d-inline-flex align-items-center gap-1 fw-bold">
+                      <i class="fa-solid fa-star" style="color: #eab308; font-size: 0.78rem;"></i>
+                      <span>{{ formatRating(h.starRating) }}</span>
+                    </span>
+
+                    <!-- Carousel Dots Overlay (Bottom Center) -->
+                    <div class="property-dots-wrap position-absolute bottom-0 start-50 translate-middle-x pb-2 d-flex gap-1.5 align-items-center">
+                      <span class="rounded-circle" style="width: 6px; height: 6px; background-color: #ffffff;"></span>
+                      <span class="rounded-circle" style="width: 6px; height: 6px; background-color: rgba(255,255,255,0.5);"></span>
+                      <span class="rounded-circle" style="width: 6px; height: 6px; background-color: rgba(255,255,255,0.5);"></span>
+                      <span class="rounded-circle" style="width: 6px; height: 6px; background-color: rgba(255,255,255,0.5);"></span>
+                    </div>
+                  </div>
+
+                  <!-- Card Body Content -->
+                  <div class="p-3.5 p-md-4 d-flex flex-column flex-grow-1">
+
+                    <!-- Property Name -->
+                    <h5 class="fw-bold text-dark mb-1 text-truncate" [title]="h.name" style="font-size: 1.15rem; letter-spacing: -0.01em;">
+                      {{ h.name }}
+                    </h5>
+
+                    <!-- Location -->
+                    <div class="d-flex align-items-center gap-1.5 text-secondary small mb-2 text-truncate" [title]="formatPropertyLocation(h)">
+                      <i class="fa-solid fa-location-dot text-muted" style="font-size: 0.8rem; flex-shrink: 0;"></i>
+                      <span class="text-truncate">{{ formatPropertyLocation(h) }}</span>
+                    </div>
+
+                    <!-- Description -->
+                    <p class="text-secondary small mb-3 property-card-desc" [title]="h.description || ''">
+                      {{ h.description || 'A comfortable hotel property offering well-appointed rooms, modern amenities, and dedicated service.' }}
+                    </p>
+
+                    <!-- Amenities Badges -->
+                    <div class="d-flex flex-wrap align-items-center gap-1.5 mb-3">
+                      <ng-container *ngFor="let a of getPropertyAmenitiesList(h) | slice:0:3">
+                        <span class="badge property-amenity-badge">
+                          <i [class]="a.icon" class="text-muted me-1"></i>{{ a.name }}
+                        </span>
+                      </ng-container>
+                      <span *ngIf="getPropertyAmenitiesList(h).length > 3"
+                            class="badge property-amenity-more rounded-pill"
+                            [title]="'More amenities available'">
+                        +{{ getPropertyAmenitiesList(h).length - 3 }} more
+                      </span>
+                    </div>
+
+                    <!-- Property Room Statistics (Two Compact Metrics) -->
+                    <div class="property-stats-box rounded-3 p-2.5 mb-3 bg-light-subtle border">
+                      <div class="row g-2 text-start">
+                        <!-- Room Types -->
+                        <div class="col-6 border-end">
+                          <div class="d-flex align-items-center gap-2 ps-1">
+                            <i class="fa-solid fa-bed text-muted fs-5"></i>
+                            <div>
+                              <div class="fw-bold text-dark lh-1" style="font-size: 1.05rem;">
+                                {{ getPropertyRoomTypesCount(h.id) }}
+                              </div>
+                              <div class="text-secondary" style="font-size: 0.74rem;">Room Types</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <!-- Total Rooms -->
+                        <div class="col-6">
+                          <div class="d-flex align-items-center gap-2 ps-2">
+                            <i class="fa-solid fa-door-open text-muted fs-5"></i>
+                            <div>
+                              <div class="fw-bold text-dark lh-1" style="font-size: 1.05rem;">
+                                {{ getPropertyTotalRoomsCount(h.id) }}
+                              </div>
+                              <div class="text-secondary" style="font-size: 0.74rem;">Total Rooms</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Card Actions (Always Visible Row with 3 Actions) -->
+                    <div class="d-flex align-items-center gap-2 mt-auto pt-2 border-top">
+                      <!-- 1. View Details -->
+                      <button type="button"
+                              class="btn btn-outline-teal btn-sm rounded-3 py-2 fw-semibold flex-grow-1 d-flex align-items-center justify-content-center gap-1.5"
+                              (click)="openPropertyDetailsModal(h)">
+                        <i class="fa-regular fa-eye"></i>
+                        <span>View Details</span>
+                      </button>
+
+                      <!-- 2. Edit Property -->
+                      <button type="button"
+                              class="btn btn-outline-secondary btn-sm rounded-3 py-2 fw-semibold flex-grow-1 d-flex align-items-center justify-content-center gap-1.5"
+                              (click)="openEditPropertyModal(h)">
+                        <i class="fa-regular fa-pen-to-square"></i>
+                        <span>Edit Property</span>
+                      </button>
+
+                      <!-- 3. Three-Dot Contextual Menu -->
+                      <div class="position-relative property-menu-container" (click)="$event.stopPropagation()">
+                        <button type="button"
+                                class="btn btn-outline-secondary btn-sm rounded-3 p-2 d-flex align-items-center justify-content-center property-menu-btn"
+                                [class.active]="activePropertyMenuId === h.id"
+                                (click)="togglePropertyMenu(h.id, $event)"
+                                title="More actions"
+                                aria-label="More actions">
+                          <i class="fa-solid fa-ellipsis-vertical" style="font-size: 0.95rem;"></i>
+                        </button>
+
+                        <!-- Contextual Dropdown Menu -->
+                        <div *ngIf="activePropertyMenuId === h.id"
+                             class="property-actions-dropdown rounded-3 shadow-lg border bg-white py-1.5 position-absolute end-0 mt-1 z-3"
+                             style="min-width: 175px;">
+                          <button type="button"
+                                  class="dropdown-item py-2 px-3 d-flex align-items-center gap-2 text-dark small fw-medium"
+                                  (click)="handleManageRooms(h)">
+                            <i class="fa-solid fa-bed text-muted" style="width: 16px;"></i>
+                            <span>Manage Rooms</span>
+                          </button>
+                          <button type="button"
+                                  class="dropdown-item py-2 px-3 d-flex align-items-center gap-2 text-dark small fw-medium"
+                                  (click)="handleAddRoom(h)">
+                            <i class="fa-solid fa-plus text-muted" style="width: 16px;"></i>
+                            <span>Add Room</span>
+                          </button>
+                        </div>
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
+            <!-- Empty state when search or filters return 0 results -->
+            <ng-template #noMatchingProperties>
+              <div class="card border rounded-4 text-center p-5 bg-white shadow-2xs">
+                <div class="mb-3">
+                  <div class="rounded-circle d-inline-flex align-items-center justify-content-center"
+                       style="width: 64px; height: 64px; background-color: #f1f5f9; color: #64748b;">
+                    <i class="fa-solid fa-magnifying-glass fs-3"></i>
+                  </div>
+                </div>
+                <h5 class="fw-bold text-dark mb-1">No Properties Found</h5>
+                <p class="text-secondary small mx-auto mb-3" style="max-width: 440px;">
+                  No registered properties match your current search criteria or filter settings. Try adjusting your search query or reset your filters.
+                </p>
+                <div>
+                  <button type="button" class="btn btn-outline-teal rounded-3 px-3.5 py-2 fw-semibold" (click)="clearPropertyFilters()">
+                    <i class="fa-solid fa-rotate-left me-1.5"></i> Clear Filters
+                  </button>
+                </div>
+              </div>
+            </ng-template>
+          </div>
+
+          <!-- Empty state when no properties exist at all -->
+          <ng-template #noHotelsRegistered>
+            <div class="card border rounded-4 text-center p-5 bg-white shadow-2xs">
+              <div class="mb-3">
+                <div class="rounded-circle d-inline-flex align-items-center justify-content-center"
+                     style="width: 64px; height: 64px; background-color: #ecfeff; color: #0d9488;">
+                  <i class="fa-solid fa-hotel fs-3"></i>
+                </div>
+              </div>
+              <h5 class="fw-bold text-dark mb-1">No Hotel Properties Registered Yet</h5>
+              <p class="text-secondary small mx-auto mb-3" style="max-width: 440px;">
+                Add your hotel to TravelEasy to begin managing room categories, daily inventory, base pricing, and guest reservations.
               </p>
-              <div class="mt-2">
-                <button class="btn btn-teal-primary text-white rounded-pill fw-bold px-4 py-2" (click)="startPropertyRegistration()">
-                  <i class="fa-solid fa-plus me-1"></i> Register New Property
+              <div>
+                <button class="btn btn-teal-primary text-white rounded-3 fw-semibold px-4 py-2 d-inline-flex align-items-center gap-2"
+                        (click)="startPropertyRegistration()">
+                  <i class="fa-solid fa-plus"></i>
+                  <span>Register New Property</span>
                 </button>
               </div>
             </div>
           </ng-template>
+
         </div>
+
+        <!-- ==================== 2. PROPERTY DETAILS FULL-PAGE VIEW ==================== -->
+        <div *ngIf="propertyViewMode === 'details'" class="property-details-page-view">
+
+          <!-- 1. Page Header (No breadcrumbs per design requirements) -->
+          <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+            <div class="d-flex align-items-center gap-3">
+              <button type="button"
+                      class="btn btn-outline-secondary rounded-circle d-flex align-items-center justify-content-center p-0 flex-shrink-0"
+                      style="width: 40px; height: 40px;"
+                      (click)="closePropertyDetailsPage()"
+                      title="Back to My Properties">
+                <i class="fa-solid fa-arrow-left"></i>
+              </button>
+              <div>
+                <h3 class="fw-bold text-dark mb-0.5" style="letter-spacing: -0.01em;">Property Details</h3>
+                <p class="text-secondary small mb-0">
+                  Complete information about this hotel property, including registration, address, amenities, policies, and room configuration.
+                </p>
+              </div>
+            </div>
+
+            <!-- Page Actions -->
+            <div class="d-flex align-items-center gap-2">
+              <button type="button"
+                      class="btn btn-outline-teal rounded-3 fw-semibold px-3.5 py-2 d-inline-flex align-items-center gap-2 shadow-2xs"
+                      (click)="openEditPropertyModal(propertyDetailsData)">
+                <i class="fa-regular fa-pen-to-square"></i>
+                <span>Edit Property</span>
+              </button>
+
+              <!-- More Actions Dropdown -->
+              <div class="position-relative details-more-actions-container">
+                <button type="button"
+                        class="btn btn-outline-secondary rounded-3 px-3 py-2 fw-semibold d-inline-flex align-items-center gap-1.5 shadow-2xs"
+                        (click)="toggleDetailsMoreActions($event)">
+                  <i class="fa-solid fa-ellipsis"></i>
+                  <span>More Actions</span>
+                </button>
+
+                <div *ngIf="showDetailsMoreActions"
+                     class="dropdown-menu show shadow-lg rounded-3 py-1.5 border position-absolute end-0 mt-1 z-3"
+                     style="min-width: 175px;">
+                  <button class="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 small text-dark"
+                          (click)="handleManageRooms(propertyDetailsData)">
+                    <i class="fa-solid fa-bed text-secondary"></i>
+                    <span>Manage Rooms</span>
+                  </button>
+                  <button class="dropdown-item d-flex align-items-center gap-2.5 py-2 px-3 small text-dark"
+                          (click)="handleAddRoom(propertyDetailsData)">
+                    <i class="fa-solid fa-plus text-secondary"></i>
+                    <span>Add Room</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Persistent Property Summary & Gallery Card -->
+          <div class="card border rounded-4 p-4 mb-4 bg-white shadow-2xs">
+            <div class="row g-4 align-items-stretch">
+
+              <!-- Left Column: Image Gallery (Mockup Reference: ~42% on desktop) -->
+              <div class="col-12 col-lg-5">
+                <!-- Main Image Display -->
+                <div class="position-relative rounded-4 overflow-hidden mb-2 shadow-2xs details-gallery-hero"
+                     style="height: 250px; background-color: #0f172a;">
+                  <img [src]="activeGalleryImage || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80'"
+                       alt="Property Image"
+                       class="w-100 h-100 object-fit-cover">
+
+                  <!-- Previous / Next Controls -->
+                  <button *ngIf="galleryImages.length > 1"
+                          type="button"
+                          class="gallery-nav-btn gallery-nav-prev"
+                          (click)="prevGalleryImage()"
+                          aria-label="Previous Image">
+                    <i class="fa-solid fa-chevron-left"></i>
+                  </button>
+                  <button *ngIf="galleryImages.length > 1"
+                          type="button"
+                          class="gallery-nav-btn gallery-nav-next"
+                          (click)="nextGalleryImage()"
+                          aria-label="Next Image">
+                    <i class="fa-solid fa-chevron-right"></i>
+                  </button>
+
+                  <!-- Carousel Dots Indicator -->
+                  <div *ngIf="galleryImages.length > 1" class="gallery-dots-overlay">
+                    <span *ngFor="let img of galleryImages; let i = index"
+                          class="gallery-dot"
+                          [class.active]="i === activeGalleryIndex"
+                          (click)="selectGalleryImage(i)"></span>
+                  </div>
+
+                  <!-- Image Count Badge (e.g. 1 / 8) -->
+                  <div class="gallery-counter-badge">
+                    {{ (activeGalleryIndex + 1) }} / {{ galleryImages.length }}
+                  </div>
+                </div>
+
+                <!-- Thumbnails Row (Up to 4 visible, +N More on the 4th if > 4) -->
+                <div class="row g-2">
+                  <div *ngFor="let thumb of getVisibleGalleryThumbnails(); let i = index"
+                       class="col-3">
+                    <div class="gallery-thumb-slot rounded-3 overflow-hidden position-relative cursor-pointer"
+                         [class.active-thumb]="i === activeGalleryIndex"
+                         (click)="selectGalleryImage(i)">
+                      <img [src]="thumb.imageUrl" alt="Thumbnail" class="w-100 h-100 object-fit-cover">
+
+                      <!-- +N More Overlay on 4th thumbnail if extra images exist -->
+                      <div *ngIf="i === 3 && getRemainingGalleryImagesCount() > 0"
+                           class="gallery-more-overlay d-flex flex-column align-items-center justify-content-center">
+                        <span class="fw-bold">+{{ getRemainingGalleryImagesCount() }}</span>
+                        <span class="small" style="font-size: 0.68rem;">More</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right Column: Property Identity & Metrics -->
+              <div class="col-12 col-lg-7 d-flex flex-column justify-content-between">
+                <div>
+                  <!-- Title and Status Badge -->
+                  <div class="d-flex align-items-center gap-2.5 mb-2 flex-wrap">
+                    <h3 class="fw-bold text-dark mb-0" style="font-size: 1.6rem; letter-spacing: -0.01em;">
+                      {{ propertyDetailsData?.name || selectedPropertyForDetails?.name }}
+                    </h3>
+                    <span class="badge rounded-pill px-2.5 py-1 fw-semibold small d-inline-flex align-items-center gap-1.5"
+                          [ngClass]="(propertyDetailsData?.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning'">
+                      <span class="status-dot-sm" [ngClass]="(propertyDetailsData?.status || 'ACTIVE').toUpperCase() === 'ACTIVE' ? 'bg-success' : 'bg-warning'"></span>
+                      <span>{{ (propertyDetailsData?.status || 'Active') | titlecase }}</span>
+                    </span>
+                  </div>
+
+                  <!-- Classification Pill & Property Type Pill (Side by Side) -->
+                  <div class="d-flex align-items-center gap-2 mb-2.5">
+                    <!-- Classification (Star Category) -->
+                    <span class="badge rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 shadow-2xs"
+                          style="background-color: #fffbeb; color: #b45309; border: 1px solid #fde68a;">
+                      <i class="fa-solid fa-star text-warning"></i>
+                      <span>{{ propertyDetailsData?.propertyClassification || (propertyDetailsData?.starRating ? propertyDetailsData.starRating + ' Star' : '5 Star') }}</span>
+                    </span>
+
+                    <!-- Property Type -->
+                    <span class="badge rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 shadow-2xs"
+                          style="background-color: #f0fdfa; color: #0f766e; border: 1px solid #ccfbf1;">
+                      <i class="fa-solid fa-hotel"></i>
+                      <span>{{ propertyDetailsData?.propertyType || 'Hotel' }}</span>
+                    </span>
+                  </div>
+
+                  <!-- Location -->
+                  <div class="d-flex align-items-center gap-1.5 text-secondary small mb-2">
+                    <i class="fa-solid fa-location-dot text-teal flex-shrink-0"></i>
+                    <span class="text-truncate">
+                      {{ formatPropertyLocation(propertyDetailsData || selectedPropertyForDetails) }}
+                    </span>
+                  </div>
+
+                  <!-- Description -->
+                  <p class="text-secondary small mb-3 lh-base property-desc-clamp">
+                    {{ propertyDetailsData?.description || selectedPropertyForDetails?.description || 'No detailed property description available.' }}
+                  </p>
+                </div>
+
+                <!-- 4 Summary KPI Cards Grid -->
+                <div class="row g-2.5 mt-auto">
+                  <!-- Card 1: Room Types -->
+                  <div class="col-6 col-sm-3">
+                    <div class="details-kpi-card p-2.5 rounded-3 border bg-white shadow-2xs d-flex align-items-center gap-2.5">
+                      <div class="details-kpi-icon-wrap rounded-3 d-flex align-items-center justify-content-center">
+                        <i class="fa-solid fa-bed text-teal"></i>
+                      </div>
+                      <div>
+                        <div class="fw-bold text-dark lh-1" style="font-size: 1.15rem;">
+                          {{ getOperationalRoomTypesCount() }}
+                        </div>
+                        <div class="text-secondary small mt-0.5" style="font-size: 0.75rem;">Room Types</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Card 2: Total Rooms -->
+                  <div class="col-6 col-sm-3">
+                    <div class="details-kpi-card p-2.5 rounded-3 border bg-white shadow-2xs d-flex align-items-center gap-2.5">
+                      <div class="details-kpi-icon-wrap rounded-3 d-flex align-items-center justify-content-center">
+                        <i class="fa-solid fa-door-open text-teal"></i>
+                      </div>
+                      <div>
+                        <div class="fw-bold text-dark lh-1" style="font-size: 1.15rem;">
+                          {{ getOperationalTotalRoomsCount() }}
+                        </div>
+                        <div class="text-secondary small mt-0.5" style="font-size: 0.75rem;">Total Rooms</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Card 3: Registered On -->
+                  <div class="col-6 col-sm-3">
+                    <div class="details-kpi-card p-2.5 rounded-3 border bg-white shadow-2xs d-flex align-items-center gap-2.5">
+                      <div class="details-kpi-icon-wrap rounded-3 d-flex align-items-center justify-content-center">
+                        <i class="fa-regular fa-calendar-check text-teal"></i>
+                      </div>
+                      <div>
+                        <div class="fw-bold text-dark lh-1" style="font-size: 0.92rem;">
+                          {{ (propertyDetailsData?.submittedAt || propertyDetailsData?.createdAt) ? (propertyDetailsData?.submittedAt || propertyDetailsData?.createdAt | date:'dd MMM yyyy') : '—' }}
+                        </div>
+                        <div class="text-secondary small mt-0.5" style="font-size: 0.75rem;">Registered On</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Card 4: Activated On -->
+                  <div class="col-6 col-sm-3">
+                    <div class="details-kpi-card p-2.5 rounded-3 border bg-white shadow-2xs d-flex align-items-center gap-2.5">
+                      <div class="details-kpi-icon-wrap rounded-3 d-flex align-items-center justify-content-center">
+                        <i class="fa-solid fa-rotate text-teal"></i>
+                      </div>
+                      <div>
+                        <div class="fw-bold text-dark lh-1" style="font-size: 0.92rem;">
+                          {{ propertyDetailsData?.activatedAt ? (propertyDetailsData.activatedAt | date:'dd MMM yyyy') : '—' }}
+                        </div>
+                        <div class="text-secondary small mt-0.5" style="font-size: 0.75rem;">Activated On</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+
+          <!-- 3. Subsection Navigation Tabs -->
+          <div class="details-subnav-bar bg-white rounded-4 border p-2 mb-4 shadow-2xs">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <button type="button"
+                      class="details-subnav-tab"
+                      [class.active]="activePropertyDetailsSubNav === 'overview'"
+                      (click)="setPropertyDetailsSubNav('overview')">
+                <i class="fa-solid fa-circle-info"></i>
+                <span>Overview</span>
+              </button>
+
+              <button type="button"
+                      class="details-subnav-tab"
+                      [class.active]="activePropertyDetailsSubNav === 'address-contact'"
+                      (click)="setPropertyDetailsSubNav('address-contact')">
+                <i class="fa-solid fa-location-dot"></i>
+                <span>Address & Contact</span>
+              </button>
+
+              <button type="button"
+                      class="details-subnav-tab"
+                      [class.active]="activePropertyDetailsSubNav === 'amenities'"
+                      (click)="setPropertyDetailsSubNav('amenities')">
+                <i class="fa-solid fa-table-cells-large"></i>
+                <span>Amenities</span>
+              </button>
+
+              <button type="button"
+                      class="details-subnav-tab"
+                      [class.active]="activePropertyDetailsSubNav === 'policies'"
+                      (click)="setPropertyDetailsSubNav('policies')">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span>Policies</span>
+              </button>
+
+              <button type="button"
+                      class="details-subnav-tab"
+                      [class.active]="activePropertyDetailsSubNav === 'registration'"
+                      (click)="setPropertyDetailsSubNav('registration')">
+                <i class="fa-solid fa-file-lines"></i>
+                <span>Registration</span>
+              </button>
+
+              <button type="button"
+                      class="details-subnav-tab"
+                      [class.active]="activePropertyDetailsSubNav === 'room-types'"
+                      (click)="setPropertyDetailsSubNav('room-types')">
+                <i class="fa-solid fa-bed"></i>
+                <span>Room Types</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 4. Active Subsection Content -->
+
+          <!-- ==================== SUBSECTION 1: OVERVIEW ==================== -->
+          <div *ngIf="activePropertyDetailsSubNav === 'overview'" class="row g-4">
+            <!-- 1. Property Manager Details -->
+            <div class="col-12 col-lg-6">
+              <div class="card border rounded-4 bg-white shadow-2xs h-100">
+                <div class="p-3.5 px-4 border-bottom d-flex align-items-center gap-2.5">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center"
+                       style="width: 32px; height: 32px; background-color: #f0fdfa; color: #0d9488;">
+                    <i class="fa-solid fa-user-tie"></i>
+                  </div>
+                  <h6 class="fw-bold text-dark mb-0" style="font-size: 1.05rem;">Property Manager Details</h6>
+                </div>
+                <div class="p-4 d-flex flex-column">
+                  <div class="details-field-row">
+                    <span class="details-field-label">
+                      <i class="fa-solid fa-user text-teal"></i> Manager Name
+                    </span>
+                    <span class="details-field-value">{{ propertyDetailsData?.propertyManagerName || '—' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">
+                      <i class="fa-solid fa-id-card-clip text-teal"></i> Designation
+                    </span>
+                    <span class="details-field-value">{{ propertyDetailsData?.propertyManagerDesignation || '—' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">
+                      <i class="fa-solid fa-phone text-teal"></i> Contact Number
+                    </span>
+                    <span class="details-field-value">{{ propertyDetailsData?.propertyManagerContactNumber || '—' }}</span>
+                  </div>
+                  <div class="details-field-row border-0 pb-0">
+                    <span class="details-field-label">
+                      <i class="fa-solid fa-envelope text-teal"></i> Email
+                    </span>
+                    <span class="details-field-value">{{ propertyDetailsData?.propertyManagerEmail || '—' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Key Operational Details -->
+            <div class="col-12 col-lg-6">
+              <div class="card border rounded-4 bg-white shadow-2xs h-100">
+                <div class="p-3.5 px-4 border-bottom d-flex align-items-center gap-2.5">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center"
+                       style="width: 32px; height: 32px; background-color: #f0fdfa; color: #0d9488;">
+                    <i class="fa-regular fa-calendar-check"></i>
+                  </div>
+                  <h6 class="fw-bold text-dark mb-0" style="font-size: 1.05rem;">Key Operational Details</h6>
+                </div>
+                <div class="p-4 d-flex flex-column">
+                  <div class="details-field-row">
+                    <span class="details-field-label">
+                      <i class="fa-solid fa-door-open text-teal"></i> Check-in Time
+                    </span>
+                    <span class="details-field-value">{{ format12HourTime(propertyDetailsData?.checkInTime) }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">
+                      <i class="fa-solid fa-door-closed text-teal"></i> Check-out Time
+                    </span>
+                    <span class="details-field-value">{{ format12HourTime(propertyDetailsData?.checkOutTime) }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">
+                      <i class="fa-regular fa-clock text-teal"></i> Reception Availability
+                    </span>
+                    <span class="details-field-value">
+                      {{ (propertyDetailsData?.receptionAvailability === 'SPECIFIC_HOURS' ? 'Specific Hours' : '24 × 7') }}
+                    </span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">
+                      <i class="fa-regular fa-clock text-teal"></i> Reception Timing
+                    </span>
+                    <span class="details-field-value">
+                      {{ propertyDetailsData?.receptionAvailability === 'SPECIFIC_HOURS' ? (format12HourTime(propertyDetailsData?.receptionOpeningTime) + ' – ' + format12HourTime(propertyDetailsData?.receptionClosingTime)) : '—' }}
+                    </span>
+                  </div>
+                  <div class="details-field-row border-0 pb-0">
+                    <span class="details-field-label">
+                      <i class="fa-solid fa-circle-info text-teal"></i> Cancellation Policy
+                    </span>
+                    <span class="details-field-value d-inline-flex align-items-center gap-1.5">
+                      <span>Platform Policy</span>
+                      <i class="fa-solid fa-circle-info text-secondary cursor-pointer"
+                         title="Standard TravelEasy platform cancellation policy applies to bookings at this property."></i>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ==================== SUBSECTION 2: ADDRESS & CONTACT ==================== -->
+          <div *ngIf="activePropertyDetailsSubNav === 'address-contact'" class="row g-4">
+            <!-- 1. Address Information -->
+            <div class="col-12 col-lg-6">
+              <div class="card border rounded-4 bg-white shadow-2xs h-100">
+                <div class="p-3.5 px-4 border-bottom d-flex align-items-center gap-2.5">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center"
+                       style="width: 32px; height: 32px; background-color: #f0fdfa; color: #0d9488;">
+                    <i class="fa-solid fa-location-dot"></i>
+                  </div>
+                  <h6 class="fw-bold text-dark mb-0" style="font-size: 1.05rem;">Address Information</h6>
+                </div>
+                <div class="p-4 d-flex flex-column">
+                  <div class="details-field-row">
+                    <span class="details-field-label">Address Line 1</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.addressLine1 || propertyDetailsData?.address || '—' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">Address Line 2</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.addressLine2 || '—' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">City</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.city || '—' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">State</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.state || '—' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">Country</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.country || 'India' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">Postal Code</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.postalCode || '—' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">Landmark</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.landmark || '—' }}</span>
+                  </div>
+                  <div class="details-field-row border-0 pb-0">
+                    <span class="details-field-label">Legacy Address</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.address || propertyDetailsData?.addressLine1 || '—' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Contact Information -->
+            <div class="col-12 col-lg-6">
+              <div class="card border rounded-4 bg-white shadow-2xs h-100">
+                <div class="p-3.5 px-4 border-bottom d-flex align-items-center gap-2.5">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center"
+                       style="width: 32px; height: 32px; background-color: #f0fdfa; color: #0d9488;">
+                    <i class="fa-solid fa-phone-volume"></i>
+                  </div>
+                  <h6 class="fw-bold text-dark mb-0" style="font-size: 1.05rem;">Contact Information</h6>
+                </div>
+                <div class="p-4 d-flex flex-column">
+                  <div class="details-field-row">
+                    <span class="details-field-label">
+                      <i class="fa-solid fa-phone text-teal"></i> Primary Contact
+                    </span>
+                    <span class="details-field-value">{{ propertyDetailsData?.propertyContactNumber || '—' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">
+                      <i class="fa-solid fa-phone-flip text-teal"></i> Alternate Contact
+                    </span>
+                    <span class="details-field-value">{{ propertyDetailsData?.alternateContactNumber || '—' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">
+                      <i class="fa-solid fa-envelope text-teal"></i> Email
+                    </span>
+                    <span class="details-field-value">{{ propertyDetailsData?.propertyEmail || '—' }}</span>
+                  </div>
+                  <div class="details-field-row border-0 pb-0">
+                    <span class="details-field-label">
+                      <i class="fa-solid fa-globe text-teal"></i> Website
+                    </span>
+                    <span class="details-field-value">
+                      <a [href]="formatUrl(propertyDetailsData?.websiteUrl)"
+                         target="_blank"
+                         class="text-teal text-decoration-none fw-semibold">
+                        {{ propertyDetailsData?.websiteUrl || '—' }}
+                      </a>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ==================== SUBSECTION 3: AMENITIES ==================== -->
+          <div *ngIf="activePropertyDetailsSubNav === 'amenities'" class="row g-4">
+            <!-- 1. Property Amenities -->
+            <div class="col-12 col-lg-7">
+              <div class="card border rounded-4 bg-white shadow-2xs h-100">
+                <div class="p-3.5 px-4 border-bottom d-flex align-items-center gap-2.5">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center"
+                       style="width: 32px; height: 32px; background-color: #f0fdfa; color: #0d9488;">
+                    <i class="fa-solid fa-table-cells-large"></i>
+                  </div>
+                  <h6 class="fw-bold text-dark mb-0" style="font-size: 1.05rem;">Property Amenities</h6>
+                </div>
+                <div class="p-4">
+                  <div class="d-flex flex-wrap gap-2.5">
+                    <span *ngFor="let a of getPredefinedAmenitiesList(propertyDetailsData)"
+                          class="details-amenity-badge px-3 py-2 rounded-3 border bg-light-subtle d-inline-flex align-items-center gap-2">
+                      <i [class]="a.icon" class="text-teal"></i>
+                      <span class="fw-semibold text-dark" style="font-size: 0.88rem;">{{ a.name }}</span>
+                    </span>
+                    <span *ngIf="getPredefinedAmenitiesList(propertyDetailsData).length === 0" class="text-secondary small">
+                      No predefined amenities specified for this property.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Custom Amenities -->
+            <div class="col-12 col-lg-5">
+              <div class="card border rounded-4 bg-white shadow-2xs h-100">
+                <div class="p-3.5 px-4 border-bottom d-flex align-items-center gap-2.5">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center"
+                       style="width: 32px; height: 32px; background-color: #f0fdfa; color: #0d9488;">
+                    <i class="fa-regular fa-star"></i>
+                  </div>
+                  <h6 class="fw-bold text-dark mb-0" style="font-size: 1.05rem;">Custom Amenities</h6>
+                </div>
+                <div class="p-4">
+                  <div class="d-flex flex-wrap gap-2.5">
+                    <span *ngFor="let ca of getCustomAmenitiesList(propertyDetailsData)"
+                          class="details-amenity-badge px-3 py-2 rounded-3 border bg-light-subtle d-inline-flex align-items-center gap-2">
+                      <i class="fa-solid fa-sparkles text-teal"></i>
+                      <span class="fw-semibold text-dark" style="font-size: 0.88rem;">{{ ca }}</span>
+                    </span>
+                    <span *ngIf="getCustomAmenitiesList(propertyDetailsData).length === 0" class="text-secondary small">
+                      No custom amenities specified for this property.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ==================== SUBSECTION 4: POLICIES ==================== -->
+          <div *ngIf="activePropertyDetailsSubNav === 'policies'" class="row g-4">
+            <!-- 1. Guest Policies -->
+            <div class="col-12 col-lg-6">
+              <div class="card border rounded-4 bg-white shadow-2xs h-100">
+                <div class="p-3.5 px-4 border-bottom d-flex align-items-center gap-2.5">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center"
+                       style="width: 32px; height: 32px; background-color: #f0fdfa; color: #0d9488;">
+                    <i class="fa-solid fa-shield-halved"></i>
+                  </div>
+                  <h6 class="fw-bold text-dark mb-0" style="font-size: 1.05rem;">Guest Policies</h6>
+                </div>
+                <div class="p-4 d-flex flex-column">
+                  <div class="details-field-row">
+                    <span class="details-field-label">Children Policy</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.childrenPolicy || 'Children of all age groups are welcome.' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">Pet Policy</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.petPolicy || 'Pets are not allowed.' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">Smoking Policy</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.smokingPolicy || 'Smoking is not permitted in rooms.' }}</span>
+                  </div>
+                  <div class="details-field-row border-0 pb-0">
+                    <span class="details-field-label">Extra-bed Policy</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.extraBedPolicy || 'Extra bed available on request (charges may apply).' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Supported ID Proofs & Additional Rules -->
+            <div class="col-12 col-lg-6">
+              <div class="card border rounded-4 bg-white shadow-2xs h-100 d-flex flex-column">
+                <!-- Section A: Supported ID Proofs -->
+                <div class="p-3.5 px-4 border-bottom d-flex align-items-center gap-2.5">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center"
+                       style="width: 32px; height: 32px; background-color: #f0fdfa; color: #0d9488;">
+                    <i class="fa-solid fa-id-card"></i>
+                  </div>
+                  <h6 class="fw-bold text-dark mb-0" style="font-size: 1.05rem;">Supported ID Proofs</h6>
+                </div>
+                <div class="p-4 border-bottom">
+                  <div class="text-secondary small fw-medium mb-2">Accepted ID Types</div>
+                  <div class="d-flex flex-wrap gap-2">
+                    <span *ngFor="let idType of getAcceptedIdList(propertyDetailsData)"
+                          class="badge rounded-pill px-3 py-1.5 fw-semibold"
+                          style="background-color: #f0fdfa; color: #0f766e; border: 1px solid #ccfbf1; font-size: 0.82rem;">
+                      {{ idType }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Section B: Additional Rules -->
+                <div class="p-3.5 px-4 border-bottom d-flex align-items-center gap-2.5 bg-light-subtle">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center"
+                       style="width: 32px; height: 32px; background-color: #f0fdfa; color: #0d9488;">
+                    <i class="fa-solid fa-file-contract"></i>
+                  </div>
+                  <h6 class="fw-bold text-dark mb-0" style="font-size: 1.05rem;">Additional Rules</h6>
+                </div>
+                <div class="p-4 flex-grow-1">
+                  <p class="text-secondary small mb-0 lh-base">
+                    {{ propertyDetailsData?.additionalRules || 'Valid government-issued ID is mandatory for all guests. Standard hotel policies apply.' }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ==================== SUBSECTION 5: REGISTRATION (STRICTLY NO PAN) ==================== -->
+          <div *ngIf="activePropertyDetailsSubNav === 'registration'" class="row g-4">
+            <!-- 1. Business Registration Details -->
+            <div class="col-12 col-lg-6">
+              <div class="card border rounded-4 bg-white shadow-2xs h-100">
+                <div class="p-3.5 px-4 border-bottom d-flex align-items-center gap-2.5">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center"
+                       style="width: 32px; height: 32px; background-color: #f0fdfa; color: #0d9488;">
+                    <i class="fa-solid fa-file-lines"></i>
+                  </div>
+                  <h6 class="fw-bold text-dark mb-0" style="font-size: 1.05rem;">Business Registration Details</h6>
+                </div>
+                <div class="p-4 d-flex flex-column">
+                  <div class="details-field-row">
+                    <span class="details-field-label">Registration Number</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.businessRegistrationNumber || '—' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">Business Name</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.registeredBusinessName || propertyDetailsData?.name || '—' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">Registration Type</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.businessRegistrationType || '—' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">Registered Address</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.registeredBusinessAddress || (propertyDetailsData?.addressLine1 ? propertyDetailsData?.addressLine1 + ', ' + (propertyDetailsData?.city || '') : (propertyDetailsData?.address || '—')) }}</span>
+                  </div>
+                  <div class="details-field-row border-0 pb-0">
+                    <span class="details-field-label">Registered On</span>
+                    <span class="details-field-value">
+                      {{ (propertyDetailsData?.submittedAt || propertyDetailsData?.createdAt) ? (propertyDetailsData?.submittedAt || propertyDetailsData?.createdAt | date:'dd MMM yyyy') : '—' }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. GST Information -->
+            <div class="col-12 col-lg-6">
+              <div class="card border rounded-4 bg-white shadow-2xs h-100">
+                <div class="p-3.5 px-4 border-bottom d-flex align-items-center gap-2.5">
+                  <span class="badge text-white px-2 py-1 rounded fw-bold" style="background-color: #0d9488; font-size: 0.75rem;">GST</span>
+                  <h6 class="fw-bold text-dark mb-0" style="font-size: 1.05rem;">GST Information</h6>
+                </div>
+                <div class="p-4 d-flex flex-column">
+                  <div class="details-field-row">
+                    <span class="details-field-label">GST Registered</span>
+                    <span class="details-field-value">
+                      <span class="badge rounded-pill px-2.5 py-1 fw-semibold small"
+                            [ngClass]="propertyDetailsData?.isGstRegistered ? 'bg-success-subtle text-success' : 'bg-secondary-subtle text-secondary'">
+                        {{ propertyDetailsData?.isGstRegistered ? 'Yes' : 'No' }}
+                      </span>
+                    </span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">GST Number</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.gstin || '—' }}</span>
+                  </div>
+                  <div class="details-field-row">
+                    <span class="details-field-label">GST Legal Name</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.gstLegalName || '—' }}</span>
+                  </div>
+                  <div class="details-field-row border-0 pb-0">
+                    <span class="details-field-label">GST State</span>
+                    <span class="details-field-value">{{ propertyDetailsData?.gstState || propertyDetailsData?.state || '—' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ==================== SUBSECTION 6: ROOM TYPES ==================== -->
+          <div *ngIf="activePropertyDetailsSubNav === 'room-types'">
+            <div class="card border rounded-4 bg-white shadow-2xs">
+              <!-- Card Header with View All Link -->
+              <div class="p-3.5 px-4 border-bottom d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2.5">
+                  <div class="rounded-3 d-flex align-items-center justify-content-center"
+                       style="width: 32px; height: 32px; background-color: #f0fdfa; color: #0d9488;">
+                    <i class="fa-solid fa-bed"></i>
+                  </div>
+                  <h6 class="fw-bold text-dark mb-0" style="font-size: 1.05rem;">
+                    Room Types ({{ getOperationalRoomTypesCount() }})
+                  </h6>
+                </div>
+                <a class="text-teal fw-semibold text-decoration-none small d-inline-flex align-items-center gap-1 cursor-pointer"
+                   (click)="handleManageRooms(propertyDetailsData)">
+                  <span>View All</span>
+                  <i class="fa-solid fa-arrow-right"></i>
+                </a>
+              </div>
+
+              <!-- Table Body -->
+              <div class="table-responsive">
+                <table class="table table-hover mb-0 align-middle details-room-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th class="ps-4 py-3 text-secondary text-uppercase fw-semibold" style="font-size: 0.75rem; width: 5%;">#</th>
+                      <th class="py-3 text-secondary text-uppercase fw-semibold" style="font-size: 0.75rem; width: 30%;">Room Type</th>
+                      <th class="py-3 text-secondary text-uppercase fw-semibold text-center" style="font-size: 0.75rem; width: 20%;">Max Occupancy</th>
+                      <th class="py-3 text-secondary text-uppercase fw-semibold text-center" style="font-size: 0.75rem; width: 15%;">Total Rooms</th>
+                      <th class="py-3 text-secondary text-uppercase fw-semibold text-center" style="font-size: 0.75rem; width: 15%;">Available Rooms</th>
+                      <th class="py-3 text-secondary text-uppercase fw-semibold text-center" style="font-size: 0.75rem; width: 15%;">Allocated Rooms</th>
+                      <th class="pe-4 py-3 text-secondary text-uppercase fw-semibold text-center" style="font-size: 0.75rem; width: 10%;">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let r of getOperationalDetailsRooms(); let idx = index">
+                      <td class="ps-4 py-3 text-secondary fw-medium" style="font-size: 0.88rem;">{{ idx + 1 }}</td>
+                      <td class="py-3 fw-bold text-dark" style="font-size: 0.92rem;">{{ r.roomTypeName }}</td>
+                      <td class="py-3 text-center text-secondary" style="font-size: 0.88rem;">
+                        {{ r.maxOccupancy ? (r.maxOccupancy + ' Adults') : (r.baseOccupancy ? (r.baseOccupancy + ' Adults') : '2 Adults') }}
+                      </td>
+                      <td class="py-3 text-center fw-bold text-dark" style="font-size: 0.92rem;">{{ r.totalRooms || 0 }}</td>
+                      <td class="py-3 text-center fw-semibold text-teal" style="font-size: 0.92rem;">
+                        {{ r.availableRooms != null ? r.availableRooms : r.totalRooms }}
+                      </td>
+                      <td class="py-3 text-center fw-semibold text-secondary" style="font-size: 0.92rem;">
+                        {{ r.allocatedRooms != null ? r.allocatedRooms : ((r.totalRooms || 0) - (r.availableRooms != null ? r.availableRooms : r.totalRooms)) }}
+                      </td>
+                      <td class="pe-4 py-3 text-center">
+                        <span class="badge rounded-pill px-2.5 py-1 fw-semibold"
+                              style="background-color: #dcfce7; color: #15803d; font-size: 0.8rem;">
+                          Active
+                        </span>
+                      </td>
+                    </tr>
+                    <tr *ngIf="getOperationalDetailsRooms().length === 0">
+                      <td colspan="7" class="text-center py-5 text-secondary">
+                        <i class="fa-solid fa-bed text-muted fs-3 mb-2 d-block"></i>
+                        <p class="mb-0 fw-medium">No active room types found for this property.</p>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ==================== EDIT PROPERTY MODAL ==================== -->
+        <div *ngIf="showEditPropertyModal" class="modal-backdrop-custom d-flex align-items-center justify-content-center p-3 z-5">
+          <div class="modal-dialog-custom bg-white rounded-4 shadow-lg overflow-hidden position-relative"
+               style="max-width: 620px; width: 100%; max-height: 90vh; display: flex; flex-direction: column;">
+
+            <!-- Modal Header -->
+            <div class="p-3.5 p-md-4 border-bottom d-flex align-items-center justify-content-between">
+              <div class="d-flex align-items-center gap-2.5">
+                <div class="rounded-3 d-flex align-items-center justify-content-center"
+                     style="width: 38px; height: 38px; background-color: #ccfbf1; color: #0d9488;">
+                  <i class="fa-solid fa-pen-to-square fs-5"></i>
+                </div>
+                <div>
+                  <h5 class="fw-bold text-dark mb-0" style="font-size: 1.15rem;">Edit Property</h5>
+                  <p class="text-secondary small mb-0">{{ editingProperty?.name }}</p>
+                </div>
+              </div>
+              <button type="button" class="btn-close" (click)="closeEditPropertyModal()" aria-label="Close"></button>
+            </div>
+
+            <!-- Modal Form Body -->
+            <div class="p-3.5 p-md-4 overflow-y-auto flex-grow-1" style="max-height: calc(90vh - 160px);">
+
+              <!-- Error Alert -->
+              <div *ngIf="editPropertyError" class="alert alert-danger rounded-3 py-2 px-3 small mb-3 d-flex align-items-center gap-2">
+                <i class="fa-solid fa-circle-exclamation flex-shrink-0"></i>
+                <span>{{ editPropertyError }}</span>
+              </div>
+
+              <form (ngSubmit)="submitEditProperty()" class="d-flex flex-column gap-3">
+
+                <!-- Property Name -->
+                <div>
+                  <label class="form-label small fw-semibold text-dark mb-1">Property Name <span class="text-danger">*</span></label>
+                  <input type="text"
+                         class="form-control rounded-3"
+                         [(ngModel)]="editPropertyForm.name"
+                         name="propertyName"
+                         placeholder="e.g. Grand Residency Hotel"
+                         required>
+                </div>
+
+                <!-- City & Star Rating (Row) -->
+                <div class="row g-2.5">
+                  <div class="col-12 col-md-7">
+                    <label class="form-label small fw-semibold text-dark mb-1">City <span class="text-danger">*</span></label>
+                    <input type="text"
+                           class="form-control rounded-3"
+                           [(ngModel)]="editPropertyForm.city"
+                           name="propertyCity"
+                           placeholder="e.g. Hyderabad"
+                           required>
+                  </div>
+                  <div class="col-12 col-md-5">
+                    <label class="form-label small fw-semibold text-dark mb-1">Star Rating</label>
+                    <select class="form-select rounded-3" [(ngModel)]="editPropertyForm.starRating" name="propertyRating">
+                      <option [ngValue]="5">5 Star</option>
+                      <option [ngValue]="4">4 Star</option>
+                      <option [ngValue]="3">3 Star</option>
+                      <option [ngValue]="2">2 Star</option>
+                      <option [ngValue]="1">1 Star</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Address -->
+                <div>
+                  <label class="form-label small fw-semibold text-dark mb-1">Address <span class="text-danger">*</span></label>
+                  <textarea class="form-control rounded-3"
+                            rows="2"
+                            [(ngModel)]="editPropertyForm.address"
+                            name="propertyAddress"
+                            placeholder="Full street address, locality, area..."
+                            required></textarea>
+                </div>
+
+                <!-- Image URL -->
+                <div>
+                  <label class="form-label small fw-semibold text-dark mb-1">Cover Image URL</label>
+                  <input type="url"
+                         class="form-control rounded-3"
+                         [(ngModel)]="editPropertyForm.imageUrl"
+                         name="propertyImage"
+                         placeholder="https://example.com/hotel.jpg">
+                  <div *ngIf="editPropertyForm.imageUrl" class="mt-2 rounded-3 overflow-hidden border" style="height: 100px;">
+                    <img [src]="editPropertyForm.imageUrl"
+                         class="w-100 h-100 object-fit-cover"
+                         (error)="$any($event.target).style.display='none'">
+                  </div>
+                </div>
+
+                <!-- Description -->
+                <div>
+                  <label class="form-label small fw-semibold text-dark mb-1">Description</label>
+                  <textarea class="form-control rounded-3"
+                            rows="3"
+                            maxlength="2000"
+                            [(ngModel)]="editPropertyForm.description"
+                            name="propertyDescription"
+                            placeholder="Brief description of property, location highlights, and guest experience..."></textarea>
+                  <div class="text-end text-muted small mt-0.5" style="font-size: 0.75rem;">
+                    {{ editPropertyForm.description?.length || 0 }} / 2000
+                  </div>
+                </div>
+
+                <!-- Amenities -->
+                <div>
+                  <label class="form-label small fw-semibold text-dark mb-1">Amenities</label>
+                  <input type="text"
+                         class="form-control rounded-3"
+                         [(ngModel)]="editPropertyForm.amenities"
+                         name="propertyAmenities"
+                         placeholder="e.g. Free Wi-Fi, Swimming Pool, Restaurant, Gym, Parking">
+                  <div class="text-muted small mt-0.5" style="font-size: 0.75rem;">
+                    Enter comma-separated amenities.
+                  </div>
+                </div>
+
+                <!-- Status -->
+                <div>
+                  <label class="form-label small fw-semibold text-dark mb-1">Operational Status</label>
+                  <select class="form-select rounded-3" [(ngModel)]="editPropertyForm.status" name="propertyStatus">
+                    <option value="ACTIVE">Active (Live for operations)</option>
+                    <option value="INACTIVE">Inactive (Temporarily hidden)</option>
+                  </select>
+                </div>
+
+              </form>
+
+            </div>
+
+            <!-- Modal Footer Actions -->
+            <div class="p-3 border-top bg-light-subtle d-flex justify-content-end gap-2">
+              <button type="button" class="btn btn-outline-secondary btn-sm px-3.5 py-2 fw-medium rounded-3"
+                      [disabled]="isUpdatingProperty"
+                      (click)="closeEditPropertyModal()">
+                Cancel
+              </button>
+              <button type="button" class="btn btn-teal-primary text-white btn-sm px-4 py-2 fw-semibold rounded-3 d-inline-flex align-items-center gap-1.5"
+                      [disabled]="isUpdatingProperty"
+                      (click)="submitEditProperty()">
+                <span *ngIf="isUpdatingProperty" class="spinner-border spinner-border-sm"></span>
+                <i *ngIf="!isUpdatingProperty" class="fa-solid fa-check"></i>
+                <span>Save Changes</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+
 
         <!-- 2. PROPERTY REGISTRATION WIZARD VIEW (STEP 1) -->
         <div *ngIf="propertyViewMode === 'wizard'" class="wizard-container">
@@ -4985,51 +6210,66 @@
               <div class="row g-4 align-items-stretch">
 
                 <!-- Left Column: Calendar Grid -->
-                <div class="col-12 col-lg-8 col-xl-9">
-                  <div class="inv-cal-table-card position-relative overflow-hidden h-100">
+                <div class="col-12 col-xl-9">
+                  <div class="position-relative">
 
                     <!-- Loading Overlay -->
                     <div *ngIf="isInventoryCalendarLoading"
-                         class="position-absolute top-0 start-0 w-100 h-100 bg-white bg-opacity-75 d-flex align-items-center justify-content-center z-3">
+                         class="position-absolute top-0 start-0 w-100 h-100 bg-white bg-opacity-75 d-flex align-items-center justify-content-center rounded-3 z-3">
                       <div class="spinner-border text-teal" role="status">
                         <span class="visually-hidden">Loading calendar...</span>
                       </div>
                     </div>
 
                     <!-- Calendar Table Grid -->
-                    <div class="table-responsive">
-                      <table class="table inv-cal-grid-table mb-0">
-                        <thead>
+                    <div class="table-responsive rounded-3 border inv-cal-table-wrap">
+                      <table class="table table-bordered mb-0 inv-cal-table text-center align-middle">
+                        <thead class="inv-cal-thead">
                           <tr>
-                            <th>Sun</th>
-                            <th>Mon</th>
-                            <th>Tue</th>
-                            <th>Wed</th>
-                            <th>Thu</th>
-                            <th>Fri</th>
-                            <th>Sat</th>
+                            <th class="py-2.5 fw-semibold text-secondary" style="width: 14.28%;">Sun</th>
+                            <th class="py-2.5 fw-semibold text-secondary" style="width: 14.28%;">Mon</th>
+                            <th class="py-2.5 fw-semibold text-secondary" style="width: 14.28%;">Tue</th>
+                            <th class="py-2.5 fw-semibold text-secondary" style="width: 14.28%;">Wed</th>
+                            <th class="py-2.5 fw-semibold text-secondary" style="width: 14.28%;">Thu</th>
+                            <th class="py-2.5 fw-semibold text-secondary" style="width: 14.28%;">Fri</th>
+                            <th class="py-2.5 fw-semibold text-secondary" style="width: 14.28%;">Sat</th>
                           </tr>
                         </thead>
                         <tbody>
                           <tr *ngFor="let week of inventoryCalendarGridWeeks">
                             <td *ngFor="let cell of week"
                                 class="p-0 position-relative inv-cal-td"
-                                [ngClass]="{
-                                  'inv-cal-empty-cell': cell.isEmpty,
-                                  'inv-cal-day-cell': !cell.isEmpty,
-                                  'inv-cal-cell-selected': !cell.isEmpty && cell.dateStr === selectedInventoryDateStr,
-                                  'inv-cal-avail-high': !cell.isEmpty && cell.classification === 'high',
-                                  'inv-cal-avail-low': !cell.isEmpty && cell.classification === 'low',
-                                  'inv-cal-avail-none': !cell.isEmpty && cell.classification === 'none'
-                                }"
+                                [class.inv-td-leading-trailing]="cell.isLeadingTrailing || cell.isEmpty"
+                                [class.inv-td-active]="!cell.isLeadingTrailing && !cell.isEmpty"
+                                [class.inv-td-selected]="!cell.isLeadingTrailing && !cell.isEmpty && cell.dateStr === selectedInventoryDateStr"
                                 (click)="selectInventoryDate(cell)">
-                              <div *ngIf="!cell.isEmpty" class="inv-cal-cell-content">
-                                <div class="inv-cal-day-num">{{ cell.headerLabel }}</div>
-                                <div class="inv-cal-day-avl" [ngClass]="{'text-danger': cell.classification === 'none'}">
+
+                              <!-- Leading / Trailing cell outside month -->
+                              <div *ngIf="cell.isLeadingTrailing || cell.isEmpty" class="inv-cal-cell-inner inv-cal-cell-muted">
+                                <span class="inv-cal-day-num text-muted opacity-50">{{ cell.dayNumber }}</span>
+                              </div>
+
+                              <!-- Current Month Cell -->
+                              <div *ngIf="!cell.isLeadingTrailing && !cell.isEmpty"
+                                   class="inv-cal-cell-inner"
+                                   [class.inv-cal-avail-high]="cell.classification === 'high'"
+                                   [class.inv-cal-avail-low]="cell.classification === 'low'"
+                                   [class.inv-cal-avail-none]="cell.classification === 'none'"
+                                   [class.inv-cal-cell-selected]="cell.dateStr === selectedInventoryDateStr">
+
+                                <!-- Top row: day number / label on left -->
+                                <div class="d-flex align-items-center justify-content-between w-100 px-2 pt-2">
+                                  <span class="inv-cal-day-num fw-bold">{{ cell.headerLabel }}</span>
+                                </div>
+
+                                <!-- Bottom row: inventory availability -->
+                                <div class="inv-cal-day-avl px-2 pb-2 mt-auto text-center"
+                                     [ngClass]="{'text-danger': cell.classification === 'none'}">
                                   Avl: <strong [class.text-danger]="cell.classification === 'none'">{{ cell.availableRooms }} / {{ cell.totalRooms }}</strong>
                                 </div>
+
                               </div>
-                              <div *ngIf="cell.isEmpty" class="inv-cal-cell-content"></div>
+
                             </td>
                           </tr>
                         </tbody>
@@ -5040,7 +6280,7 @@
                 </div>
 
                 <!-- Right Column: Information Panel (Single Card matching Mockup) -->
-                <div class="col-12 col-lg-4 col-xl-3">
+                <div class="col-12 col-xl-3">
                   <div class="inv-cal-side-card">
 
                     <!-- Top Half: How to read (Legend) -->
