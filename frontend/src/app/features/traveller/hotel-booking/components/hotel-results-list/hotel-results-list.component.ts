@@ -221,7 +221,7 @@ export class HotelResultsListComponent {
   }
 
   isHotelSaved(hotelId: number): boolean {
-    return this.savedHotelIds.includes(hotelId);
+    return Array.isArray(this.savedHotelIds) && this.savedHotelIds.includes(hotelId);
   }
 
   onSortChange(newSort: string) {

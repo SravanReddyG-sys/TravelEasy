@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { NotificationService } from '../../services/notification.service';
 import { FormattedNotification } from '../../models/notification.model';
-import { Subscription } from 'rxjs';
+import { Subscription, timeout, finalize } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
@@ -1218,6 +1218,8 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
   isSearchingHotels = false;
   hotelsSearched = false;
   hotelSearchError = '';
+  private lastSearchedHotelKey = '';
+  private hotelSearchRequestId = 0;
   hotelResults: HotelPublicDto[] = [];
   rawHotelResults: HotelPublicDto[] = [];
   filteredHotelResults: HotelPublicDto[] = [];
@@ -1289,6 +1291,13 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
   };
   favouritesList: any[] = [];
   favouriteFilter = '';
+
+  get savedHotelIds(): number[] {
+    if (!this.favouritesList) return [];
+    return this.favouritesList
+      .filter((f: any) => f.itemType === 'HOTEL' && f.itemId != null)
+      .map((f: any) => f.itemId);
+  }
   supportTickets: any[] = [];
   ticketModel: any = { category: 'BOOKING', subject: '', message: '' };
 
@@ -1465,10 +1474,22 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
       if (params['checkOut']) {
         this.checkOutDate = params['checkOut'];
       }
+      if (params['rooms']) {
+        const r = parseInt(params['rooms'], 10);
+        if (!isNaN(r) && r >= 1) this.hotelRoomsCount = r;
+      }
+      if (params['adults']) {
+        const a = parseInt(params['adults'], 10);
+        if (!isNaN(a) && a >= 1) this.hotelAdultsCount = a;
+      }
+      if (params['children'] !== undefined) {
+        const c = parseInt(params['children'], 10);
+        if (!isNaN(c) && c >= 0) this.hotelChildrenCount = c;
+      }
 
       if (this.activeTab === 'hotel') {
         if (this.hotelCity) {
-          this.onSearchHotels();
+          this.executeHotelSearchIfChanged();
         }
       } else if (this.activeTab === 'bus') {
         this.onSearchBuses();
@@ -1482,7 +1503,7 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
     this.route.fragment.subscribe(fragment => {
       if (fragment === 'hotels') {
         this.activeTab = 'hotel';
-        if (this.hotelCity && !this.hotelsSearched) this.onSearchHotels();
+        if (this.hotelCity && !this.hotelsSearched) this.executeHotelSearchIfChanged();
       } else if (fragment === 'buses') {
         this.activeTab = 'bus';
         if (!this.busesSearched) this.onSearchBuses();
@@ -1558,7 +1579,7 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
       this.loadMyBookings();
       this.loadFavourites();
     } else if (tab === 'hotel' && !this.hotelsSearched) {
-      this.onSearchHotels();
+      this.executeHotelSearchIfChanged();
     } else if (tab === 'bus' && !this.busesSearched) {
       this.onSearchBuses();
     } else if (tab === 'my-bookings') {
@@ -2582,6 +2603,24 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
     this.onSearchHotels();
   }
 
+  private getNormalizedHotelSearchKey(criteria?: HotelSearchCriteria): string {
+    const city = (criteria?.city ?? this.hotelCity ?? '').trim().toLowerCase();
+    const checkIn = (criteria?.checkIn ?? this.checkInDate ?? '').trim();
+    const checkOut = (criteria?.checkOut ?? this.checkOutDate ?? '').trim();
+    const rooms = criteria?.rooms ?? this.hotelRoomsCount ?? 1;
+    const adults = criteria?.adults ?? this.hotelAdultsCount ?? 1;
+    const children = criteria?.children ?? this.hotelChildrenCount ?? 0;
+    return `${city}|${checkIn}|${checkOut}|${rooms}|${adults}|${children}`;
+  }
+
+  executeHotelSearchIfChanged(criteria?: HotelSearchCriteria): void {
+    const key = this.getNormalizedHotelSearchKey(criteria);
+    if (this.isSearchingHotels || (this.hotelsSearched && this.lastSearchedHotelKey === key)) {
+      return;
+    }
+    this.onSearchHotels(criteria);
+  }
+
   onSearchHotels(criteria?: HotelSearchCriteria) {
     if (criteria) {
       this.hotelCity = criteria.city;
@@ -2595,9 +2634,15 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
     const cityTrimmed = (this.hotelCity || '').trim();
     if (!cityTrimmed) return;
 
+    const currentKey = this.getNormalizedHotelSearchKey();
+    this.lastSearchedHotelKey = currentKey;
+    const currentRequestId = ++this.hotelSearchRequestId;
+
     this.isSearchingHotels = true;
     this.hotelSearchError = '';
     this.selectedHotel = null;
+
+    console.debug('[Hotel Search] Initiating search for:', cityTrimmed, this.checkInDate, this.checkOutDate, 'rooms:', this.hotelRoomsCount, 'adults:', this.hotelAdultsCount, 'children:', this.hotelChildrenCount, 'requestId:', currentRequestId);
 
     const totalGuests = this.hotelAdultsCount + this.hotelChildrenCount;
 
@@ -2607,32 +2652,53 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
       this.checkOutDate,
       this.hotelRoomsCount,
       totalGuests
+    ).pipe(
+      timeout(30000),
+      finalize(() => {
+        if (this.hotelSearchRequestId === currentRequestId) {
+          this.isSearchingHotels = false;
+        }
+      })
     ).subscribe({
       next: (res: HotelPublicDto[]) => {
+        if (this.hotelSearchRequestId !== currentRequestId) {
+          console.debug('[Hotel Search] Ignoring stale response for requestId:', currentRequestId);
+          return;
+        }
+        console.debug('[Hotel Search] Received response for requestId:', currentRequestId, 'count:', res?.length);
         this.rawHotelResults = res || [];
         this.hotelsSearched = true;
-        this.isSearchingHotels = false;
         this.hotelCurrentPage = 1;
         this.initHotelFilters(this.rawHotelResults);
         this.applyHotelFiltersAndSorting();
       },
-      error: () => {
+      error: (err: any) => {
+        if (this.hotelSearchRequestId !== currentRequestId) {
+          return;
+        }
+        console.error('[Hotel Search] Search error for requestId:', currentRequestId, err);
         this.rawHotelResults = [];
         this.filteredHotelResults = [];
         this.hotelsSearched = true;
-        this.isSearchingHotels = false;
-        this.hotelSearchError = 'Failed to load hotels for ' + cityTrimmed + '. Please try again.';
+        if (err?.name === 'TimeoutError') {
+          this.hotelSearchError = 'The hotel search is taking longer than expected. Please try again.';
+        } else {
+          this.hotelSearchError = 'Failed to load hotels for ' + cityTrimmed + '. Please try again.';
+        }
       }
     });
   }
 
   initHotelFilters(hotels: HotelPublicDto[]) {
-    if (hotels.length > 0) {
-      const prices = hotels.map(h => h.minPrice || 3200);
-      const minP = Math.floor(Math.min(...prices) / 500) * 500;
-      const maxP = Math.ceil(Math.max(...prices) / 1000) * 1000;
+    const validPrices = hotels
+      .map(h => h.minPrice)
+      .filter((p): p is number => typeof p === 'number' && p > 0);
+
+    if (validPrices.length > 0) {
+      const minP = Math.floor(Math.min(...validPrices) / 500) * 500;
+      const maxP = Math.ceil(Math.max(...validPrices) / 1000) * 1000;
       this.hotelMinPriceLimit = minP > 0 ? minP : 1000;
-      this.hotelMaxPriceLimit = maxP > this.hotelMinPriceLimit ? maxP : 10000;
+      this.hotelMaxPriceLimit = maxP > this.hotelMinPriceLimit ? maxP : (this.hotelMinPriceLimit + 5000);
     } else {
       this.hotelMinPriceLimit = 1000;
       this.hotelMaxPriceLimit = 10000;
@@ -2701,10 +2767,12 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
   applyHotelFiltersAndSorting() {
     let list = [...this.rawHotelResults];
 
-    // Filter by price
+    // Filter by price (only filter out hotels with known price exceeding the maximum)
     list = list.filter(h => {
-      const price = h.minPrice || 3200;
-      return price <= this.hotelMaxPriceSelected;
+      if (typeof h.minPrice === 'number' && h.minPrice > 0) {
+        return h.minPrice <= this.hotelMaxPriceSelected && h.minPrice >= this.hotelMinPriceSelected;
+      }
+      return true; // Keep hotels with unavailable price visible
     });
 
     // Filter by property types (if any selected)
@@ -2728,9 +2796,17 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
 
     // Sorting
     if (this.hotelSortBy === 'price_asc' || this.hotelSortBy === 'priceLow') {
-      list.sort((a, b) => (a.minPrice || 3200) - (b.minPrice || 3200));
+      list.sort((a, b) => {
+        const pA = typeof a.minPrice === 'number' && a.minPrice > 0 ? a.minPrice : Number.MAX_SAFE_INTEGER;
+        const pB = typeof b.minPrice === 'number' && b.minPrice > 0 ? b.minPrice : Number.MAX_SAFE_INTEGER;
+        return pA - pB;
+      });
     } else if (this.hotelSortBy === 'price_desc' || this.hotelSortBy === 'priceHigh') {
-      list.sort((a, b) => (b.minPrice || 3200) - (a.minPrice || 3200));
+      list.sort((a, b) => {
+        const pA = typeof a.minPrice === 'number' && a.minPrice > 0 ? a.minPrice : -1;
+        const pB = typeof b.minPrice === 'number' && b.minPrice > 0 ? b.minPrice : -1;
+        return pB - pA;
+      });
     } else if (this.hotelSortBy === 'name_asc') {
       list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     } else if (this.hotelSortBy === 'name_desc') {

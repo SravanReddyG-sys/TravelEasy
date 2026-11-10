@@ -25,6 +25,8 @@ public class HotelPublicDto {
     private String amenities;
     private String imageUrl;
     private Double minPrice;
+    private Double minTotalPricePerRoomForStay;
+    private Long selectedRoomTypeId;
     private String propertyType;
 
     public static HotelPublicDto fromEntity(HotelProperty property) {

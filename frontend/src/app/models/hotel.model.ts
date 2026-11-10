@@ -50,6 +50,8 @@ export interface HotelPublicDto {
   amenities?: string;
   imageUrl?: string;
   minPrice?: number;
+  minTotalPricePerRoomForStay?: number;
+  selectedRoomTypeId?: number;
   propertyType?: string;
 }
 
