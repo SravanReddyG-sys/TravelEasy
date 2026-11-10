@@ -241,9 +241,14 @@ public class BookingController {
             }
         }
 
-        com.traveleasy.booking.dto.HotelReservationInitiationResponse response =
-                hotelOrchestrationService.initiateHotelReservation(request, callerUserId, callerEmail);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        try {
+            com.traveleasy.booking.dto.HotelReservationInitiationResponse response =
+                    hotelOrchestrationService.initiateHotelReservation(request, callerUserId, callerEmail);
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (org.springframework.web.server.ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("message", e.getReason() != null ? e.getReason() : e.getMessage()));
+        }
     }
 
 
@@ -655,6 +660,45 @@ public class BookingController {
                     return ResponseEntity.ok(b);
                 })
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Retrieves complete hotel reservation details including primary guest, physical-room guest allocations,
+     * occupants, and immutable pricing snapshots (WP-HB-06.2).
+     */
+    @GetMapping("/ref/{bookingRef}/hotel-reservation-details")
+    public ResponseEntity<?> getHotelReservationDetails(
+            @PathVariable String bookingRef,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+            @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+
+        boolean isInternal = securityService.authenticateInternalService(authHeader, internalToken, internalService);
+        Long callerUserId = null;
+        String callerRole = null;
+
+        if (!isInternal && authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7).trim();
+            if (securityService.validateToken(token)) {
+                callerUserId = securityService.extractUserId(token);
+                callerRole = securityService.extractRole(token);
+            } else {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Invalid or expired authorization token"));
+            }
+        } else if (!isInternal) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Authorization token required"));
+        }
+
+        try {
+            com.traveleasy.booking.dto.HotelReservationDetailResponse details =
+                    hotelOrchestrationService.getReservationDetails(bookingRef, callerUserId, callerRole, isInternal);
+            return ResponseEntity.ok(details);
+        } catch (org.springframework.web.server.ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("message", e.getReason() != null ? e.getReason() : e.getMessage()));
+        }
     }
 
 

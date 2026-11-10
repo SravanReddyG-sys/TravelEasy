@@ -36,6 +36,28 @@ export interface HotelSearchCriteria {
   checkOut: string;
   guests?: number;
   rooms?: number;
+  adults?: number;
+  children?: number;
+}
+
+export interface HotelPublicDto {
+  id: number;
+  name: string;
+  city: string;
+  address: string;
+  starRating?: number;
+  description?: string;
+  amenities?: string;
+  imageUrl?: string;
+  minPrice?: number;
+  propertyType?: string;
+}
+
+export interface HotelFilterCriteria {
+  minPrice: number | null;
+  maxPrice: number | null;
+  propertyTypes: string[];
+  amenities: string[];
 }
 
 // --- WP-05: PROPERTY REGISTRATION WIZARD (STEP 1) ---

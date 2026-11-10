@@ -25,6 +25,7 @@ public class HotelPublicDto {
     private String amenities;
     private String imageUrl;
     private Double minPrice;
+    private String propertyType;
 
     public static HotelPublicDto fromEntity(HotelProperty property) {
         if (property == null) {
@@ -39,6 +40,7 @@ public class HotelPublicDto {
                 .description(property.getDescription())
                 .amenities(property.getAmenities())
                 .imageUrl(property.getImageUrl())
+                .propertyType(property.getPropertyType())
                 .build();
     }
 
@@ -55,6 +57,7 @@ public class HotelPublicDto {
                 .description(property.getDescription())
                 .amenities(property.getAmenities())
                 .imageUrl(property.getImageUrl())
+                .propertyType(property.getPropertyType())
                 .minPrice(minPrice)
                 .build();
     }

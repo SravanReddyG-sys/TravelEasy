@@ -1,15 +1,18 @@
 package com.traveleasy.booking.model;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Relational snapshot of an individual room-type allocation within a consolidated hotel reservation (WP-HB-05).
- * Stores authoritative historical nightly pricing and provides schema readiness for WP-HB-06 guest allocation.
+ * Stores authoritative historical nightly pricing and provides physical room guest allocations (WP-HB-06.1).
  */
 @Entity
 @Table(name = "hotel_allocation_snapshots", indexes = {
@@ -67,4 +70,17 @@ public class HotelAllocationSnapshot {
 
     @Builder.Default
     private LocalDateTime updatedAt = LocalDateTime.now();
+
+    @OneToMany(mappedBy = "allocationSnapshot", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JsonManagedReference
+    @Builder.Default
+    private List<HotelRoomGuestAllocation> roomAllocations = new ArrayList<>();
+
+    public void addRoomAllocation(HotelRoomGuestAllocation roomAllocation) {
+        if (roomAllocations == null) {
+            roomAllocations = new ArrayList<>();
+        }
+        roomAllocations.add(roomAllocation);
+        roomAllocation.setAllocationSnapshot(this);
+    }
 }

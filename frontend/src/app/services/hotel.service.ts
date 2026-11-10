@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { HotelPublicDto } from '../models/hotel.model';
 
 @Injectable({
   providedIn: 'root'
@@ -62,12 +63,15 @@ export class HotelService {
     return this.http.put(`${this.apiUrl}/rooms/${roomId}/restore`, {});
   }
 
-  searchHotels(city: string, checkIn?: string, checkOut?: string, rooms: number = 1): Observable<any[]> {
+  searchHotels(city: string, checkIn?: string, checkOut?: string, rooms: number = 1, guests?: number): Observable<HotelPublicDto[]> {
     let url = `${this.apiUrl}/search?city=${encodeURIComponent(city)}`;
     if (checkIn && checkOut) {
       url += `&checkIn=${encodeURIComponent(checkIn)}&checkOut=${encodeURIComponent(checkOut)}&rooms=${rooms}`;
     }
-    return this.http.get<any[]>(url);
+    if (guests !== undefined && guests !== null && guests > 0) {
+      url += `&guests=${guests}`;
+    }
+    return this.http.get<HotelPublicDto[]>(url);
   }
 
   getHotelDetails(hotelId: number, checkIn?: string, checkOut?: string, rooms: number = 1): Observable<any> {

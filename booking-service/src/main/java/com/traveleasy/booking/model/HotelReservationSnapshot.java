@@ -10,8 +10,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Relational snapshot of a consolidated hotel reservation (WP-HB-05).
- * Replaces reliance on the 4000-character detailsJson column for multi-room hotel bookings.
+ * Relational snapshot of a consolidated hotel reservation (WP-HB-05 / WP-HB-06.1).
+ * Replaces reliance on the 4000-character detailsJson column for multi-room hotel bookings
+ * and stores authoritative primary guest contact details.
  */
 @Entity
 @Table(name = "hotel_reservation_snapshots", indexes = {
@@ -41,6 +42,18 @@ public class HotelReservationSnapshot {
     private Long hotelId;
 
     private String hotelName;
+
+    /**
+     * WP-HB-06.1: Historical primary guest contact details for the overall reservation.
+     */
+    @Column(name = "primary_guest_name")
+    private String primaryGuestName;
+
+    @Column(name = "primary_guest_email")
+    private String primaryGuestEmail;
+
+    @Column(name = "primary_guest_mobile")
+    private String primaryGuestMobile;
 
     @Column(nullable = false)
     private LocalDate checkInDate;

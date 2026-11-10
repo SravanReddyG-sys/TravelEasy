@@ -9,7 +9,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Traveller request payload to initiate a consolidated multi-room hotel reservation (WP-HB-05).
+ * Traveller request payload to initiate a consolidated multi-room hotel reservation (WP-HB-05 / WP-HB-06.1).
  */
 @Data
 @NoArgsConstructor
@@ -22,6 +22,11 @@ public class HotelReservationInitiationRequest {
     private Long customerId;
     private String customerName;
     private String customerEmail;
+
+    /**
+     * WP-HB-06.1: Structured primary guest contact representing the overall reservation.
+     */
+    private PrimaryGuestDto primaryGuest;
 
     private Long hotelId;
     private String hotelName;

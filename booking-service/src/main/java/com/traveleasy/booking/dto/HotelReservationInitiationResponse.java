@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Authoritative response returned when a consolidated hotel reservation is initiated (WP-HB-05).
+ * Authoritative response returned when a consolidated hotel reservation is initiated (WP-HB-05, extended in WP-HB-06.2).
  */
 @Data
 @NoArgsConstructor
@@ -30,6 +30,7 @@ public class HotelReservationInitiationResponse {
     private LocalDate checkOutDate;
     private Integer totalNights;
     private Boolean idempotent;
+    private PrimaryGuestDto primaryGuest;
     private List<AllocationSnapshotDto> allocations;
 
     @Data
@@ -44,5 +45,6 @@ public class HotelReservationInitiationResponse {
         private Double allocationTotal;
         private String nightlyRatesJson;
         private String status;
+        private List<RoomGuestAllocationDto> rooms;
     }
 }
