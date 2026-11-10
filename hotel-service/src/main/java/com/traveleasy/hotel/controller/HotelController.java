@@ -3,6 +3,10 @@ package com.traveleasy.hotel.controller;
 import com.traveleasy.hotel.service.AddressReferenceData;
 
 import com.traveleasy.hotel.dto.*;
+import com.traveleasy.hotel.dto.ConsolidatedReservationRequestDto;
+import com.traveleasy.hotel.dto.HotelReservationResponseDto;
+import com.traveleasy.hotel.service.HotelReservationService;
+
 import com.traveleasy.hotel.model.HotelProperty;
 import com.traveleasy.hotel.model.HotelImage;
 import com.traveleasy.hotel.model.RoomType;
@@ -47,6 +51,7 @@ public class HotelController {
     private final RoomBlockService roomBlockService;
     private final HotelImageStorageService imageStorageService;
     private final HotelImageRepository hotelImageRepository;
+    private final HotelReservationService reservationService;
 
     // =========================================================================
     // 1A. PROPERTY REGISTRATION WIZARD DRAFTS (WP-05 STEP 1)
@@ -702,6 +707,61 @@ public class HotelController {
     }
 
     // =========================================================================
+    // 3B. CONSOLIDATED MULTI-ALLOCATION RESERVATION (WP-HB-04)
+    // =========================================================================
+
+    /**
+     * Consolidated multi-allocation hotel reservation endpoint (WP-HB-04).
+     * Atomically reserves all requested room allocations under a parent HotelReservation aggregate.
+     * Restricted to trusted internal-service requests.
+     */
+    @PostMapping("/reservations")
+    public ResponseEntity<?> createConsolidatedReservation(
+            @Valid @RequestBody ConsolidatedReservationRequestDto dto,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+            @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+
+        boolean isInternal = securityService.authenticateInternalService(authHeader, internalToken, internalService);
+        if (!isInternal) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Consolidated reservation endpoint is restricted to trusted internal services"));
+        }
+
+        HotelReservationResponseDto response;
+        try {
+            response = reservationService.createConsolidatedReservation(dto, isInternal);
+        } catch (org.springframework.dao.DataIntegrityViolationException raceEx) {
+            log.warn("Database unique constraint arbitrated concurrent reservation race for bookingRef: {}", dto.getBookingRef());
+            response = reservationService.handleConcurrentReservationRace(dto);
+        }
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Retrieves full consolidated reservation details by booking reference (WP-HB-04).
+     */
+    @GetMapping("/reservations/{bookingRef}")
+    public ResponseEntity<?> getReservation(
+            @PathVariable String bookingRef,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+            @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+
+        boolean isInternal = securityService.authenticateInternalService(authHeader, internalToken, internalService);
+        CallerPrincipal principal = !isInternal && authHeader != null ? securityService.resolvePrincipal(authHeader) : null;
+
+        if (!isInternal && (principal == null || !principal.hasManagerOrAdminAccess())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Internal service, admin, or manager authentication required"));
+        }
+
+        HotelReservationResponseDto response = reservationService.getReservation(bookingRef);
+        return ResponseEntity.ok(response);
+    }
+
+
+    // =========================================================================
     // 4. DATE-WISE INVENTORY RESERVATION & RELEASE (WP-03)
     // =========================================================================
 
@@ -772,7 +832,7 @@ public class HotelController {
             return ResponseEntity.badRequest().body(Map.of("message", "Booking reference is mandatory for release"));
         }
 
-        Map<String, Object> result = inventoryService.releaseStayInventory(ref, principal, isInternal);
+        Map<String, Object> result = reservationService.releaseReservation(ref, principal, isInternal);
         return ResponseEntity.ok(result);
     }
 
@@ -787,9 +847,26 @@ public class HotelController {
             @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
 
         boolean isInternal = securityService.authenticateInternalService(authHeader, internalToken, internalService);
-        CallerPrincipal principal = authHeader != null ? securityService.resolvePrincipal(authHeader) : null;
+        CallerPrincipal principal = null;
 
-        Map<String, Object> result = inventoryService.confirmStayInventory(bookingRef, principal, isInternal);
+        if (!isInternal) {
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Authentication required to confirm room inventory"));
+            }
+            String token = authHeader.substring(7).trim();
+            if (!securityService.validateToken(token)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Invalid or expired authorization token"));
+            }
+            principal = securityService.resolvePrincipal(authHeader);
+            if (principal == null || (!principal.isAdmin() && !principal.isHotelManager())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("message", "Access denied: Only trusted internal services, admins, or the owning manager can confirm inventory"));
+            }
+        }
+
+        Map<String, Object> result = reservationService.confirmReservation(bookingRef, principal, isInternal);
         return ResponseEntity.ok(result);
     }
 

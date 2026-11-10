@@ -11,6 +11,8 @@ import com.traveleasy.hotel.exception.DomainValidationException;
 import com.traveleasy.hotel.exception.OwnershipAccessDeniedException;
 import com.traveleasy.hotel.exception.ResourceNotFoundException;
 import com.traveleasy.hotel.model.HotelBookingAllocation;
+import com.traveleasy.hotel.model.HotelReservation;
+import com.traveleasy.hotel.repository.HotelReservationRepository;
 import com.traveleasy.hotel.model.HotelProperty;
 import com.traveleasy.hotel.model.RoomDailyInventory;
 import com.traveleasy.hotel.model.RoomType;
@@ -38,6 +40,7 @@ public class HotelInventoryService {
     private final HotelPropertyRepository hotelRepository;
     private final RoomDailyInventoryRepository dailyInventoryRepository;
     private final HotelBookingAllocationRepository allocationRepository;
+    private final HotelReservationRepository reservationRepository;
     private final HotelPricingService pricingService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -288,8 +291,25 @@ public class HotelInventoryService {
             ratesJson = objectMapper.writeValueAsString(ratesBreakdown);
         } catch (JsonProcessingException ignored) {}
 
-        // Step 3: Record booking allocation
+        // Step 3: Record parent HotelReservation and booking allocation (WP-HB-04)
+        HotelReservation parentRes = reservationRepository.findByBookingRef(dto.getBookingRef()).orElse(null);
+        if (parentRes == null) {
+            String hash = roomType.getHotelId() + ":" + checkIn + ":" + checkOut + ":" + roomId + "x" + count;
+            parentRes = HotelReservation.builder()
+                    .bookingRef(dto.getBookingRef())
+                    .hotelId(roomType.getHotelId())
+                    .checkInDate(checkIn)
+                    .checkOutDate(checkOut)
+                    .status("HELD")
+                    .requestHash(hash)
+                    .totalPrice(finalTotalPrice)
+                    .allocations(new ArrayList<>())
+                    .build();
+            parentRes = reservationRepository.save(parentRes);
+        }
+
         HotelBookingAllocation allocation = HotelBookingAllocation.builder()
+                .reservation(parentRes)
                 .bookingRef(dto.getBookingRef())
                 .hotelId(roomType.getHotelId())
                 .roomId(roomId)
@@ -371,27 +391,57 @@ public class HotelInventoryService {
             }
         }
 
+        // Pass 1: Strict validation of inventory counters before mutation
         LocalDate cur = alloc.getCheckInDate();
         while (cur.isBefore(alloc.getCheckOutDate())) {
             final LocalDate dateForLock = cur;
-            Optional<RoomDailyInventory> dailyOpt = dailyInventoryRepository
-                    .findByRoomIdAndInventoryDateForUpdate(alloc.getRoomId(), dateForLock);
+            RoomDailyInventory daily = dailyInventoryRepository
+                    .findByRoomIdAndInventoryDateForUpdate(alloc.getRoomId(), dateForLock)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Integrity failure: Missing daily inventory record during release for room " +
+                                    alloc.getRoomId() + " on " + dateForLock));
 
-            if (dailyOpt.isPresent()) {
-                RoomDailyInventory daily = dailyOpt.get();
-                if ("HELD".equalsIgnoreCase(alloc.getStatus())) {
-                    daily.setHeldRooms(Math.max(0, daily.getHeldRooms() - alloc.getRoomCount()));
-                } else if ("CONFIRMED".equalsIgnoreCase(alloc.getStatus())) {
-                    daily.setBookedRooms(Math.max(0, daily.getBookedRooms() - alloc.getRoomCount()));
+            if ("HELD".equalsIgnoreCase(alloc.getStatus())) {
+                if (daily.getHeldRooms() < alloc.getRoomCount()) {
+                    throw new DomainValidationException(
+                            "Integrity failure: Insufficient held rooms (" + daily.getHeldRooms() +
+                                    " < " + alloc.getRoomCount() + ") for room " + alloc.getRoomId() + " on " + dateForLock);
                 }
-                dailyInventoryRepository.save(daily);
+            } else if ("CONFIRMED".equalsIgnoreCase(alloc.getStatus())) {
+                if (daily.getBookedRooms() < alloc.getRoomCount()) {
+                    throw new DomainValidationException(
+                            "Integrity failure: Insufficient booked rooms (" + daily.getBookedRooms() +
+                                    " < " + alloc.getRoomCount() + ") for room " + alloc.getRoomId() + " on " + dateForLock);
+                }
             }
+            cur = cur.plusDays(1);
+        }
+
+        // Pass 2: Mutate daily inventory counters
+        cur = alloc.getCheckInDate();
+        while (cur.isBefore(alloc.getCheckOutDate())) {
+            final LocalDate dateForLock = cur;
+            RoomDailyInventory daily = dailyInventoryRepository
+                    .findByRoomIdAndInventoryDateForUpdate(alloc.getRoomId(), dateForLock).orElseThrow();
+
+            if ("HELD".equalsIgnoreCase(alloc.getStatus())) {
+                daily.setHeldRooms(daily.getHeldRooms() - alloc.getRoomCount());
+            } else if ("CONFIRMED".equalsIgnoreCase(alloc.getStatus())) {
+                daily.setBookedRooms(daily.getBookedRooms() - alloc.getRoomCount());
+            }
+            dailyInventoryRepository.save(daily);
             cur = cur.plusDays(1);
         }
 
         alloc.setStatus("RELEASED");
         alloc.setUpdatedAt(LocalDateTime.now());
         allocationRepository.save(alloc);
+
+        reservationRepository.findByBookingRef(bookingRef).ifPresent(p -> {
+            p.setStatus("RELEASED");
+            p.setUpdatedAt(LocalDateTime.now());
+            reservationRepository.save(p);
+        });
 
         roomTypeRepository.findById(alloc.getRoomId()).ifPresent(this::updateLegacyAvailableSnapshot);
 
@@ -433,6 +483,7 @@ public class HotelInventoryService {
             throw new DomainValidationException("Cannot confirm allocation with status: " + alloc.getStatus());
         }
 
+        // Pass 1: Strict validation of inventory counters before mutation
         LocalDate cur = alloc.getCheckInDate();
         while (cur.isBefore(alloc.getCheckOutDate())) {
             final LocalDate confirmDate = cur;
@@ -441,7 +492,22 @@ public class HotelInventoryService {
                     .orElseGet(() -> getOrCreateDailyInventory(
                             roomTypeRepository.findById(alloc.getRoomId()).orElseThrow(), confirmDate));
 
-            daily.setHeldRooms(Math.max(0, daily.getHeldRooms() - alloc.getRoomCount()));
+            if (daily.getHeldRooms() < alloc.getRoomCount()) {
+                throw new DomainValidationException(
+                        "Integrity failure: Insufficient held rooms (" + daily.getHeldRooms() +
+                                " < " + alloc.getRoomCount() + ") for room " + alloc.getRoomId() + " on " + confirmDate);
+            }
+            cur = cur.plusDays(1);
+        }
+
+        // Pass 2: Mutate inventory counters
+        cur = alloc.getCheckInDate();
+        while (cur.isBefore(alloc.getCheckOutDate())) {
+            final LocalDate confirmDate = cur;
+            RoomDailyInventory daily = dailyInventoryRepository
+                    .findByRoomIdAndInventoryDateForUpdate(alloc.getRoomId(), confirmDate).orElseThrow();
+
+            daily.setHeldRooms(daily.getHeldRooms() - alloc.getRoomCount());
             daily.setBookedRooms(daily.getBookedRooms() + alloc.getRoomCount());
             dailyInventoryRepository.save(daily);
             cur = cur.plusDays(1);
@@ -450,6 +516,12 @@ public class HotelInventoryService {
         alloc.setStatus("CONFIRMED");
         alloc.setUpdatedAt(LocalDateTime.now());
         allocationRepository.save(alloc);
+
+        reservationRepository.findByBookingRef(bookingRef).ifPresent(p -> {
+            p.setStatus("CONFIRMED");
+            p.setUpdatedAt(LocalDateTime.now());
+            reservationRepository.save(p);
+        });
 
         log.info("Confirmed stay allocation for bookingRef {} ({} rooms)", bookingRef, alloc.getRoomCount());
 

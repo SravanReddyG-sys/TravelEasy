@@ -15,6 +15,7 @@ import com.traveleasy.booking.service.ScheduleCancellationCoordinatorService;
 import com.traveleasy.booking.service.BookingStateTransitionService;
 import com.traveleasy.booking.service.HotelCancellationPolicyService;
 import com.traveleasy.booking.service.HotelGuestLifecycleService;
+import com.traveleasy.booking.service.HotelBookingOrchestrationService;
 import com.traveleasy.booking.dto.CancellationPolicyResult;
 import com.traveleasy.booking.dto.BookingLifecycleOperationResponse;
 import org.springframework.data.domain.Page;
@@ -22,6 +23,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
+import java.util.Optional;
 
 
 import lombok.RequiredArgsConstructor;
@@ -74,6 +76,8 @@ public class BookingController {
     private final BookingInternalTokenService internalTokenService;
     private final HotelCancellationPolicyService cancellationPolicyService;
     private final HotelGuestLifecycleService guestLifecycleService;
+    private final HotelBookingOrchestrationService hotelOrchestrationService;
+    private final com.traveleasy.booking.repository.HotelReservationSnapshotRepository snapshotRepository;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private RestTemplate restTemplate = new RestTemplate();
@@ -180,12 +184,66 @@ public class BookingController {
             if (booking.getCheckOutDate() == null) {
                 booking.setCheckOutDate(booking.resolveCheckOutDate());
             }
+
+            // WP-HB-05: Consolidated multi-allocation hotel reservation orchestration
+            if (booking.getAllocations() != null && !booking.getAllocations().isEmpty()) {
+                com.traveleasy.booking.dto.HotelReservationInitiationRequest initReq =
+                        com.traveleasy.booking.dto.HotelReservationInitiationRequest.builder()
+                                .bookingRef(booking.getBookingRef())
+                                .customerId(booking.getCustomerId())
+                                .customerName(booking.getCustomerName())
+                                .customerEmail(booking.getCustomerEmail())
+                                .hotelId(booking.getServiceId())
+                                .hotelName(booking.getServiceTitle())
+                                .checkInDate(booking.getCheckInDate())
+                                .checkOutDate(booking.getCheckOutDate())
+                                .allocations(booking.getAllocations())
+                                .guestDetailsJson(booking.getDetailsJson())
+                                .build();
+
+                com.traveleasy.booking.dto.HotelReservationInitiationResponse initResp =
+                        hotelOrchestrationService.initiateHotelReservation(initReq, booking.getCustomerId(), booking.getCustomerEmail());
+                Booking initiatedBooking = bookingRepository.findById(initResp.getBookingId()).orElseThrow();
+                return ResponseEntity.status(HttpStatus.CREATED).body(initiatedBooking);
+            }
         }
 
         Booking saved = bookingRepository.save(booking);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
 
+    }
+
+    /**
+     * Dedicated consolidated hotel reservation initiation endpoint (WP-HB-05).
+     */
+    @PostMapping("/hotel-reservations")
+    public ResponseEntity<?> initiateHotelReservation(
+            @RequestBody com.traveleasy.booking.dto.HotelReservationInitiationRequest request,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        Long callerUserId = null;
+        String callerEmail = null;
+
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7).trim();
+            if (securityService.validateToken(token)) {
+                String callerRole = securityService.extractRole(token);
+                if ("ROLE_BUS_OPERATOR".equalsIgnoreCase(callerRole) || "ROLE_HOTEL_MANAGER".equalsIgnoreCase(callerRole)) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(Map.of("message", "Management accounts are prohibited from booking customer tickets."));
+                }
+                callerUserId = securityService.extractUserId(token);
+                callerEmail = securityService.extractEmail(token);
+            } else {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Invalid or expired authorization token"));
+            }
+        }
+
+        com.traveleasy.booking.dto.HotelReservationInitiationResponse response =
+                hotelOrchestrationService.initiateHotelReservation(request, callerUserId, callerEmail);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
 
@@ -622,124 +680,163 @@ public class BookingController {
 
 
     @PutMapping("/{id}/confirm")
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<?> confirmBooking(
+            @PathVariable Long id,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+            @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
 
-    public ResponseEntity<?> confirmBooking(@PathVariable Long id,
+        Optional<Booking> opt = bookingRepository.findByIdForUpdate(id);
+        if (opt.isEmpty()) {
+            opt = bookingRepository.findById(id);
+        }
 
-                                            @RequestHeader(value = "Authorization", required = false) String authHeader,
+        return opt.map(bkg -> executeConfirmBooking(bkg, authHeader, internalToken, internalService))
+                .orElse(ResponseEntity.notFound().build());
+    }
 
-                                            @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+    @PutMapping("/ref/{bookingRef}/confirm")
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<?> confirmBookingByRef(
+            @PathVariable String bookingRef,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+            @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
 
-        return bookingRepository.findById(id).map(bkg -> {
+        Optional<Booking> opt = bookingRepository.findByBookingRefForUpdate(bookingRef);
+        if (opt.isEmpty()) {
+            opt = bookingRepository.findByBookingRef(bookingRef);
+        }
 
-            // Idempotent check
+        return opt.map(bkg -> executeConfirmBooking(bkg, authHeader, internalToken, internalService))
+                .orElse(ResponseEntity.notFound().build());
+    }
 
-            if ("CONFIRMED".equalsIgnoreCase(bkg.getStatus())) {
+    private ResponseEntity<?> executeConfirmBooking(
+            Booking bkg, String authHeader, String internalToken, String internalService) {
 
-                return ResponseEntity.ok(Map.of("message", "Booking is already confirmed", "booking", bkg));
+        // 1. Idempotent check
+        if ("CONFIRMED".equalsIgnoreCase(bkg.getStatus())) {
+            return ResponseEntity.ok(Map.of("message", "Booking is already confirmed", "booking", bkg));
+        }
 
+        // 2. Terminal state check
+        if ("CANCELLED".equalsIgnoreCase(bkg.getStatus()) || "EXPIRED".equalsIgnoreCase(bkg.getStatus())) {
+            if ("EXPIRED".equalsIgnoreCase(bkg.getStatus())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Cannot confirm an expired booking"));
             }
+            return ResponseEntity.badRequest().body(Map.of("message", "Cannot confirm a cancelled booking"));
+        }
 
-            if ("CANCELLED".equalsIgnoreCase(bkg.getStatus()) || "EXPIRED".equalsIgnoreCase(bkg.getStatus())) {
-                if ("EXPIRED".equalsIgnoreCase(bkg.getStatus())) {
-                    return ResponseEntity.badRequest().body(Map.of("message", "Cannot confirm an expired booking"));
+        // 3. Authoritative expiry check (persisted expiresAt deadline)
+        if (bkg.getExpiresAt() != null && LocalDateTime.now().isAfter(bkg.getExpiresAt())) {
+            org.slf4j.LoggerFactory.getLogger(BookingController.class)
+                    .warn("Booking {} rejected confirmation: expiresAt deadline has passed", bkg.getBookingRef());
+            bkg.setStatus("EXPIRED");
+            bookingRepository.save(bkg);
+            releaseRoomsInHotelService(bkg);
+            releaseSeatsInBusService(bkg);
+            snapshotRepository.findByBookingId(bkg.getId()).ifPresent(s -> {
+                s.setStatus("EXPIRED");
+                if (s.getAllocations() != null) {
+                    s.getAllocations().forEach(a -> a.setStatus("EXPIRED"));
                 }
-                return ResponseEntity.badRequest().body(Map.of("message", "Cannot confirm a cancelled booking"));
+                snapshotRepository.save(s);
+            });
+
+            // Refund if payment was captured late
+            boolean paymentCaptured = verifyPaymentStatusWithPaymentService(bkg.getBookingRef(), bkg.getTotalAmount());
+            if (paymentCaptured) {
+                processRefundInPaymentService(bkg.getBookingRef(), bkg.getTotalAmount());
             }
+            return ResponseEntity.badRequest().body(Map.of("message", "Cannot confirm an expired booking"));
+        }
 
+        // 4. Authorization check: internal service or owning customer / admin
+        boolean isInternal = securityService.authenticateInternalService(authHeader, internalToken, internalService);
 
+        if (!isInternal && authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7).trim();
+            if (securityService.validateToken(token)) {
+                Long callerUserId = securityService.extractUserId(token);
+                String callerRole = securityService.extractRole(token);
+                boolean isAdmin = "ROLE_ADMIN".equalsIgnoreCase(callerRole);
 
-            // Authorization check
-
-            boolean isInternal = "payment-service".equalsIgnoreCase(internalService);
-
-            if (!isInternal && authHeader != null && authHeader.startsWith("Bearer ")) {
-
-                String token = authHeader.substring(7).trim();
-
-                if (securityService.validateToken(token)) {
-
-                    Long callerUserId = securityService.extractUserId(token);
-
-                    String callerRole = securityService.extractRole(token);
-
-                    boolean isAdmin = "ROLE_ADMIN".equalsIgnoreCase(callerRole);
-
-                    if (!isAdmin && callerUserId != null && bkg.getCustomerId() != null && !callerUserId.equals(bkg.getCustomerId())) {
-
-                        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-
-                                .body(Map.of("message", "Access denied: Cannot confirm another user's booking"));
-
-                    }
-
+                if (!isAdmin && callerUserId != null && bkg.getCustomerId() != null && !callerUserId.equals(bkg.getCustomerId())) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(Map.of("message", "Access denied: Cannot confirm another user's booking"));
                 }
-
             }
+        }
 
+        // 5. Authoritative server-side verification with Payment Service
+        boolean paymentValid = verifyPaymentStatusWithPaymentService(bkg.getBookingRef(), bkg.getTotalAmount());
+        if (!paymentValid && !isInternal) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("message", "Cannot confirm booking: Authoritative payment verification failed or payment is not captured"));
+        }
 
+        // 6. Attempt to confirm seats in bus-service
+        boolean seatsConfirmed = confirmSeatsInBusService(bkg);
+        if (!seatsConfirmed) {
+            org.slf4j.LoggerFactory.getLogger(BookingController.class)
+                    .warn("Seats for booking {} are no longer available. Initiating automatic refund.", bkg.getBookingRef());
+            processRefundInPaymentService(bkg.getBookingRef(), bkg.getTotalAmount());
+            bkg.setStatus("EXPIRED");
+            Booking saved = bookingRepository.save(bkg);
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                    "message", "Cannot confirm booking: Seat hold has expired and seats have been allocated to another traveller. An automated refund has been initiated to your original payment method.",
+                    "booking", saved
+            ));
+        }
 
-            // Authoritative server-side verification with Payment Service
+        // 7. Attempt to confirm rooms in hotel-service (WP-04 & WP-HB-05 consolidated reservation)
+        boolean roomsConfirmed = confirmRoomsInHotelService(bkg);
+        if (!roomsConfirmed) {
+            org.slf4j.LoggerFactory.getLogger(BookingController.class)
+                    .warn("Rooms for booking {} are no longer available or hold expired. Initiating automatic refund.", bkg.getBookingRef());
+            processRefundInPaymentService(bkg.getBookingRef(), bkg.getTotalAmount());
+            bkg.setStatus("EXPIRED");
+            Booking saved = bookingRepository.save(bkg);
+            snapshotRepository.findByBookingId(bkg.getId()).ifPresent(s -> {
+                s.setStatus("EXPIRED");
+                if (s.getAllocations() != null) {
+                    s.getAllocations().forEach(a -> a.setStatus("EXPIRED"));
+                }
+                snapshotRepository.save(s);
+            });
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                    "message", "Cannot confirm booking: Room hold has expired and room inventory is no longer available. An automated refund has been initiated to your original payment method.",
+                    "booking", saved
+            ));
+        }
 
-            boolean paymentValid = verifyPaymentStatusWithPaymentService(bkg.getBookingRef(), bkg.getTotalAmount());
-
-            if (!paymentValid && !isInternal) {
-
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-
-                        .body(Map.of("message", "Cannot confirm booking: Authoritative payment verification failed or payment is not captured"));
-
+        // 8. Update relational snapshot status to CONFIRMED
+        snapshotRepository.findByBookingId(bkg.getId()).ifPresent(s -> {
+            s.setStatus("CONFIRMED");
+            if (s.getAllocations() != null) {
+                s.getAllocations().forEach(a -> a.setStatus("CONFIRMED"));
             }
+            snapshotRepository.save(s);
+        });
 
+        Booking saved = stateTransitionService.confirmBooking(bkg);
+        return ResponseEntity.ok(Map.of("message", "Booking confirmed", "booking", saved));
+    }
 
+    @GetMapping("/ref/{bookingRef}/snapshot")
+    public ResponseEntity<?> getHotelReservationSnapshotByRef(@PathVariable String bookingRef) {
+        return snapshotRepository.findByBookingRef(bookingRef)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
 
-            // Attempt to confirm seats in bus-service
-
-            boolean seatsConfirmed = confirmSeatsInBusService(bkg);
-
-            if (!seatsConfirmed) {
-
-                // Hold expired and seats allocated to another passenger - trigger automatic refund!
-
-                org.slf4j.LoggerFactory.getLogger(BookingController.class)
-
-                        .warn("Seats for booking {} are no longer available. Initiating automatic refund.", bkg.getBookingRef());
-
-                processRefundInPaymentService(bkg.getBookingRef(), bkg.getTotalAmount());
-
-                bkg.setStatus("EXPIRED");
-
-                Booking saved = bookingRepository.save(bkg);
-
-                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
-
-                        "message", "Cannot confirm booking: Seat hold has expired and seats have been allocated to another traveller. An automated refund has been initiated to your original payment method.",
-
-                        "booking", saved
-
-                ));
-
-            }
-
-            // Attempt to confirm rooms in hotel-service (WP-03 date-wise inventory)
-            boolean roomsConfirmed = confirmRoomsInHotelService(bkg);
-            if (!roomsConfirmed) {
-                org.slf4j.LoggerFactory.getLogger(BookingController.class)
-                        .warn("Rooms for booking {} are no longer available or hold expired. Initiating automatic refund.", bkg.getBookingRef());
-                processRefundInPaymentService(bkg.getBookingRef(), bkg.getTotalAmount());
-                bkg.setStatus("EXPIRED");
-                Booking saved = bookingRepository.save(bkg);
-                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
-                        "message", "Cannot confirm booking: Room hold has expired and room inventory is no longer available. An automated refund has been initiated to your original payment method.",
-                        "booking", saved
-                ));
-            }
-
-            Booking saved = stateTransitionService.confirmBooking(bkg);
-
-            return ResponseEntity.ok(Map.of("message", "Booking confirmed", "booking", saved));
-
-        }).orElse(ResponseEntity.notFound().build());
-
+    @GetMapping("/{id}/snapshot")
+    public ResponseEntity<?> getHotelReservationSnapshotById(@PathVariable Long id) {
+        return snapshotRepository.findByBookingId(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
 
@@ -1136,6 +1233,13 @@ public class BookingController {
                         org.springframework.http.HttpEntity<Void> stayEntity = new org.springframework.http.HttpEntity<>(headers);
                         ResponseEntity<Map> stayResp = restTemplate.exchange(stayUrl, org.springframework.http.HttpMethod.POST, stayEntity, Map.class);
                         if (stayResp.getStatusCode().is2xxSuccessful()) {
+                            snapshotRepository.findByBookingRef(booking.getBookingRef()).ifPresent(s -> {
+                                s.setStatus("RELEASED");
+                                if (s.getAllocations() != null) {
+                                    s.getAllocations().forEach(a -> a.setStatus("RELEASED"));
+                                }
+                                snapshotRepository.save(s);
+                            });
                             org.slf4j.LoggerFactory.getLogger(BookingController.class)
                                     .info("Authoritatively released stay inventory for bookingRef {} via hotel-service", booking.getBookingRef());
                             return true;

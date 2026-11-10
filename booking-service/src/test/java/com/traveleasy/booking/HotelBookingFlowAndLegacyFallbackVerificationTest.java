@@ -67,6 +67,12 @@ public class HotelBookingFlowAndLegacyFallbackVerificationTest {
     private HotelGuestLifecycleService guestLifecycleService;
 
     @MockBean
+    private com.traveleasy.booking.service.HotelBookingOrchestrationService hotelOrchestrationService;
+
+    @MockBean
+    private com.traveleasy.booking.repository.HotelReservationSnapshotRepository snapshotRepository;
+
+    @MockBean
     private RestTemplate restTemplate;
 
     @Autowired

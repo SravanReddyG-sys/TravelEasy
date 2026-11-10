@@ -74,6 +74,12 @@ public class BookingControllerTest {
     private com.traveleasy.booking.service.HotelGuestLifecycleService guestLifecycleService;
 
     @MockBean
+    private com.traveleasy.booking.service.HotelBookingOrchestrationService hotelOrchestrationService;
+
+    @MockBean
+    private com.traveleasy.booking.repository.HotelReservationSnapshotRepository snapshotRepository;
+
+    @MockBean
     private RestTemplate restTemplate;
 
     @BeforeEach

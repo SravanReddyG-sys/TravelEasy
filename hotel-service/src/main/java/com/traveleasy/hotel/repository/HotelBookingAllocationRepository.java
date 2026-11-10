@@ -13,6 +13,14 @@ public interface HotelBookingAllocationRepository extends JpaRepository<HotelBoo
 
     Optional<HotelBookingAllocation> findByBookingRef(String bookingRef);
 
+    List<HotelBookingAllocation> findByReservationIdOrderByIdAsc(Long reservationId);
+
+    List<HotelBookingAllocation> findByReservationBookingRefOrderByIdAsc(String bookingRef);
+
+    List<HotelBookingAllocation> findByReservationBookingRef(String bookingRef);
+
+    List<HotelBookingAllocation> findByReservationIdAndStatus(Long reservationId, String status);
+
     List<HotelBookingAllocation> findByRoomIdAndStatus(Long roomId, String status);
 
     List<HotelBookingAllocation> findByRoomIdAndStatusIn(Long roomId, List<String> statuses);

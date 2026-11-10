@@ -79,6 +79,9 @@ public class Booking {
     @Transient
     private String operatorBusinessName;
 
+    @Transient
+    private java.util.List<com.traveleasy.booking.dto.ReservationAllocationItemDto> allocations;
+
     public boolean isDateWiseBooking() {
         if (!"HOTEL".equalsIgnoreCase(this.serviceType)) {
             return false;

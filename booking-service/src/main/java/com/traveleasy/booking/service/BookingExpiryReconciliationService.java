@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,6 +32,7 @@ public class BookingExpiryReconciliationService {
     private final BookingRepository bookingRepository;
     private final BookingStateTransitionService stateTransitionService;
     private final BookingInternalTokenService internalTokenService;
+    private final com.traveleasy.booking.repository.HotelReservationSnapshotRepository snapshotRepository;
     private RestTemplate restTemplate = new RestTemplate();
 
     public void setRestTemplate(RestTemplate restTemplate) {
@@ -53,11 +55,16 @@ public class BookingExpiryReconciliationService {
     @Scheduled(fixedRate = 30000)
     @Transactional
     public void reconcileExpiredBookings() {
-        LocalDateTime threshold = LocalDateTime.now().minusMinutes(15);
-        List<Booking> candidates = bookingRepository.findByStatusInAndBookingDateBefore(
-                List.of("PENDING_PAYMENT", "INITIATED"), threshold);
+        LocalDateTime now = LocalDateTime.now();
+        List<Booking> candidates = bookingRepository.findByStatusInAndExpiresAtBefore(
+                List.of("PENDING_PAYMENT", "INITIATED"), now);
 
-        if (candidates.isEmpty()) {
+        if (candidates == null || candidates.isEmpty()) {
+            candidates = bookingRepository.findByStatusInAndBookingDateBefore(
+                    List.of("PENDING_PAYMENT", "INITIATED"), now.minusMinutes(15));
+        }
+
+        if (candidates == null || candidates.isEmpty()) {
             return;
         }
 
@@ -78,43 +85,79 @@ public class BookingExpiryReconciliationService {
                 .orElse(false);
     }
 
-    private boolean expireSingleBooking(Booking booking) {
-        if ("CONFIRMED".equalsIgnoreCase(booking.getStatus()) 
-                || "CANCELLED".equalsIgnoreCase(booking.getStatus()) 
-                || "EXPIRED".equalsIgnoreCase(booking.getStatus())) {
+    @Transactional
+    public boolean expireSingleBooking(Booking booking) {
+        if (booking == null || booking.getBookingRef() == null) {
+            return false;
+        }
+
+        // Concurrency-safe pessimistic write lock to coordinate with payment confirmation (WP-HB-05 Part A)
+        Optional<Booking> lockedOpt = bookingRepository.findByBookingRefForUpdate(booking.getBookingRef());
+        if (lockedOpt.isEmpty()) {
+            lockedOpt = bookingRepository.findByBookingRef(booking.getBookingRef());
+        }
+        if (lockedOpt.isEmpty()) {
+            lockedOpt = Optional.of(booking);
+        }
+        Booking lockedBooking = lockedOpt.get();
+
+        if ("CONFIRMED".equalsIgnoreCase(lockedBooking.getStatus()) 
+                || "CANCELLED".equalsIgnoreCase(lockedBooking.getStatus()) 
+                || "EXPIRED".equalsIgnoreCase(lockedBooking.getStatus())) {
             return false;
         }
 
         // 1. Verify with Payment Service before expiring
-        boolean paymentCaptured = isPaymentSuccessful(booking.getBookingRef());
+        boolean paymentCaptured = isPaymentSuccessful(lockedBooking.getBookingRef());
 
         if (paymentCaptured) {
-            log.info("Booking {} has confirmed payment. Attempting authoritative seat/room confirmation.", booking.getBookingRef());
-            boolean seatsConfirmed = confirmSeatsInBusService(booking);
-            boolean roomsConfirmed = confirmRoomsInHotelService(booking);
+            log.info("Booking {} has confirmed payment. Attempting authoritative seat/room confirmation.", lockedBooking.getBookingRef());
+            boolean seatsConfirmed = confirmSeatsInBusService(lockedBooking);
+            boolean roomsConfirmed = confirmRoomsInHotelService(lockedBooking);
             if (seatsConfirmed && roomsConfirmed) {
-                stateTransitionService.confirmBooking(booking);
-                log.info("Booking {} successfully recovered and marked CONFIRMED.", booking.getBookingRef());
+                stateTransitionService.confirmBooking(lockedBooking);
+                snapshotRepository.findByBookingId(lockedBooking.getId()).ifPresent(snapshot -> {
+                    snapshot.setStatus("CONFIRMED");
+                    if (snapshot.getAllocations() != null) {
+                        snapshot.getAllocations().forEach(a -> a.setStatus("CONFIRMED"));
+                    }
+                    snapshotRepository.save(snapshot);
+                });
+                log.info("Booking {} successfully recovered and marked CONFIRMED.", lockedBooking.getBookingRef());
                 return false;
             } else {
                 // Race condition: payment arrived late, but inventory is already taken!
                 log.warn("Late payment detected for booking {}, but inventory is already allocated to another traveller. Initiating automatic refund.",
-                        booking.getBookingRef());
-                processRefund(booking.getBookingRef(), booking.getTotalAmount(), "Inventory hold expired and allocated to another traveller");
-                booking.setStatus("EXPIRED");
-                bookingRepository.save(booking);
+                        lockedBooking.getBookingRef());
+                processRefund(lockedBooking.getBookingRef(), lockedBooking.getTotalAmount(), "Inventory hold expired and allocated to another traveller");
+                lockedBooking.setStatus("EXPIRED");
+                bookingRepository.save(lockedBooking);
+                snapshotRepository.findByBookingId(lockedBooking.getId()).ifPresent(snapshot -> {
+                    snapshot.setStatus("EXPIRED");
+                    if (snapshot.getAllocations() != null) {
+                        snapshot.getAllocations().forEach(a -> a.setStatus("EXPIRED"));
+                    }
+                    snapshotRepository.save(snapshot);
+                });
                 return true;
             }
         }
 
         // 2. Unpaid: transition status to EXPIRED
-        log.warn("Expiring unpaid booking {} (held for customer {})", booking.getBookingRef(), booking.getCustomerId());
-        booking.setStatus("EXPIRED");
-        bookingRepository.save(booking);
+        log.warn("Expiring unpaid booking {} (held for customer {})", lockedBooking.getBookingRef(), lockedBooking.getCustomerId());
+        lockedBooking.setStatus("EXPIRED");
+        bookingRepository.save(lockedBooking);
+        snapshotRepository.findByBookingId(lockedBooking.getId()).ifPresent(snapshot -> {
+            snapshot.setStatus("EXPIRED");
+            if (snapshot.getAllocations() != null) {
+                snapshot.getAllocations().forEach(a -> a.setStatus("EXPIRED"));
+            }
+            snapshotRepository.save(snapshot);
+        });
 
         // 3. Release any remaining held seats or rooms in provider services
-        releaseSeatsInBusService(booking);
-        releaseRoomsInHotelService(booking);
+        releaseSeatsInBusService(lockedBooking);
+        releaseRoomsInHotelService(lockedBooking);
         return true;
     }
 

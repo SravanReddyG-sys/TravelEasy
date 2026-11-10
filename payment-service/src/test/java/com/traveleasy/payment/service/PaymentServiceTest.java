@@ -79,6 +79,16 @@ public class PaymentServiceTest {
         lenient().when(recipientResolutionService.resolveTravellerRecipient(anyString(), any())).thenReturn(java.util.Collections.emptyList());
         lenient().when(webhookEventRepository.claimWebhookEvent(anyString(), anyString(), any(), any())).thenReturn(1);
         lenient().when(webhookEventRepository.findByWebhookEventId(anyString())).thenReturn(Optional.empty());
+
+        Map<String, Object> defaultBooking = new java.util.HashMap<>();
+        defaultBooking.put("bookingRef", "BK-1001");
+        defaultBooking.put("totalAmount", 1250.00);
+        defaultBooking.put("status", "PENDING_PAYMENT");
+        defaultBooking.put("expiresAt", java.time.Instant.now().plus(java.time.Duration.ofMinutes(15)).toString());
+        lenient().when(restTemplate.getForEntity(org.mockito.ArgumentMatchers.contains("/api/bookings/ref/"), org.mockito.ArgumentMatchers.eq(Map.class)))
+                .thenReturn(org.springframework.http.ResponseEntity.ok(defaultBooking));
+        lenient().when(restTemplate.exchange(org.mockito.ArgumentMatchers.contains("/api/bookings/ref/"), org.mockito.ArgumentMatchers.eq(org.springframework.http.HttpMethod.GET), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(Map.class)))
+                .thenReturn(org.springframework.http.ResponseEntity.ok(defaultBooking));
         stateTransitionService = spy(new PaymentStateTransitionService(paymentRepository, outboxRepository, new com.fasterxml.jackson.databind.ObjectMapper()));
         paymentService = new PaymentServiceImpl(
                 paymentRepository,

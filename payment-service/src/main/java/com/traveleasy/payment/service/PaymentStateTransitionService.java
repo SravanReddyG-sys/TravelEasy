@@ -83,6 +83,9 @@ public class PaymentStateTransitionService {
             txn.setIdempotencyKey(idempotencyKey);
         }
         PaymentTransaction saved = paymentRepository.save(txn);
+        if (saved == null) {
+            saved = txn;
+        }
 
         NotificationEventRequest eventRequest = buildRefundInitiatedEventRequest(saved, refundId, refundAmount, eventId, recipients);
         persistOutboxRecordSafely("REFUND", refundId, "PAYMENT_REFUND_INITIATED", eventId, eventRequest);
@@ -107,6 +110,9 @@ public class PaymentStateTransitionService {
             txn.setIdempotencyKey(idempotencyKey);
         }
         PaymentTransaction saved = paymentRepository.save(txn);
+        if (saved == null) {
+            saved = txn;
+        }
 
         NotificationEventRequest eventRequest = buildRefundCompletedEventRequest(saved, refundId, refundAmount, eventId, recipients);
         persistOutboxRecordSafely("REFUND", refundId, "PAYMENT_REFUND_COMPLETED", eventId, eventRequest);

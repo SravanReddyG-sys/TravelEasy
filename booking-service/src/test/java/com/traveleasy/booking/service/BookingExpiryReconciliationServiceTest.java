@@ -40,6 +40,9 @@ public class BookingExpiryReconciliationServiceTest {
     @Mock
     private BookingInternalTokenService internalTokenService;
 
+    @Mock
+    private com.traveleasy.booking.repository.HotelReservationSnapshotRepository snapshotRepository;
+
     @InjectMocks
     private BookingExpiryReconciliationService reconciliationService;
 

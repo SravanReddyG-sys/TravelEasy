@@ -5,10 +5,12 @@ import com.traveleasy.hotel.dto.PriceOverrideRequestDto;
 import com.traveleasy.hotel.dto.RoomTypeDto;
 import com.traveleasy.hotel.model.HotelBookingAllocation;
 import com.traveleasy.hotel.model.HotelProperty;
+import com.traveleasy.hotel.model.HotelReservation;
 import com.traveleasy.hotel.model.RoomPriceOverride;
 import com.traveleasy.hotel.model.RoomType;
 import com.traveleasy.hotel.repository.HotelBookingAllocationRepository;
 import com.traveleasy.hotel.repository.HotelPropertyRepository;
+import com.traveleasy.hotel.repository.HotelReservationRepository;
 import com.traveleasy.hotel.repository.RoomPriceOverrideRepository;
 import com.traveleasy.hotel.repository.RoomTypeRepository;
 import com.traveleasy.hotel.service.HotelPricingService;
@@ -54,6 +56,9 @@ public class BasePriceManagementTest {
 
     @Autowired
     private HotelBookingAllocationRepository allocationRepository;
+
+    @Autowired
+    private HotelReservationRepository reservationRepository;
 
     @Autowired
     private HotelPricingService pricingService;
@@ -462,13 +467,27 @@ public class BasePriceManagementTest {
         RoomType room = createRoom(hotel.getId(), "Balcony Room", 5000.0, 5);
 
         String bookingRef = "BK-HIST-" + UUID.randomUUID().toString().substring(0, 8);
+        LocalDate checkIn = LocalDate.now().plusDays(2);
+        LocalDate checkOut = LocalDate.now().plusDays(4);
+
+        HotelReservation parent = HotelReservation.builder()
+                .bookingRef(bookingRef)
+                .hotelId(hotel.getId())
+                .checkInDate(checkIn)
+                .checkOutDate(checkOut)
+                .status("CONFIRMED")
+                .totalPrice(20000.0)
+                .build();
+        parent = reservationRepository.save(parent);
+
         HotelBookingAllocation allocation = HotelBookingAllocation.builder()
+                .reservation(parent)
                 .bookingRef(bookingRef)
                 .hotelId(hotel.getId())
                 .roomId(room.getId())
                 .roomCount(2)
-                .checkInDate(LocalDate.now().plusDays(2))
-                .checkOutDate(LocalDate.now().plusDays(4))
+                .checkInDate(checkIn)
+                .checkOutDate(checkOut)
                 .status("CONFIRMED")
                 .totalPrice(20000.0) // 2 nights * 5000 * 2 rooms
                 .build();

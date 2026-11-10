@@ -1,9 +1,11 @@
 package com.traveleasy.booking.repository;
 
 import com.traveleasy.booking.model.Booking;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -14,12 +16,21 @@ import java.util.Optional;
 
 public interface BookingRepository extends JpaRepository<Booking, Long> {
     Optional<Booking> findByBookingRef(String bookingRef);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Booking b WHERE b.bookingRef = :bookingRef")
+    Optional<Booking> findByBookingRefForUpdate(@Param("bookingRef") String bookingRef);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Booking b WHERE b.id = :id")
+    Optional<Booking> findByIdForUpdate(@Param("id") Long id);
     List<Booking> findByCustomerIdOrderByBookingDateDesc(Long customerId);
     List<Booking> findByCustomerIdAndStatusInOrderByBookingDateDesc(Long customerId, Collection<String> statuses);
     List<Booking> findByProviderIdOrderByBookingDateDesc(Long providerId);
     List<Booking> findByServiceTypeAndProviderId(String serviceType, Long providerId);
     List<Booking> findByServiceTypeAndServiceId(String serviceType, Long serviceId);
     List<Booking> findByStatusInAndBookingDateBefore(List<String> statuses, LocalDateTime dateTime);
+    List<Booking> findByStatusInAndExpiresAtBefore(List<String> statuses, LocalDateTime dateTime);
 
     // ==========================================
     // WP-03 Administrative Queries
