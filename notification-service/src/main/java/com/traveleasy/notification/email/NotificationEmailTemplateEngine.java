@@ -12,6 +12,7 @@ public class NotificationEmailTemplateEngine {
         return switch (templateName.toLowerCase()) {
             case "bus-booking-confirmation" -> renderBusBookingConfirmedHtml(subject, data);
             case "bus-booking-cancelled" -> renderBusBookingCancelledHtml(subject, data);
+            case "hotel-booking-cancelled" -> renderHotelBookingCancelledHtml(subject, data);
             case "payment-failed" -> renderPaymentFailedHtml(subject, data);
             case "payment-refund-initiated" -> renderRefundInitiatedHtml(subject, data);
             case "payment-refund-completed" -> renderRefundCompletedHtml(subject, data);
@@ -98,6 +99,31 @@ public class NotificationEmailTemplateEngine {
                 (refundAmount.isEmpty() ? "" : "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Refund Amount:</td><td style=\"padding:6px 0;font-size:14px;font-weight:700;color:#166534;text-align:right;\">&#8377;" + escape(refundAmount) + "</td></tr>") +
                 "</table>" +
                 "<p style=\"font-size:13px;color:#64748B;line-height:1.5;\">Your booking has been cancelled and the reserved seats released. If eligible for a refund, processing will complete shortly.</p>" +
+                getFooterHtml();
+    }
+
+    private String renderHotelBookingCancelledHtml(String subject, Map<String, Object> data) {
+        String bookingRef = getVal(data, "bookingRef");
+        String hotelName = getVal(data, "hotelName");
+        String checkInDate = getVal(data, "checkInDate");
+        String checkOutDate = getVal(data, "checkOutDate");
+        String refundAmount = getVal(data, "refundAmount");
+        String cancellationFee = getVal(data, "cancellationFee");
+        String refundStatus = getVal(data, "refundStatus");
+        String summary = getVal(data, "summary");
+
+        return getHeaderHtml() +
+                "<div style=\"display:inline-block;padding:4px 12px;background-color:#FEE2E2;color:#991B1B;font-size:12px;font-weight:700;border-radius:20px;margin-bottom:12px;\">&#10007; Hotel Booking Cancelled</div>" +
+                "<h1 style=\"margin:0 0 8px 0;font-size:20px;font-weight:700;color:#0F172A;\">" + escape(subject) + "</h1>" +
+                "<p style=\"margin:0 0 20px 0;font-size:14px;color:#64748B;\">Booking Reference: <strong style=\"color:#0F172A;\">" + escape(bookingRef) + "</strong></p>" +
+                "<table role=\"presentation\" width=\"100%\" style=\"background-color:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:16px;margin-bottom:20px;\">" +
+                (hotelName.isEmpty() ? "" : "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Hotel:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0F172A;text-align:right;\">" + escape(hotelName) + "</td></tr>") +
+                (checkInDate.isEmpty() ? "" : "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Stay Dates:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#0F172A;text-align:right;\">" + escape(checkInDate) + (checkOutDate.isEmpty() ? "" : " to " + escape(checkOutDate)) + "</td></tr>") +
+                (cancellationFee.isEmpty() ? "" : "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Cancellation Fee:</td><td style=\"padding:6px 0;font-size:14px;font-weight:600;color:#991B1B;text-align:right;\">&#8377;" + escape(cancellationFee) + "</td></tr>") +
+                (refundAmount.isEmpty() ? "" : "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Refund Amount:</td><td style=\"padding:6px 0;font-size:14px;font-weight:700;color:#166534;text-align:right;\">&#8377;" + escape(refundAmount) + "</td></tr>") +
+                (refundStatus.isEmpty() ? "" : "<tr><td style=\"padding:6px 0;font-size:13px;color:#64748B;\">Refund Status:</td><td style=\"padding:6px 0;font-size:13px;font-weight:600;color:#0F172A;text-align:right;\">" + escape(refundStatus) + "</td></tr>") +
+                "</table>" +
+                "<p style=\"font-size:13px;color:#64748B;line-height:1.5;\">" + escape(summary.isEmpty() ? "Your hotel reservation has been cancelled." : summary) + "</p>" +
                 getFooterHtml();
     }
 

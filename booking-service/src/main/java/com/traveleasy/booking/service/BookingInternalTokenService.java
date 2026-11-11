@@ -72,4 +72,62 @@ public class BookingInternalTokenService {
             return token;
         }
     }
+
+    /**
+     * Strictly verifies an incoming internal microservice token (WP-HC-01).
+     * Rejects callers that supply bare X-Internal-Service headers without a signed JWT,
+     * expired/invalid signatures, non-internal issuers/roles, or mismatched X-Internal-Service headers.
+     */
+    public boolean verifyStrictInternalToken(String authHeader, String internalTokenHeader, String internalServiceHeader) {
+        String token = null;
+        if (internalTokenHeader != null && !internalTokenHeader.isBlank()) {
+            token = internalTokenHeader.trim();
+            if (token.startsWith("Bearer ")) {
+                token = token.substring(7).trim();
+            }
+        } else if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            token = authHeader.substring(7).trim();
+        }
+
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+
+        try {
+            io.jsonwebtoken.Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(getSigningKey())
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+
+            if (!INTERNAL_ISSUER.equals(claims.getIssuer())) {
+                return false;
+            }
+            Object roleObj = claims.get("role");
+            if (roleObj == null || !INTERNAL_SERVICE_ROLE.equals(roleObj.toString())) {
+                return false;
+            }
+            String serviceName = claims.getSubject();
+            if (serviceName == null || serviceName.isBlank()) {
+                return false;
+            }
+            String normalizedService = serviceName.trim().toLowerCase();
+            boolean allowed = "payment-service".equals(normalizedService)
+                    || "hotel-service".equals(normalizedService)
+                    || "booking-service".equals(normalizedService)
+                    || "bus-service".equals(normalizedService);
+            if (!allowed) {
+                return false;
+            }
+            if (internalServiceHeader != null && !internalServiceHeader.isBlank()) {
+                if (!serviceName.equalsIgnoreCase(internalServiceHeader.trim())) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (Exception ex) {
+            log.warn("Strict internal service JWT verification failed: {}", ex.getMessage());
+            return false;
+        }
+    }
 }

@@ -99,6 +99,74 @@ public class BookingStateTransitionService {
     }
 
     /**
+     * Enqueues an idempotent HOTEL_BOOKING_CANCELLED outbox notification event
+     * reflecting the authoritative refund and inventory release outcome without
+     * blocking cancellation persistence on Notification Service availability.
+     */
+    @Transactional
+    public void recordHotelCancellationOutboxEvent(Booking booking, String refundOutcome, String inventoryOutcome) {
+        if (booking == null || booking.getBookingRef() == null || booking.getBookingRef().isBlank()) {
+            return;
+        }
+        String eventId = "BKG-EVT-" + booking.getBookingRef() + "-CANCELLED";
+        List<RecipientDto> recipients = buildRecipients(booking);
+        Double effectiveRefund = booking.getRefundAmount() != null ? booking.getRefundAmount() : 0.0;
+        Double cancellationFee = booking.getCancellationFee() != null ? booking.getCancellationFee() : 0.0;
+        String formattedRefund = String.format("%.2f", effectiveRefund);
+        String formattedFee = String.format("%.2f", cancellationFee);
+        String hotelName = (booking.getServiceTitle() != null && !booking.getServiceTitle().isBlank())
+                ? booking.getServiceTitle()
+                : "Hotel";
+
+        String refundSummarySegment;
+        if ("NON_REFUNDABLE".equalsIgnoreCase(refundOutcome) || effectiveRefund <= 0.0) {
+            refundSummarySegment = "This cancellation is non-refundable under the property cancellation policy (Refund: ₹0.00).";
+        } else if ("PROCESSED".equalsIgnoreCase(refundOutcome)) {
+            refundSummarySegment = "A refund of ₹" + formattedRefund + " has been processed.";
+        } else {
+            refundSummarySegment = "A refund of ₹" + formattedRefund + " is queued and pending settlement.";
+        }
+
+        String summary = "Your hotel booking at " + hotelName + " (" + booking.getBookingRef() + ") has been cancelled. "
+                + refundSummarySegment;
+
+        Map<String, Object> templateData = new HashMap<>();
+        templateData.put("bookingRef", booking.getBookingRef());
+        templateData.put("hotelName", hotelName);
+        templateData.put("refundAmount", formattedRefund);
+        templateData.put("cancellationFee", formattedFee);
+        templateData.put("cancellationTier", booking.getCancellationPolicyTier());
+        templateData.put("refundStatus", refundOutcome != null ? refundOutcome : booking.getRefundStatus());
+        templateData.put("inventoryReleaseStatus", inventoryOutcome != null ? inventoryOutcome : booking.getInventoryReleaseStatus());
+        templateData.put("checkInDate", booking.resolveCheckInDate() != null ? booking.resolveCheckInDate().toString() : "");
+        templateData.put("checkOutDate", booking.resolveCheckOutDate() != null ? booking.resolveCheckOutDate().toString() : "");
+        templateData.put("reason", booking.getCancellationReason() != null ? booking.getCancellationReason() : "Cancelled by traveller");
+        templateData.put("summary", summary);
+
+        EventContentDto content = EventContentDto.builder()
+                .title("Hotel Booking Cancelled - " + booking.getBookingRef())
+                .summary(summary)
+                .actionUrl("/my-bookings")
+                .template("hotel-booking-cancelled")
+                .templateData(templateData)
+                .build();
+
+        NotificationEventRequest eventRequest = NotificationEventRequest.builder()
+                .eventId(eventId)
+                .eventType("HOTEL_BOOKING_CANCELLED")
+                .aggregateType("BOOKING")
+                .aggregateId(booking.getBookingRef())
+                .timestamp(Instant.now())
+                .recipients(recipients)
+                .content(content)
+                .build();
+
+        persistOutboxRecordSafely(booking, "HOTEL_BOOKING_CANCELLED", eventId, eventRequest);
+        log.info("Recorded HOTEL_BOOKING_CANCELLED outbox event {} for booking {} (refundStatus={})",
+                eventId, booking.getBookingRef(), refundOutcome);
+    }
+
+    /**
      * Records an operational guest lifecycle outbox event for hotel stays (BD-09).
      */
     @Transactional

@@ -4,6 +4,7 @@ C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Proje
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\notification-service\src\test\java\com\traveleasy\notification\email\ResendEmailClientTest.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\notification-service\src\test\java\com\traveleasy\notification\EventIngestionSecurityTest.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\notification-service\src\test\java\com\traveleasy\notification\controller\NewsletterControllerTest.java
+C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\notification-service\src\test\java\com\traveleasy\notification\email\NotificationEmailTemplateEngineTest.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\notification-service\src\test\java\com\traveleasy\notification\worker\NotificationDeliveryWorkerConcurrencyTest.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\notification-service\src\test\java\com\traveleasy\notification\controller\InAppNotificationControllerTest.java
 C:\Users\reddy\Documents\Materials_and_Assignments\FALL SEM(26-27)\SAA\SAA_Project\notification-service\src\test\java\com\traveleasy\notification\EventIngestionIntegrationTest.java

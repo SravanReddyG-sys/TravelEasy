@@ -678,4 +678,40 @@ public class PaymentServiceTest {
         // Verify restTemplate.exchange (the cancel PUT) was NEVER called because booking was already CANCELLED
         verify(restTemplate, never()).exchange(contains("/api/bookings/"), eq(HttpMethod.PUT), any(), eq(Map.class));
     }
+
+    @Test
+    @DisplayName("WP-HC-01: Rejects explicit zero or negative refund amount with 400 BAD_REQUEST instead of defaulting to full transaction amount")
+    void testProcessRefund_ExplicitZeroOrNegativeAmount_ThrowsBadRequest() {
+        String txnRef = "TXN-ZERO-REFUND-GUARD";
+        PaymentTransaction transaction = PaymentTransaction.builder()
+                .id(303L)
+                .transactionRef(txnRef)
+                .bookingRef("BK-HTL-ZERO-303")
+                .amount(2500.0)
+                .razorpayPaymentId("pay_zero_guard_303")
+                .status("SUCCESS")
+                .build();
+
+        when(paymentRepository.findByTransactionRef(txnRef)).thenReturn(Optional.of(transaction));
+
+        RefundRequest zeroReq = RefundRequest.builder()
+                .amount(0.0)
+                .idempotencyKey("htl-rfnd-BK-HTL-ZERO-303")
+                .reason("Invalid zero refund call")
+                .build();
+
+        PaymentException zeroEx = assertThrows(PaymentException.class, () -> paymentService.processRefund(txnRef, zeroReq));
+        assertEquals(HttpStatus.BAD_REQUEST, zeroEx.getStatus());
+
+        RefundRequest negativeReq = RefundRequest.builder()
+                .amount(-10.0)
+                .idempotencyKey("htl-rfnd-BK-HTL-ZERO-303")
+                .reason("Invalid negative refund call")
+                .build();
+
+        PaymentException negEx = assertThrows(PaymentException.class, () -> paymentService.processRefund(txnRef, negativeReq));
+        assertEquals(HttpStatus.BAD_REQUEST, negEx.getStatus());
+
+        verify(paymentRepository, never()).save(any());
+    }
 }

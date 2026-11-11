@@ -265,4 +265,50 @@ public class EventIngestionSecurityTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.status").value("FORBIDDEN"));
     }
+
+    @Test
+    void testBookingService_CanSubmitHotelBookingCancelledEvent_Returns202() throws Exception {
+        NotificationEventRequest req = NotificationEventRequest.builder()
+                .eventId("HTL-CANCEL-SEC-" + UUID.randomUUID())
+                .eventType("HOTEL_BOOKING_CANCELLED")
+                .aggregateType("BOOKING")
+                .aggregateId("BKG-HTL-SEC-1")
+                .recipients(List.of(
+                        RecipientDto.builder()
+                                .userId(10L)
+                                .email("traveller@test.com")
+                                .role(RecipientRole.TRAVELLER)
+                                .channels(List.of("IN_APP", "EMAIL"))
+                                .build(),
+                        RecipientDto.builder()
+                                .userId(22L)
+                                .name("Grand Hotel")
+                                .role(RecipientRole.HOTEL_PARTNER)
+                                .channels(List.of("IN_APP"))
+                                .build()
+                ))
+                .content(EventContentDto.builder()
+                        .title("Hotel Booking Cancelled - BKG-HTL-SEC-1")
+                        .summary("Your hotel booking has been cancelled.")
+                        .actionUrl("/my-bookings")
+                        .template("hotel-booking-cancelled")
+                        .build())
+                .build();
+
+        String bookingToken = createInternalToken("booking-service", NotificationSecurityService.ROLE_INTERNAL_SERVICE, NotificationSecurityService.INTERNAL_ISSUER, 5);
+        mockMvc.perform(post("/api/notifications/events")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + bookingToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("INGESTED"));
+
+        String busToken = createInternalToken("bus-service", NotificationSecurityService.ROLE_INTERNAL_SERVICE, NotificationSecurityService.INTERNAL_ISSUER, 5);
+        mockMvc.perform(post("/api/notifications/events")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + busToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value("FORBIDDEN"));
+    }
 }

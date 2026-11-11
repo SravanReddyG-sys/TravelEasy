@@ -31,7 +31,7 @@ public class NotificationSecurityService {
     );
 
     private static final Map<String, Set<String>> SERVICE_EVENT_OWNERSHIP = Map.of(
-            "booking-service", Set.of("BUS_BOOKING_CONFIRMED", "BUS_BOOKING_CANCELLED"),
+            "booking-service", Set.of("BUS_BOOKING_CONFIRMED", "BUS_BOOKING_CANCELLED", "HOTEL_BOOKING_CANCELLED"),
             "payment-service", Set.of("PAYMENT_FAILED", "PAYMENT_REFUND_INITIATED", "PAYMENT_REFUND_COMPLETED"),
             "bus-service", Set.of("BUS_SCHEDULE_CREATED", "BUS_SCHEDULE_CANCELLED", "BUS_DEACTIVATED", "BUS_ACTIVATED")
     );

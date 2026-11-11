@@ -67,6 +67,17 @@ public class Booking {
     @Column(length = 2000)
     private String cancellationPolicySnapshot;
 
+    @Builder.Default
+    @Column(length = 30)
+    private String inventoryReleaseStatus = "NOT_APPLICABLE";
+
+    private LocalDateTime inventoryReleasedAt;
+
+    private Long cancelledByUserId;
+
+    @Column(length = 40)
+    private String cancelledByRole;
+
     @Transient
     private String exteriorImageUrl;
 

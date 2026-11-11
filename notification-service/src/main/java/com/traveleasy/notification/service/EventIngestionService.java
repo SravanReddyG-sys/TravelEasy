@@ -37,6 +37,7 @@ public class EventIngestionService {
     public static final Set<String> SUPPORTED_EVENT_TYPES = Set.of(
             "BUS_BOOKING_CONFIRMED",
             "BUS_BOOKING_CANCELLED",
+            "HOTEL_BOOKING_CANCELLED",
             "PAYMENT_FAILED",
             "PAYMENT_REFUND_INITIATED",
             "PAYMENT_REFUND_COMPLETED",

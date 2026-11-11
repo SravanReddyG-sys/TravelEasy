@@ -6,8 +6,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -62,4 +64,22 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
            "   OR (b.status = 'CANCELLED' AND (b.refundStatus IN ('PROCESSED', 'PENDING', 'FAILED_RETRYABLE') OR b.refundId IS NOT NULL)) " +
            "ORDER BY COALESCE(b.confirmedAt, b.bookingDate) DESC")
     Page<Booking> findRecentConfirmedBookings(Pageable pageable);
+
+    @Transactional
+    @Modifying
+    @Query("UPDATE Booking b SET b.inventoryReleaseStatus = :status, " +
+           "b.inventoryReleasedAt = CASE WHEN :releasedAt IS NOT NULL THEN :releasedAt ELSE b.inventoryReleasedAt END " +
+           "WHERE b.id = :bookingId")
+    int updateHotelInventoryReleaseOutcome(@Param("bookingId") Long bookingId,
+                                           @Param("status") String status,
+                                           @Param("releasedAt") LocalDateTime releasedAt);
+
+    @Transactional
+    @Modifying
+    @Query("UPDATE Booking b SET b.refundStatus = :refundStatus, " +
+           "b.refundId = CASE WHEN :refundId IS NOT NULL THEN :refundId ELSE b.refundId END " +
+           "WHERE b.id = :bookingId")
+    int updateHotelRefundOutcome(@Param("bookingId") Long bookingId,
+                                 @Param("refundStatus") String refundStatus,
+                                 @Param("refundId") String refundId);
 }

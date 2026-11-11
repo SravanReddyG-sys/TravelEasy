@@ -69,4 +69,105 @@ public class BookingInternalTokenServiceTest {
 
         assertThrows(IllegalStateException.class, nullService::validateSecret);
     }
+
+    @Test
+    @DisplayName("verifyStrictInternalToken accepts signed internal JWT via X-Internal-Token or Bearer Authorization")
+    void testVerifyStrictInternalToken_ValidInternalJwt() {
+        Key key = Keys.hmacShaKeyFor(TEST_SECRET.getBytes(StandardCharsets.UTF_8));
+        java.util.Date now = new java.util.Date();
+        java.util.Date exp = new java.util.Date(now.getTime() + 300_000L);
+
+        String paymentToken = Jwts.builder()
+                .setSubject("payment-service")
+                .setIssuer(BookingInternalTokenService.INTERNAL_ISSUER)
+                .claim("role", BookingInternalTokenService.INTERNAL_SERVICE_ROLE)
+                .setIssuedAt(now)
+                .setExpiration(exp)
+                .signWith(key)
+                .compact();
+
+        assertTrue(tokenService.verifyStrictInternalToken(null, paymentToken, "payment-service"));
+        assertTrue(tokenService.verifyStrictInternalToken(null, "Bearer " + paymentToken, "PAYMENT-SERVICE"));
+        assertTrue(tokenService.verifyStrictInternalToken("Bearer " + paymentToken, null, "payment-service"));
+        assertTrue(tokenService.verifyStrictInternalToken(null, tokenService.generateInternalToken(), "booking-service"));
+    }
+
+    @Test
+    @DisplayName("verifyStrictInternalToken rejects bare headers, mismatched service, wrong issuer/role, expired, and forged JWTs")
+    void testVerifyStrictInternalToken_Rejections() {
+        Key key = Keys.hmacShaKeyFor(TEST_SECRET.getBytes(StandardCharsets.UTF_8));
+        Key wrongKey = Keys.hmacShaKeyFor("AnotherCompletelyDifferentSecretKey9876543210".getBytes(StandardCharsets.UTF_8));
+        java.util.Date now = new java.util.Date();
+        java.util.Date exp = new java.util.Date(now.getTime() + 300_000L);
+
+        // Bare X-Internal-Service without JWT
+        assertFalse(tokenService.verifyStrictInternalToken(null, null, "payment-service"));
+        assertFalse(tokenService.verifyStrictInternalToken(null, "   ", "hotel-service"));
+
+        // Mismatched X-Internal-Service vs token subject
+        String hotelToken = Jwts.builder()
+                .setSubject("hotel-service")
+                .setIssuer(BookingInternalTokenService.INTERNAL_ISSUER)
+                .claim("role", BookingInternalTokenService.INTERNAL_SERVICE_ROLE)
+                .setIssuedAt(now)
+                .setExpiration(exp)
+                .signWith(key)
+                .compact();
+        assertFalse(tokenService.verifyStrictInternalToken(null, hotelToken, "payment-service"));
+
+        // Customer JWT masquerading as internal service
+        String customerToken = Jwts.builder()
+                .setSubject("customer@example.com")
+                .setIssuer("traveleasy-auth")
+                .claim("role", "ROLE_CUSTOMER")
+                .setIssuedAt(now)
+                .setExpiration(exp)
+                .signWith(key)
+                .compact();
+        assertFalse(tokenService.verifyStrictInternalToken(null, customerToken, "payment-service"));
+
+        // Wrong issuer even with INTERNAL_SERVICE role
+        String badIssuerToken = Jwts.builder()
+                .setSubject("payment-service")
+                .setIssuer("untrusted-issuer")
+                .claim("role", BookingInternalTokenService.INTERNAL_SERVICE_ROLE)
+                .setIssuedAt(now)
+                .setExpiration(exp)
+                .signWith(key)
+                .compact();
+        assertFalse(tokenService.verifyStrictInternalToken(null, badIssuerToken, "payment-service"));
+
+        // Unpermitted service subject
+        String unknownServiceToken = Jwts.builder()
+                .setSubject("evil-service")
+                .setIssuer(BookingInternalTokenService.INTERNAL_ISSUER)
+                .claim("role", BookingInternalTokenService.INTERNAL_SERVICE_ROLE)
+                .setIssuedAt(now)
+                .setExpiration(exp)
+                .signWith(key)
+                .compact();
+        assertFalse(tokenService.verifyStrictInternalToken(null, unknownServiceToken, "evil-service"));
+
+        // Forged signature
+        String forgedToken = Jwts.builder()
+                .setSubject("payment-service")
+                .setIssuer(BookingInternalTokenService.INTERNAL_ISSUER)
+                .claim("role", BookingInternalTokenService.INTERNAL_SERVICE_ROLE)
+                .setIssuedAt(now)
+                .setExpiration(exp)
+                .signWith(wrongKey)
+                .compact();
+        assertFalse(tokenService.verifyStrictInternalToken(null, forgedToken, "payment-service"));
+
+        // Expired token
+        String expiredToken = Jwts.builder()
+                .setSubject("payment-service")
+                .setIssuer(BookingInternalTokenService.INTERNAL_ISSUER)
+                .claim("role", BookingInternalTokenService.INTERNAL_SERVICE_ROLE)
+                .setIssuedAt(new java.util.Date(now.getTime() - 120_000L))
+                .setExpiration(new java.util.Date(now.getTime() - 60_000L))
+                .signWith(key)
+                .compact();
+        assertFalse(tokenService.verifyStrictInternalToken(null, expiredToken, "payment-service"));
+    }
 }

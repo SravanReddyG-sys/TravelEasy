@@ -713,7 +713,11 @@ public class PaymentServiceImpl implements PaymentService {
             throw new PaymentException("Only successful payments can be refunded. Current status: " + txn.getStatus(), HttpStatus.BAD_REQUEST);
         }
 
-        double refundAmount = (request != null && request.getAmount() != null && request.getAmount() > 0)
+        if (request != null && request.getAmount() != null && request.getAmount() <= 0) {
+            throw new PaymentException("Refund amount must be greater than zero when explicitly specified", HttpStatus.BAD_REQUEST);
+        }
+
+        double refundAmount = (request != null && request.getAmount() != null)
                 ? request.getAmount()
                 : txn.getAmount();
 
