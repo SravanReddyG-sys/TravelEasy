@@ -9,21 +9,16 @@ export const roleGuard: CanActivateFn = (
   const authService = inject(AuthService);
   const router = inject(Router);
 
-  const currentUser = authService.currentUserValue;
+  const currentUser = authService.restoreSession();
   const expectedRoles: string[] = route.data?.['roles'] || [];
 
   if (!currentUser || !currentUser.token) {
-    router.navigate(['/login'], { queryParams: { returnUrl: state.url } });
-    return false;
+    return router.createUrlTree(['/login'], { queryParams: { returnUrl: state.url } });
   }
 
   if (expectedRoles.length > 0 && !expectedRoles.includes(currentUser.role)) {
-    if (currentUser.role === 'ROLE_CUSTOMER') {
-      router.navigate(['/customer']);
-    } else {
-      router.navigate(['/home']);
-    }
-    return false;
+    const dashboardRoute = authService.getDashboardRoute(currentUser);
+    return router.createUrlTree([dashboardRoute ?? '/home']);
   }
 
   return true;

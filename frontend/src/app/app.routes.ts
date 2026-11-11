@@ -16,11 +16,12 @@ import { BusOperatorDashboardComponent } from './components/bus-operator-dashboa
 import { HotelManagerDashboardComponent } from './components/hotel-manager-dashboard/hotel-manager-dashboard.component';
 import { AdminDashboardComponent } from './components/admin-dashboard/admin-dashboard.component';
 import { roleGuard } from './guards/role.guard';
+import { publicEntryRedirectGuard } from './guards/public-entry.guard';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
-  { path: 'home', component: HomeComponent },
-  { path: 'login', component: LoginComponent },
+  { path: 'home', component: HomeComponent, canActivate: [publicEntryRedirectGuard] },
+  { path: 'login', component: LoginComponent, canActivate: [publicEntryRedirectGuard] },
   { path: 'register', component: RegisterSelectComponent },
   { path: 'register/traveller', component: TravellerRegisterComponent },
   { path: 'register/bus-operator', component: BusOperatorRegisterComponent },

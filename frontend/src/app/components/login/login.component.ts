@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 
 @Component({
@@ -649,7 +649,11 @@ export class LoginComponent {
   loading = false;
   errorMessage = '';
 
-  constructor(private authService: AuthService, private router: Router) {}
+  constructor(
+    private authService: AuthService,
+    private router: Router,
+    private route: ActivatedRoute
+  ) {}
 
   clearError() {
     if (this.errorMessage) {
@@ -676,28 +680,9 @@ export class LoginComponent {
     this.authService.login({ email: trimmedEmail, password: this.password }).subscribe({
       next: (user) => {
         this.loading = false;
-
-        if (user.status === 'PENDING' || user.verificationStatus === 'UNDER_REVIEW') {
-          this.router.navigate(['/account-pending']);
-          return;
-        }
-
-        switch (user.role) {
-          case 'ROLE_CUSTOMER': 
-            this.router.navigate(['/customer']); 
-            break;
-          case 'ROLE_BUS_OPERATOR': 
-            this.router.navigate(['/bus-operator']); 
-            break;
-          case 'ROLE_HOTEL_MANAGER': 
-            this.router.navigate(['/hotel-manager']); 
-            break;
-          case 'ROLE_ADMIN': 
-            this.router.navigate(['/admin']); 
-            break;
-          default: 
-            this.router.navigate(['/']);
-        }
+        const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+        const targetRoute = this.authService.getPostLoginRoute(user, returnUrl);
+        this.router.navigateByUrl(targetRoute);
       },
       error: (err: HttpErrorResponse) => {
         this.loading = false;

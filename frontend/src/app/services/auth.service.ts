@@ -1,35 +1,176 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Injector } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable, tap } from 'rxjs';
+import { Router } from '@angular/router';
+import { BehaviorSubject, Observable, take, tap } from 'rxjs';
 import { User } from '../models/user.model';
 import { ApplicationDetails } from '../models/application-details.model';
 import { AdminUserStats, AdminPendingProvidersPage, AdminProviderDetails } from '../models/admin-dashboard.model';
+import {
+  AUTH_USER_STORAGE_KEY,
+  readAndValidateStoredSession,
+  resolveDashboardRoute,
+  resolvePostLoginRoute,
+  resolveRevalidatedSessionUser,
+  validateStoredUserSession
+} from '../shared/utils/auth-session.util';
 
 @Injectable({
   providedIn: 'root'
 })
 export class AuthService {
-  private apiUrl = window.location.port === '4200' ? 'http://localhost:8080/api' : '/api';
+  private apiUrl = typeof window !== 'undefined' && window.location.port === '4200'
+    ? 'http://localhost:8080/api'
+    : '/api';
   private currentUserSubject = new BehaviorSubject<User | null>(this.getUserFromStorage());
   public currentUser$ = this.currentUserSubject.asObservable();
+  private startupValidationStarted = false;
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private injector: Injector) {
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('storage', (event: StorageEvent) => {
+        if (event.key === null || event.key === AUTH_USER_STORAGE_KEY) {
+          this.restoreSession();
+        }
+      });
+    }
+  }
+
+  private getStorage(): Storage | null {
+    try {
+      return typeof localStorage !== 'undefined' ? localStorage : null;
+    } catch {
+      return null;
+    }
+  }
 
   private getUserFromStorage(): User | null {
-    const data = localStorage.getItem('traveleasy_user');
-    return data ? JSON.parse(data) : null;
+    return readAndValidateStoredSession(this.getStorage());
   }
 
   public get currentUserValue(): User | null {
     return this.currentUserSubject.value;
   }
 
+  restoreSession(): User | null {
+    const validatedUser = this.getUserFromStorage();
+    const current = this.currentUserSubject.value;
+    const sameUser =
+      (!current && !validatedUser) ||
+      (!!current &&
+        !!validatedUser &&
+        current.id === validatedUser.id &&
+        current.role === validatedUser.role &&
+        current.token === validatedUser.token &&
+        current.status === validatedUser.status &&
+        current.verificationStatus === validatedUser.verificationStatus);
+
+    if (!sameUser) {
+      this.currentUserSubject.next(validatedUser);
+    }
+
+    return validatedUser;
+  }
+
+  initializeSession(): User | null {
+    const restoredUser = this.restoreSession();
+    if (restoredUser && !this.startupValidationStarted) {
+      this.startupValidationStarted = true;
+      this.verifyRestoredSessionWithBackend(restoredUser);
+    }
+    return restoredUser;
+  }
+
+  getDashboardRoute(user: User | null | undefined = this.currentUserValue): string | null {
+    return resolveDashboardRoute(user);
+  }
+
+  getPostLoginRoute(user: User, returnUrl?: string | null): string {
+    return resolvePostLoginRoute(user, returnUrl);
+  }
+
+  private persistUserSession(user: User): void {
+    const validated = validateStoredUserSession(user);
+    const userToStore = validated.valid && validated.user ? validated.user : user;
+    const storage = this.getStorage();
+    if (storage) {
+      storage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(userToStore));
+    }
+    this.currentUserSubject.next(userToStore);
+  }
+
+  private clearStoredUserSession(): void {
+    const storage = this.getStorage();
+    if (storage) {
+      storage.removeItem(AUTH_USER_STORAGE_KEY);
+    }
+    if (this.currentUserSubject.value !== null) {
+      this.currentUserSubject.next(null);
+    }
+  }
+
+  private verifyRestoredSessionWithBackend(restoredUser: User): void {
+    if (!restoredUser.token) {
+      return;
+    }
+
+    this.http.get<ApplicationDetails>(`${this.apiUrl}/auth/application-details`, {
+      headers: {
+        Authorization: `Bearer ${restoredUser.token}`
+      }
+    }).pipe(take(1)).subscribe({
+      next: (details) => {
+        if (this.currentUserSubject.value?.token !== restoredUser.token) {
+          return;
+        }
+        const check = resolveRevalidatedSessionUser(restoredUser, details);
+        if (!check.valid) {
+          this.logout();
+          const router = this.injector.get(Router);
+          if (check.redirectTo && router.url !== check.redirectTo) {
+            router.navigate([check.redirectTo]);
+          }
+          return;
+        }
+        if (check.updatedUser) {
+          const nextUser = check.updatedUser;
+          const metadataChanged =
+            nextUser.fullName !== restoredUser.fullName ||
+            nextUser.status !== restoredUser.status ||
+            nextUser.verified !== restoredUser.verified ||
+            nextUser.verificationStatus !== restoredUser.verificationStatus;
+          if (metadataChanged) {
+            this.persistUserSession(nextUser);
+          }
+        }
+      },
+      error: (err) => {
+        if (this.currentUserSubject.value?.token !== restoredUser.token) {
+          return;
+        }
+        if (err?.status === 401 || err?.status === 403 || err?.status === 404) {
+          const errStatus = String(err?.error?.status || '').toUpperCase();
+          this.logout();
+          const router = this.injector.get(Router);
+          if (errStatus === 'SUSPENDED') {
+            router.navigate(['/account-suspended']);
+          } else if (errStatus === 'REJECTED') {
+            router.navigate(['/account-rejected']);
+          } else {
+            const currentPath = router.url.split('?')[0];
+            if (currentPath !== '/login' && currentPath !== '/home') {
+              router.navigate(['/login']);
+            }
+          }
+        }
+      }
+    });
+  }
+
   login(credentials: any): Observable<User> {
     return this.http.post<User>(`${this.apiUrl}/auth/login`, credentials).pipe(
       tap(user => {
-        if (user) {
-          localStorage.setItem('traveleasy_user', JSON.stringify(user));
-          this.currentUserSubject.next(user);
+        if (user && user.token && user.status !== 'PENDING' && user.verificationStatus !== 'UNDER_REVIEW') {
+          this.persistUserSession(user);
         }
       })
     );
@@ -39,8 +180,7 @@ export class AuthService {
     return this.http.post<User>(`${this.apiUrl}/auth/register/traveller`, userData).pipe(
       tap(user => {
         if (user && user.token) {
-          localStorage.setItem('traveleasy_user', JSON.stringify(user));
-          this.currentUserSubject.next(user);
+          this.persistUserSession(user);
         }
       })
     );
@@ -89,8 +229,17 @@ export class AuthService {
   }
 
   getPendingApplicationDetails(): ApplicationDetails | null {
-    const data = localStorage.getItem('traveleasy_pending_application');
-    return data ? JSON.parse(data) : null;
+    const storage = this.getStorage();
+    const data = storage?.getItem('traveleasy_pending_application');
+    if (!data) {
+      return null;
+    }
+    try {
+      return JSON.parse(data);
+    } catch {
+      storage?.removeItem('traveleasy_pending_application');
+      return null;
+    }
   }
 
   clearPendingApplication(): void {
@@ -160,9 +309,9 @@ export class AuthService {
   }
 
   logout() {
-    localStorage.removeItem('traveleasy_user');
+    this.startupValidationStarted = false;
+    this.clearStoredUserSession();
     this.clearPendingApplication();
-    this.currentUserSubject.next(null);
   }
 
   getAllUsers(): Observable<User[]> {
