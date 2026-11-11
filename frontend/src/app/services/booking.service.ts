@@ -156,6 +156,55 @@ export class BookingService {
       `${this.apiUrl}/bookings/ref/${encodeURIComponent(bookingRef)}/hotel-reservation-details`
     );
   }
+
+  /** Fetches an authoritative HOTEL-only cancellation quote by booking ID. */
+  getHotelCancellationQuoteById(
+    bookingId: number
+  ): Observable<
+    import('../features/traveller/bookings/models/hotel-cancellation.model').HotelCancellationQuoteResponse
+  > {
+    return this.http.get<
+      import('../features/traveller/bookings/models/hotel-cancellation.model').HotelCancellationQuoteResponse
+    >(`${this.apiUrl}/bookings/hotel/${bookingId}/cancellation-quote`);
+  }
+
+  /** Fetches an authoritative HOTEL-only cancellation quote by booking reference. */
+  getHotelCancellationQuoteByRef(
+    bookingRef: string
+  ): Observable<
+    import('../features/traveller/bookings/models/hotel-cancellation.model').HotelCancellationQuoteResponse
+  > {
+    return this.http.get<
+      import('../features/traveller/bookings/models/hotel-cancellation.model').HotelCancellationQuoteResponse
+    >(`${this.apiUrl}/bookings/hotel/ref/${encodeURIComponent(bookingRef)}/cancellation-quote`);
+  }
+
+  /** Cancels a HOTEL booking via the isolated backend endpoint using booking ID. */
+  cancelHotelBookingById(
+    bookingId: number,
+    request?: import('../features/traveller/bookings/models/hotel-cancellation.model').HotelCancellationRequest
+  ): Observable<
+    import('../features/traveller/bookings/models/hotel-cancellation.model').HotelCancellationResponse
+  > {
+    return this.http.put<
+      import('../features/traveller/bookings/models/hotel-cancellation.model').HotelCancellationResponse
+    >(`${this.apiUrl}/bookings/hotel/${bookingId}/cancel`, request ?? {});
+  }
+
+  /** Cancels a HOTEL booking via the isolated backend endpoint using booking reference. */
+  cancelHotelBookingByRef(
+    bookingRef: string,
+    request?: import('../features/traveller/bookings/models/hotel-cancellation.model').HotelCancellationRequest
+  ): Observable<
+    import('../features/traveller/bookings/models/hotel-cancellation.model').HotelCancellationResponse
+  > {
+    return this.http.put<
+      import('../features/traveller/bookings/models/hotel-cancellation.model').HotelCancellationResponse
+    >(
+      `${this.apiUrl}/bookings/hotel/ref/${encodeURIComponent(bookingRef)}/cancel`,
+      request ?? {}
+    );
+  }
 }
 
 

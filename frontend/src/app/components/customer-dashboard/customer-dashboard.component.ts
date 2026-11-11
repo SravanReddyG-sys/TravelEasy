@@ -1,7 +1,8 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { NotificationService } from '../../services/notification.service';
 import { FormattedNotification } from '../../models/notification.model';
-import { Subscription, timeout, finalize, filter } from 'rxjs';
+import { Subscription, timeout, finalize, filter, forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, NavigationEnd, Router, RouterModule } from '@angular/router';
@@ -25,9 +26,12 @@ import { HotelSearchPanelComponent } from '../../features/traveller/hotel-bookin
 import { HotelFilterPanelComponent, PropertyTypeOption, AmenityOption } from '../../features/traveller/hotel-booking/components/hotel-filter-panel/hotel-filter-panel.component';
 import { HotelResultsListComponent } from '../../features/traveller/hotel-booking/components/hotel-results-list/hotel-results-list.component';
 import {
+  HotelDetailsResponseDto,
   HotelPublicDto,
+  HotelReservationDetailResponse,
   HotelSearchCriteria,
   HotelStaySummary,
+  PaymentTransactionDto,
   PhysicalRoomAllocation,
   PrimaryGuestDtoPayload,
   ReservationReviewSummaryMetrics
@@ -48,6 +52,14 @@ import {
 import { loadReservationReviewState } from '../../shared/utils/reservation-review.util';
 import { MyBookingsListComponent } from '../../features/traveller/bookings/components/my-bookings-list/my-bookings-list.component';
 import { BookingDetailsModalComponent } from '../../features/traveller/bookings/components/booking-details-modal/booking-details-modal.component';
+import { HotelBookingDetailsModalComponent } from '../../features/traveller/bookings/components/hotel-booking-details-modal/hotel-booking-details-modal.component';
+import { HotelCancellationModalComponent } from '../../features/traveller/bookings/components/hotel-cancellation-modal/hotel-cancellation-modal.component';
+import { HotelBookingCardViewModel } from '../../features/traveller/bookings/models/hotel-booking-view.model';
+import { HotelCancellationResultViewModel } from '../../features/traveller/bookings/models/hotel-cancellation.model';
+import {
+  buildHotelBookingCardViewModel,
+  resolveHotelCoverImageUrl
+} from '../../features/traveller/bookings/utils/hotel-booking-presenter.util';
 
 export { Destination, DestinationAttraction };
 
@@ -74,7 +86,9 @@ export { Destination, DestinationAttraction };
     ReservationReviewPageComponent,
     HotelPaymentCheckoutPageComponent,
     MyBookingsListComponent,
-    BookingDetailsModalComponent
+    BookingDetailsModalComponent,
+    HotelBookingDetailsModalComponent,
+    HotelCancellationModalComponent
   ],
   template: `
     <div class="dashboard-wrapper d-flex flex-column min-vh-100">
@@ -1035,6 +1049,29 @@ export { Destination, DestinationAttraction };
         (rateReview)="closeBookingDetails(); openReviewModal($event)"
       ></app-booking-details-modal>
 
+      <!-- ==================== DEDICATED HOTEL BOOKING DETAILS MODAL ==================== -->
+      <app-hotel-booking-details-modal
+        [showDetailsModal]="showHotelDetailsModal"
+        [bookingCard]="selectedHotelBookingCard"
+        [hotelDetails]="selectedHotelDetailsDto"
+        [reservationDetails]="selectedHotelReservationDto"
+        [paymentTransaction]="selectedHotelPaymentDto"
+        [reviews]="selectedHotelReviews"
+        [isLoadingDetails]="isLoadingHotelModalDetails"
+        [detailsError]="hotelModalDetailsError"
+        (closeDetails)="closeHotelBookingDetails()"
+      ></app-hotel-booking-details-modal>
+
+      <!-- ==================== DEDICATED HOTEL CANCELLATION MODAL ==================== -->
+      <app-hotel-cancellation-modal
+        [showModal]="showHotelCancellationModal"
+        [bookingCard]="selectedHotelCancellationCard"
+        (closeModal)="closeHotelCancellationModal()"
+        (bookingUpdated)="onHotelBookingCancellationUpdated($event)"
+        (viewBookingAfterCancel)="onHotelCancellationCompletedViewBookings($event)"
+        (refreshBookings)="loadMyBookings()"
+      ></app-hotel-cancellation-modal>
+
     </div>
   `,
   styles: [`
@@ -1353,6 +1390,24 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
   showNewBookingMenu = false;
   selectedBookingDetails: any = null;
   showBookingDetailsModal = false;
+  showHotelDetailsModal = false;
+  selectedHotelRawBooking: any = null;
+  selectedHotelBookingCard: HotelBookingCardViewModel | null = null;
+  selectedHotelDetailsDto: HotelDetailsResponseDto | null = null;
+  selectedHotelReservationDto: HotelReservationDetailResponse | null = null;
+  selectedHotelPaymentDto: PaymentTransactionDto | null = null;
+  selectedHotelReviews: any[] | null = null;
+  isLoadingHotelModalDetails = false;
+  hotelModalDetailsError: string | null = null;
+  hotelDetailsCache: Record<number, HotelDetailsResponseDto> = {};
+  hotelReservationCache: Record<string, HotelReservationDetailResponse> = {};
+  hotelReviewsCache: Record<number, any[]> = {};
+  hotelPaymentCache: Record<string, PaymentTransactionDto | null> = {};
+  showHotelCancellationModal = false;
+  selectedHotelCancellationCard: HotelBookingCardViewModel | null = null;
+  private hotelBookingsEnrichmentSub: Subscription | null = null;
+  private hotelModalEnrichmentSub: Subscription | null = null;
+  private hotelCancellationRefreshSub: Subscription | null = null;
   bookingToCancel: any = null;
   showCancelConfirmModal = false;
   isCancellingBooking = false;
@@ -1624,6 +1679,9 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.notificationSubs.forEach(s => s.unsubscribe());
+    this.hotelBookingsEnrichmentSub?.unsubscribe();
+    this.hotelModalEnrichmentSub?.unsubscribe();
+    this.hotelCancellationRefreshSub?.unsubscribe();
   }
 
   getFirstName(): string {
@@ -3462,33 +3520,126 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
   }
 
   // --- MY BOOKINGS ---
+  private isVisibleBookingRecord(b: any): boolean {
+    if (!b) return false;
+    if (b.serviceType === 'HOTEL') {
+      return (
+        b.status === 'CONFIRMED' ||
+        b.status === 'CANCELLED' ||
+        b.status === 'COMPLETED' ||
+        b.status === 'CHECKED_IN' ||
+        b.status === 'CHECKED_OUT' ||
+        b.status === 'NO_SHOW'
+      );
+    }
+    return b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED';
+  }
+
+  private rebuildOverviewDisplayBookings() {
+    const confirmed = this.myBookings.filter((b: any) => b.status === 'CONFIRMED');
+    if (confirmed.length > 0) {
+      this.displayBookings = confirmed.slice(0, 3).map((b: any) => ({
+        serviceType: b.serviceType,
+        title: b.serviceType === 'HOTEL'
+          ? (this.hotelDetailsCache[b.serviceId]?.hotel?.name || b.serviceTitle)
+          : b.serviceTitle,
+        dateString: new Date(b.bookingDate).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
+        metaString: b.detailsJson,
+        status: b.status,
+        thumbnail: b.serviceType === 'BUS'
+          ? this.resolveBusImageUrl(b.exteriorImageUrl)
+          : resolveHotelCoverImageUrl(this.hotelDetailsCache[b.serviceId] || null)
+      }));
+    } else {
+      this.displayBookings = [];
+    }
+  }
+
+  private enrichHotelBookings(bookings: any[]) {
+    this.hotelBookingsEnrichmentSub?.unsubscribe();
+    const hotelBookings = (bookings || []).filter((b: any) => b?.serviceType === 'HOTEL');
+    if (hotelBookings.length === 0) {
+      return;
+    }
+
+    const distinctHotelIds = Array.from(
+      new Set(
+        hotelBookings
+          .map((b: any) => Number(b.serviceId))
+          .filter((id: number) => Number.isFinite(id) && id > 0 && !this.hotelDetailsCache[id])
+      )
+    );
+
+    const distinctBookingRefs = Array.from(
+      new Set(
+        hotelBookings
+          .map((b: any) => (b.bookingRef || '').trim())
+          .filter((ref: string) => ref.length > 0 && !this.hotelReservationCache[ref])
+      )
+    );
+
+    if (distinctHotelIds.length === 0 && distinctBookingRefs.length === 0) {
+      return;
+    }
+
+    const hotelRequests$ = distinctHotelIds.map(id =>
+      this.hotelService.getHotelDetails(id).pipe(
+        catchError(() => of(null))
+      )
+    );
+    const reservationRequests$ = distinctBookingRefs.map(ref =>
+      this.bookingService.getHotelReservationDetails(ref).pipe(
+        catchError(() => of(null))
+      )
+    );
+
+    this.hotelBookingsEnrichmentSub = forkJoin({
+      hotels: hotelRequests$.length > 0 ? forkJoin(hotelRequests$) : of([]),
+      reservations: reservationRequests$.length > 0 ? forkJoin(reservationRequests$) : of([])
+    }).subscribe(({ hotels, reservations }) => {
+      const nextHotelsCache = { ...this.hotelDetailsCache };
+      distinctHotelIds.forEach((id, idx) => {
+        const dto = hotels[idx];
+        if (dto) {
+          nextHotelsCache[id] = dto;
+        }
+      });
+      this.hotelDetailsCache = nextHotelsCache;
+
+      const nextResCache = { ...this.hotelReservationCache };
+      distinctBookingRefs.forEach((ref, idx) => {
+        const dto = reservations[idx];
+        if (dto) {
+          nextResCache[ref] = dto;
+        }
+      });
+      this.hotelReservationCache = nextResCache;
+
+      this.rebuildOverviewDisplayBookings();
+
+      if (this.showHotelDetailsModal && this.selectedHotelRawBooking) {
+        this.syncSelectedHotelModalBindings(this.selectedHotelRawBooking);
+      }
+    });
+  }
+
   loadMyBookings() {
     if (!this.currentUser) return;
     this.isLoadingBookings = true;
     this.bookingsError = null;
+    this.hotelDetailsCache = {};
+    this.hotelReservationCache = {};
+    this.hotelReviewsCache = {};
+    this.hotelPaymentCache = {};
+
     this.bookingService.getCustomerBookings(this.currentUser.id).subscribe({
       next: (res) => {
         this.isLoadingBookings = false;
-        // Authoritative filter: Only confirmed, completed, or cancelled bookings.
+        // Authoritative filter: Only confirmed, completed, or cancelled bookings (and active stay lifecycle states for HOTEL).
         // Temporary seat holds and incomplete payment attempts are never presented as bookings.
-        this.myBookings = (res || []).filter((b: any) =>
-          b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED'
-        );
-        const confirmed = this.myBookings.filter((b: any) => b.status === 'CONFIRMED');
-        if (confirmed.length > 0) {
-          this.displayBookings = confirmed.slice(0, 3).map((b: any) => ({
-            serviceType: b.serviceType,
-            title: b.serviceTitle,
-            dateString: new Date(b.bookingDate).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
-            metaString: b.detailsJson,
-            status: b.status,
-            thumbnail: b.serviceType === 'BUS'
-              ? this.resolveBusImageUrl(b.exteriorImageUrl)
-              : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=300&q=80'
-          }));
-        } else {
-          this.displayBookings = [];
-        }
+        this.myBookings = (res || []).filter((b: any) => this.isVisibleBookingRecord(b));
+        this.rebuildOverviewDisplayBookings();
+        this.enrichHotelBookings(this.myBookings);
       },
       error: () => {
         this.isLoadingBookings = false;
@@ -3500,15 +3651,15 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
   }
 
   get allBookingsCount(): number {
-    return this.myBookings.filter(b => b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED').length;
+    return this.myBookings.filter(b => this.isVisibleBookingRecord(b)).length;
   }
 
   get busBookingsCount(): number {
-    return this.myBookings.filter(b => b.serviceType === 'BUS' && (b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED')).length;
+    return this.myBookings.filter(b => b.serviceType === 'BUS' && this.isVisibleBookingRecord(b)).length;
   }
 
   get hotelBookingsCount(): number {
-    return this.myBookings.filter(b => b.serviceType === 'HOTEL' && (b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED')).length;
+    return this.myBookings.filter(b => b.serviceType === 'HOTEL' && this.isVisibleBookingRecord(b)).length;
   }
 
   setBookingCategoryTab(tab: 'ALL' | 'BUS' | 'HOTEL') {
@@ -3577,6 +3728,12 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
 
   parseBooking(b: any) {
     if (!b) return null;
+    if (b.serviceType === 'HOTEL') {
+      const hotelDetails = b.serviceId ? this.hotelDetailsCache[b.serviceId] || null : null;
+      const reservationDetails = b.bookingRef ? this.hotelReservationCache[b.bookingRef] || null : null;
+      return buildHotelBookingCardViewModel(b, hotelDetails, reservationDetails);
+    }
+
     const isBus = b.serviceType === 'BUS';
     let displayTitle = b.serviceTitle || (isBus ? 'Bus Booking' : 'Hotel Booking');
     let displaySubtitle = '';
@@ -3730,6 +3887,11 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
   }
 
   private extractBookingDate(b: any): string | null {
+    if (b?.serviceType === 'HOTEL') {
+      const cachedCheckIn = b.bookingRef ? this.hotelReservationCache[b.bookingRef]?.checkInDate : null;
+      if (cachedCheckIn) return cachedCheckIn.split('T')[0];
+      if (b.checkInDate) return String(b.checkInDate).split('T')[0];
+    }
     if (b.detailsJson) {
       const jMatch = b.detailsJson.match(/Journey Date:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/i);
       if (jMatch) return jMatch[1];
@@ -3743,7 +3905,7 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
   }
 
   get filteredBookings(): any[] {
-    let list = this.myBookings.filter(b => b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED');
+    let list = this.myBookings.filter(b => this.isVisibleBookingRecord(b));
 
     if (this.bookingCategoryTab === 'BUS') {
       list = list.filter(b => b.serviceType === 'BUS');
@@ -3757,7 +3919,21 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
         const ref = (b.bookingRef || '').toLowerCase();
         const title = (b.serviceTitle || '').toLowerCase();
         const details = (b.detailsJson || '').toLowerCase();
-        return ref.includes(q) || title.includes(q) || details.includes(q);
+        if (ref.includes(q) || title.includes(q) || details.includes(q)) {
+          return true;
+        }
+        if (b.serviceType === 'HOTEL') {
+          const cachedHotel = b.serviceId ? this.hotelDetailsCache[b.serviceId]?.hotel : null;
+          const cachedRes = b.bookingRef ? this.hotelReservationCache[b.bookingRef] : null;
+          const hName = (cachedHotel?.name || '').toLowerCase();
+          const hCity = (cachedHotel?.city || '').toLowerCase();
+          const hAddr = (cachedHotel?.address || '').toLowerCase();
+          const roomNames = (cachedRes?.allocations || [])
+            .map(a => (a?.roomTypeName || '').toLowerCase())
+            .join(' ');
+          return hName.includes(q) || hCity.includes(q) || hAddr.includes(q) || roomNames.includes(q);
+        }
+        return false;
       });
     }
 
@@ -3831,6 +4007,11 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
   }
 
   openBookingDetails(b: any) {
+    if (b?.serviceType === 'HOTEL') {
+      this.openHotelBookingDetails(b);
+      return;
+    }
+    this.showHotelDetailsModal = false;
     this.selectedBookingDetails = b;
     this.showBookingDetailsModal = true;
   }
@@ -3840,9 +4021,194 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
     this.selectedBookingDetails = null;
   }
 
+  openHotelBookingDetails(cardOrRaw: any) {
+    this.hotelModalEnrichmentSub?.unsubscribe();
+    const raw = cardOrRaw?.raw || cardOrRaw;
+    if (!raw) return;
+
+    this.showBookingDetailsModal = false;
+    this.selectedBookingDetails = null;
+    this.selectedHotelRawBooking = raw;
+    this.hotelModalDetailsError = null;
+    this.showHotelDetailsModal = true;
+    this.syncSelectedHotelModalBindings(raw);
+
+    const bookingRef = (raw.bookingRef || cardOrRaw?.bookingRef || '').trim();
+    const hotelId = Number(raw.serviceId || cardOrRaw?.serviceId || 0);
+
+    const needHotel = hotelId > 0 && !this.hotelDetailsCache[hotelId];
+    const needReservation = bookingRef.length > 0 && !this.hotelReservationCache[bookingRef];
+    const needPayment = bookingRef.length > 0 && !(bookingRef in this.hotelPaymentCache);
+    const needReviews = hotelId > 0 && !(hotelId in this.hotelReviewsCache);
+
+    if (!needHotel && !needReservation && !needPayment && !needReviews) {
+      this.isLoadingHotelModalDetails = false;
+      return;
+    }
+
+    this.isLoadingHotelModalDetails = true;
+    let reservationFetchFailed = false;
+
+    this.hotelModalEnrichmentSub = forkJoin({
+      hotel: needHotel
+        ? this.hotelService.getHotelDetails(hotelId).pipe(catchError(() => of(null)))
+        : of(this.hotelDetailsCache[hotelId] || null),
+      reservation: needReservation
+        ? this.bookingService.getHotelReservationDetails(bookingRef).pipe(
+            catchError(() => {
+              reservationFetchFailed = true;
+              return of(null);
+            })
+          )
+        : of(this.hotelReservationCache[bookingRef] || null),
+      payment: needPayment
+        ? this.bookingService.getPaymentByBookingRef(bookingRef).pipe(catchError(() => of(null)))
+        : of(this.hotelPaymentCache[bookingRef] ?? null),
+      reviews: needReviews
+        ? this.bookingService.getReviews('HOTEL', hotelId).pipe(catchError(() => of([])))
+        : of(this.hotelReviewsCache[hotelId] || [])
+    }).subscribe(({ hotel, reservation, payment, reviews }) => {
+      if (hotel && hotelId > 0) {
+        this.hotelDetailsCache = { ...this.hotelDetailsCache, [hotelId]: hotel };
+      }
+      if (reservation && bookingRef) {
+        this.hotelReservationCache = { ...this.hotelReservationCache, [bookingRef]: reservation };
+      }
+      if (bookingRef && needPayment) {
+        this.hotelPaymentCache = { ...this.hotelPaymentCache, [bookingRef]: payment || null };
+      }
+      if (hotelId > 0 && needReviews) {
+        this.hotelReviewsCache = { ...this.hotelReviewsCache, [hotelId]: Array.isArray(reviews) ? reviews : [] };
+      }
+
+      const activeRef = (this.selectedHotelRawBooking?.bookingRef || cardOrRaw?.bookingRef || '').trim();
+      if (this.showHotelDetailsModal && activeRef === bookingRef) {
+        this.isLoadingHotelModalDetails = false;
+        this.hotelModalDetailsError = reservationFetchFailed
+          ? 'Detailed room and guest snapshot could not be loaded completely. Showing available reservation summary.'
+          : null;
+        this.syncSelectedHotelModalBindings(this.selectedHotelRawBooking);
+      }
+    });
+  }
+
+  private syncSelectedHotelModalBindings(raw: any) {
+    if (!raw) return;
+    const hotelId = Number(raw.serviceId || 0);
+    const bookingRef = (raw.bookingRef || '').trim();
+    const hotelDetails = hotelId > 0 ? this.hotelDetailsCache[hotelId] || null : null;
+    const reservationDetails = bookingRef ? this.hotelReservationCache[bookingRef] || null : null;
+    const paymentTx = bookingRef ? this.hotelPaymentCache[bookingRef] ?? null : null;
+    const reviews = hotelId > 0 ? this.hotelReviewsCache[hotelId] ?? null : null;
+
+    this.selectedHotelDetailsDto = hotelDetails;
+    this.selectedHotelReservationDto = reservationDetails;
+    this.selectedHotelPaymentDto = paymentTx;
+    this.selectedHotelReviews = reviews;
+    this.selectedHotelBookingCard = buildHotelBookingCardViewModel(raw, hotelDetails, reservationDetails);
+  }
+
+  closeHotelBookingDetails() {
+    this.hotelModalEnrichmentSub?.unsubscribe();
+    this.showHotelDetailsModal = false;
+    this.isLoadingHotelModalDetails = false;
+    this.hotelModalDetailsError = null;
+    this.selectedHotelRawBooking = null;
+    this.selectedHotelBookingCard = null;
+  }
+
   promptCancelBooking(booking: any) {
+    if ((booking?.serviceType || '').toUpperCase() === 'HOTEL') {
+      this.openHotelCancellationWorkflow(booking);
+      return;
+    }
     this.bookingToCancel = booking;
     this.showCancelConfirmModal = true;
+  }
+
+  openHotelCancellationWorkflow(booking: any) {
+    if (!booking) return;
+    const hotelId = Number(booking.serviceId || 0);
+    const bookingRef = (booking.bookingRef || '').trim();
+    const hotelDetails = hotelId > 0 ? this.hotelDetailsCache[hotelId] || null : null;
+    const reservationDetails = bookingRef ? this.hotelReservationCache[bookingRef] || null : null;
+    this.selectedHotelCancellationCard = buildHotelBookingCardViewModel(
+      booking,
+      hotelDetails,
+      reservationDetails
+    );
+    this.showHotelCancellationModal = true;
+  }
+
+  closeHotelCancellationModal() {
+    this.showHotelCancellationModal = false;
+    this.selectedHotelCancellationCard = null;
+  }
+
+  onHotelBookingCancellationUpdated(result: HotelCancellationResultViewModel) {
+    if (!result) return;
+    const targetRef = (result.bookingRef || '').trim();
+    const targetId = Number(result.bookingId || 0);
+
+    this.myBookings = (this.myBookings || []).map(entry => {
+      const matchesRef = targetRef && (entry?.bookingRef || '').trim() === targetRef;
+      const matchesId = targetId > 0 && Number(entry?.id) === targetId;
+      if (!matchesRef && !matchesId) {
+        return entry;
+      }
+      return {
+        ...entry,
+        status: result.bookingStatus,
+        refundStatus: result.refund.normalizedStatus,
+        refundAmount: result.refundAmount,
+        refundId: result.refundId ?? entry.refundId,
+        cancellationFee: result.cancellationFee ?? entry.cancellationFee,
+        cancellationPolicyTier: result.policyTier?.rawTier ?? entry.cancellationPolicyTier,
+        cancellationReason: result.cancellationReason ?? entry.cancellationReason,
+        inventoryReleaseStatus: result.inventory.normalizedStatus
+      };
+    });
+
+    if (this.showHotelDetailsModal && this.selectedHotelRawBooking) {
+      const openRef = (this.selectedHotelRawBooking.bookingRef || '').trim();
+      if (targetRef && openRef === targetRef) {
+        const updatedOpen = this.myBookings.find(b => (b?.bookingRef || '').trim() === targetRef);
+        if (updatedOpen) {
+          this.selectedHotelRawBooking = updatedOpen;
+          this.syncSelectedHotelModalBindings(updatedOpen);
+        }
+      }
+    }
+
+    if (targetRef) {
+      this.hotelCancellationRefreshSub?.unsubscribe();
+      this.hotelCancellationRefreshSub = forkJoin({
+        reservation: this.bookingService
+          .getHotelReservationDetails(targetRef)
+          .pipe(catchError(() => of(null))),
+        payment: this.bookingService
+          .getPaymentByBookingRef(targetRef)
+          .pipe(catchError(() => of(null)))
+      }).subscribe(({ reservation, payment }) => {
+        if (reservation) {
+          this.hotelReservationCache[targetRef] = reservation;
+        }
+        if (payment !== undefined) {
+          this.hotelPaymentCache[targetRef] = payment;
+        }
+        if (
+          this.showHotelDetailsModal &&
+          (this.selectedHotelRawBooking?.bookingRef || '').trim() === targetRef
+        ) {
+          this.syncSelectedHotelModalBindings(this.selectedHotelRawBooking);
+        }
+      });
+    }
+  }
+
+  onHotelCancellationCompletedViewBookings(_result: HotelCancellationResultViewModel | null) {
+    this.closeHotelCancellationModal();
+    this.loadMyBookings();
   }
 
   closeCancelConfirmModal() {

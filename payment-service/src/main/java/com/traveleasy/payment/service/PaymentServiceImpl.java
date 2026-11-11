@@ -1,6 +1,7 @@
 package com.traveleasy.payment.service;
 
 import com.razorpay.Order;
+import com.razorpay.Payment;
 import com.razorpay.RazorpayClient;
 import com.razorpay.Refund;
 import com.razorpay.Utils;
@@ -703,14 +704,14 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public RefundResponse processRefundByBooking(String bookingRef, RefundRequest request) {
-        PaymentTransaction txn = paymentRepository.findByBookingRef(bookingRef)
+        PaymentTransaction txn = findOrRecoverTransactionByBooking(bookingRef)
                 .orElseThrow(() -> new PaymentException("Transaction not found for booking: " + bookingRef, HttpStatus.NOT_FOUND));
-        return processRefund(txn.getTransactionRef(), request);
+        return processRefundInternal(txn, request);
     }
 
     @Override
     public RefundResponse reconcileRefundByBooking(String bookingRef, String idempotencyKey, Double expectedAmount) {
-        PaymentTransaction txn = paymentRepository.findByBookingRef(bookingRef)
+        PaymentTransaction txn = findOrRecoverTransactionByBooking(bookingRef)
                 .orElseThrow(() -> new PaymentException("Transaction not found for booking: " + bookingRef, HttpStatus.NOT_FOUND));
 
         String effectiveKey = (idempotencyKey != null && !idempotencyKey.isBlank())
@@ -766,6 +767,11 @@ public class PaymentServiceImpl implements PaymentService {
     public RefundResponse processRefund(String transactionRef, RefundRequest request) {
         PaymentTransaction txn = paymentRepository.findByTransactionRef(transactionRef)
                 .orElseThrow(() -> new PaymentException("Transaction not found for ref: " + transactionRef, HttpStatus.NOT_FOUND));
+        return processRefundInternal(txn, request);
+    }
+
+    private RefundResponse processRefundInternal(PaymentTransaction txn, RefundRequest request) {
+        String transactionRef = txn.getTransactionRef();
 
         String idempotencyKey = (request != null && request.getIdempotencyKey() != null && !request.getIdempotencyKey().isBlank())
                 ? request.getIdempotencyKey().trim()
@@ -893,6 +899,251 @@ public class PaymentServiceImpl implements PaymentService {
             }
             log.error("Failed to process refund for txn {}: {}", transactionRef, e.getMessage(), e);
             throw new PaymentException("Gateway refund request failed: " + e.getMessage(), HttpStatus.BAD_GATEWAY);
+        }
+    }
+
+    /**
+     * Looks up a booking's payment transaction locally and, if missing (e.g. local record loss),
+     * performs an authoritative Razorpay order/payment recovery check cross-verified against Booking Service.
+     */
+    private Optional<PaymentTransaction> findOrRecoverTransactionByBooking(String bookingRef) {
+        if (bookingRef == null || bookingRef.isBlank()) {
+            return Optional.empty();
+        }
+        Optional<PaymentTransaction> existing = paymentRepository.findByBookingRef(bookingRef);
+        if (existing.isPresent()) {
+            return existing;
+        }
+        return recoverCapturedTransactionFromGateway(bookingRef);
+    }
+
+    private Optional<PaymentTransaction> recoverCapturedTransactionFromGateway(String bookingRef) {
+        if (razorpayConfig == null || !razorpayConfig.isConfigured()
+                || razorpayClient == null || razorpayClient.orders == null) {
+            return Optional.empty();
+        }
+
+        Object lock = orderCreationLocks.computeIfAbsent(bookingRef, k -> new Object());
+        synchronized (lock) {
+            Optional<PaymentTransaction> rechecked = paymentRepository.findByBookingRef(bookingRef);
+            if (rechecked.isPresent()) {
+                return rechecked;
+            }
+
+            Map<String, Object> bookingRecord = fetchBookingRecord(bookingRef);
+            if (bookingRecord == null || bookingRecord.get("totalAmount") == null) {
+                log.warn("Cannot recover missing payment transaction for {}: authoritative booking record or totalAmount unavailable", bookingRef);
+                return Optional.empty();
+            }
+
+            double expectedAmount;
+            try {
+                expectedAmount = Double.parseDouble(bookingRecord.get("totalAmount").toString());
+            } catch (Exception ex) {
+                log.warn("Invalid totalAmount on booking {} during gateway transaction recovery", bookingRef);
+                return Optional.empty();
+            }
+            Long bookingCustomerId = parseOptionalLong(bookingRecord.get("customerId"));
+
+            try {
+                JSONObject orderQuery = new JSONObject();
+                orderQuery.put("receipt", bookingRef);
+                List<Order> orders = razorpayClient.orders.fetchAll(orderQuery);
+                if (orders == null || orders.isEmpty()) {
+                    return Optional.empty();
+                }
+
+                // Prefer paid orders matching the exact bookingRef
+                List<Order> matchingOrders = orders.stream()
+                        .filter(o -> matchesBookingOrder(o, bookingRef))
+                        .sorted((a, b) -> Boolean.compare(
+                                "paid".equalsIgnoreCase(extractEntityString(b, "status")),
+                                "paid".equalsIgnoreCase(extractEntityString(a, "status"))))
+                        .toList();
+
+                for (Order order : matchingOrders) {
+                    String orderId = extractEntityString(order, "id");
+                    if (orderId == null || orderId.isBlank()) {
+                        continue;
+                    }
+
+                    Long orderCustomerId = parseOptionalLong(extractOrderNotesString(order, "customerId"));
+                    if (bookingCustomerId != null && orderCustomerId != null && !bookingCustomerId.equals(orderCustomerId)) {
+                        log.warn("Skipping Razorpay order {} for {}: customerId mismatch (order={}, booking={})",
+                                orderId, bookingRef, orderCustomerId, bookingCustomerId);
+                        continue;
+                    }
+
+                    Payment captured = findCapturedPaymentForOrder(orderId);
+                    if (captured == null) {
+                        continue;
+                    }
+
+                    String paymentId = extractEntityString(captured, "id");
+                    long capturedPaise = extractEntityLong(captured, "amount");
+                    double capturedAmount = capturedPaise / 100.0;
+                    if (paymentId == null || paymentId.isBlank()
+                            || capturedPaise <= 0
+                            || Math.abs(expectedAmount - capturedAmount) > 0.01) {
+                        log.warn("Skipping captured payment {} on order {} for {}: amount mismatch (gateway={}, booking={})",
+                                paymentId, orderId, bookingRef, capturedAmount, expectedAmount);
+                        continue;
+                    }
+
+                    Optional<PaymentTransaction> byPaymentId = paymentRepository.findByRazorpayPaymentId(paymentId);
+                    if (byPaymentId.isPresent()) {
+                        if (bookingRef.equalsIgnoreCase(byPaymentId.get().getBookingRef())) {
+                            return byPaymentId;
+                        }
+                        log.warn("Gateway payment {} already belongs to booking {}; refusing reassignment to {}",
+                                paymentId, byPaymentId.get().getBookingRef(), bookingRef);
+                        continue;
+                    }
+
+                    Optional<PaymentTransaction> byOrderId = paymentRepository.findByRazorpayOrderId(orderId);
+                    if (byOrderId.isPresent()) {
+                        if (bookingRef.equalsIgnoreCase(byOrderId.get().getBookingRef())) {
+                            return byOrderId;
+                        }
+                        log.warn("Gateway order {} already belongs to booking {}; refusing reassignment to {}",
+                                orderId, byOrderId.get().getBookingRef(), bookingRef);
+                        continue;
+                    }
+
+                    String currency = extractEntityString(captured, "currency");
+                    PaymentTransaction recovered = PaymentTransaction.builder()
+                            .transactionRef("TXN-REC-" + UUID.randomUUID().toString().substring(0, 10).toUpperCase())
+                            .bookingRef(bookingRef)
+                            .customerId(bookingCustomerId != null ? bookingCustomerId : orderCustomerId)
+                            .amount(capturedAmount)
+                            .currency(currency != null && !currency.isBlank() ? currency.toUpperCase() : "INR")
+                            .paymentMethod("RAZORPAY")
+                            .status("SUCCESS")
+                            .razorpayOrderId(orderId)
+                            .razorpayPaymentId(paymentId)
+                            .timestamp(LocalDateTime.now())
+                            .build();
+
+                    PaymentTransaction saved = paymentRepository.save(recovered);
+                    if (saved == null) {
+                        saved = recovered;
+                    }
+                    log.warn("Recovered missing local PaymentTransaction {} for booking {} from Razorpay order {} / payment {}",
+                            saved.getTransactionRef(), bookingRef, orderId, paymentId);
+                    return Optional.of(saved);
+                }
+            } catch (Exception ex) {
+                log.warn("Gateway recovery lookup failed for booking {}: {}", bookingRef, ex.getMessage());
+            }
+
+            return Optional.empty();
+        }
+    }
+
+    private boolean matchesBookingOrder(Order order, String bookingRef) {
+        if (order == null || bookingRef == null) {
+            return false;
+        }
+        String receipt = extractEntityString(order, "receipt");
+        if (bookingRef.equalsIgnoreCase(receipt)) {
+            return true;
+        }
+        String notesBookingRef = extractOrderNotesString(order, "bookingRef");
+        return bookingRef.equalsIgnoreCase(notesBookingRef);
+    }
+
+    private Payment findCapturedPaymentForOrder(String orderId) {
+        try {
+            List<Payment> payments = razorpayClient.orders.fetchPayments(orderId);
+            if (payments == null || payments.isEmpty()) {
+                return null;
+            }
+            for (Payment payment : payments) {
+                String status = extractEntityString(payment, "status");
+                Boolean captured = extractEntityBoolean(payment, "captured");
+                if ("captured".equalsIgnoreCase(status) || Boolean.TRUE.equals(captured)) {
+                    return payment;
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to fetch Razorpay payments for order {}: {}", orderId, ex.getMessage());
+        }
+        return null;
+    }
+
+    private String extractEntityString(com.razorpay.Entity entity, String field) {
+        try {
+            if (entity != null) {
+                Object val = entity.get(field);
+                return val != null ? val.toString().trim() : null;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private long extractEntityLong(com.razorpay.Entity entity, String field) {
+        try {
+            if (entity != null) {
+                Object val = entity.get(field);
+                if (val instanceof Number n) {
+                    return n.longValue();
+                }
+                if (val != null) {
+                    return Long.parseLong(val.toString().trim());
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return 0L;
+    }
+
+    private Boolean extractEntityBoolean(com.razorpay.Entity entity, String field) {
+        try {
+            if (entity != null) {
+                Object val = entity.get(field);
+                if (val instanceof Boolean b) {
+                    return b;
+                }
+                if (val != null) {
+                    return Boolean.parseBoolean(val.toString().trim());
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private String extractOrderNotesString(Order order, String key) {
+        try {
+            if (order != null) {
+                Object notesObj = order.get("notes");
+                if (notesObj instanceof JSONObject jsonNotes) {
+                    String val = jsonNotes.optString(key, null);
+                    return (val != null && !val.isBlank()) ? val.trim() : null;
+                }
+                if (notesObj instanceof Map<?, ?> mapNotes && mapNotes.get(key) != null) {
+                    String val = mapNotes.get(key).toString().trim();
+                    return val.isBlank() ? null : val;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private Long parseOptionalLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            if (value instanceof Number n) {
+                return n.longValue();
+            }
+            String s = value.toString().trim();
+            return s.isBlank() ? null : Long.valueOf(s);
+        } catch (Exception ignored) {
+            return null;
         }
     }
 

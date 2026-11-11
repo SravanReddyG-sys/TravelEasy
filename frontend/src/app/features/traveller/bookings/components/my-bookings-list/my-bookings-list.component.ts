@@ -1,11 +1,12 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HotelBookingCardComponent } from '../hotel-booking-card/hotel-booking-card.component';
 
 @Component({
   selector: 'app-my-bookings-list',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, HotelBookingCardComponent],
   template: `
     <div class="my-bookings-view">
       <!-- Page Header Row -->
@@ -189,70 +190,83 @@ import { FormsModule } from '@angular/forms';
 
       <!-- Booking Cards List -->
       <div *ngIf="!isLoading && !errorMessage && bookings.length > 0" class="booking-cards-list">
-        <div *ngFor="let b of bookings" class="booking-card-item mb-3">
-          <div class="d-flex align-items-center gap-3 flex-column flex-md-row">
-            <!-- Thumbnail -->
-            <img [src]="b.thumbnail" (error)="onImgError($event)" class="booking-card-img" alt="Booking Thumbnail">
-            
-            <!-- Content Details -->
-            <div class="flex-grow-1 w-100">
-              <div class="mb-1">
-                <span [class]="b.serviceType === 'BUS' ? 'badge-type-bus' : 'badge-type-hotel'">
-                  {{ b.serviceType === 'BUS' ? 'Bus' : 'Hotel' }}
-                </span>
-              </div>
-              <h5 class="fw-bold text-navy mb-1 cursor-pointer" (click)="openDetails.emit(b)">{{ b.displayTitle }}</h5>
-              <div class="text-secondary small mb-2">{{ b.displaySubtitle }}</div>
+        <ng-container *ngFor="let b of bookings">
+          <!-- BUS BOOKING CARD (Preserved Unchanged) -->
+          <div *ngIf="b.serviceType === 'BUS'; else hotelBookingCardTpl" class="booking-card-item mb-3">
+            <div class="d-flex align-items-center gap-3 flex-column flex-md-row">
+              <!-- Thumbnail -->
+              <img [src]="b.thumbnail" (error)="onImgError($event)" class="booking-card-img" alt="Booking Thumbnail">
               
-              <!-- Metadata icons row -->
-              <div class="d-flex align-items-center gap-3 text-secondary smaller flex-wrap">
-                <span *ngIf="b.dateText">
-                  <i class="fa-regular fa-calendar-days text-muted me-1"></i>{{ b.dateText }}
-                </span>
-                <span *ngIf="b.serviceType === 'BUS' && b.timeText">
-                  <i class="fa-regular fa-clock text-muted me-1"></i>{{ b.timeText }}
-                </span>
-                <span *ngIf="b.capacityText">
-                  <i class="fa-solid fa-user-group text-muted me-1"></i>{{ b.capacityText }}
-                </span>
-                <span>
-                  <i class="fa-solid fa-ticket text-muted me-1"></i>{{ b.bookingRef }}
-                </span>
-              </div>
-            </div>
-
-            <!-- Price, Status & Actions -->
-            <div class="d-flex flex-column align-items-md-end justify-content-between gap-3 w-100 w-md-auto text-md-end">
-              <div class="d-flex align-items-center gap-3 justify-content-between justify-content-md-end w-100">
-                <span class="badge-status-pill" [ngClass]="b.statusBadgeClass">
-                  {{ b.statusDisplay }}
-                </span>
-                <span *ngIf="b.status === 'CANCELLED' && b.refundStatus === 'PROCESSED'" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 smaller px-2 py-1 rounded-pill">
-                  <i class="fa-solid fa-check me-1"></i>Refunded
-                </span>
-                <span *ngIf="b.status === 'CANCELLED' && b.refundStatus === 'FAILED_RETRYABLE'" class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 smaller px-2 py-1 rounded-pill">
-                  <i class="fa-solid fa-clock-rotate-left me-1"></i>Refund Pending
-                </span>
-                <div class="booking-card-price">
-                  ₹{{ b.totalAmount | number }}
+              <!-- Content Details -->
+              <div class="flex-grow-1 w-100">
+                <div class="mb-1">
+                  <span [class]="b.serviceType === 'BUS' ? 'badge-type-bus' : 'badge-type-hotel'">
+                    {{ b.serviceType === 'BUS' ? 'Bus' : 'Hotel' }}
+                  </span>
                 </div>
-                <i class="fa-solid fa-chevron-right text-primary cursor-pointer fs-6 d-none d-md-inline-block" (click)="openDetails.emit(b)" title="View Details"></i>
+                <h5 class="fw-bold text-navy mb-1 cursor-pointer" (click)="openDetails.emit(b)">{{ b.displayTitle }}</h5>
+                <div class="text-secondary small mb-2">{{ b.displaySubtitle }}</div>
+                
+                <!-- Metadata icons row -->
+                <div class="d-flex align-items-center gap-3 text-secondary smaller flex-wrap">
+                  <span *ngIf="b.dateText">
+                    <i class="fa-regular fa-calendar-days text-muted me-1"></i>{{ b.dateText }}
+                  </span>
+                  <span *ngIf="b.serviceType === 'BUS' && b.timeText">
+                    <i class="fa-regular fa-clock text-muted me-1"></i>{{ b.timeText }}
+                  </span>
+                  <span *ngIf="b.capacityText">
+                    <i class="fa-solid fa-user-group text-muted me-1"></i>{{ b.capacityText }}
+                  </span>
+                  <span>
+                    <i class="fa-solid fa-ticket text-muted me-1"></i>{{ b.bookingRef }}
+                  </span>
+                </div>
               </div>
 
-              <div class="d-flex align-items-center gap-2 justify-content-end w-100">
-                <button class="btn btn-view-details" (click)="openDetails.emit(b)">
-                  View Details
-                </button>
-                <button *ngIf="b.isCancellable" class="btn btn-cancel-booking" (click)="cancelBooking.emit(b)">
-                  Cancel Booking
-                </button>
-                <button *ngIf="b.isCompleted" class="btn btn-outline-primary btn-sm rounded-3 px-3 py-1 fw-semibold" (click)="rateReview.emit(b.raw)">
-                  Rate & Review
-                </button>
+              <!-- Price, Status & Actions -->
+              <div class="d-flex flex-column align-items-md-end justify-content-between gap-3 w-100 w-md-auto text-md-end">
+                <div class="d-flex align-items-center gap-3 justify-content-between justify-content-md-end w-100">
+                  <span class="badge-status-pill" [ngClass]="b.statusBadgeClass">
+                    {{ b.statusDisplay }}
+                  </span>
+                  <span *ngIf="b.status === 'CANCELLED' && b.refundStatus === 'PROCESSED'" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 smaller px-2 py-1 rounded-pill">
+                    <i class="fa-solid fa-check me-1"></i>Refunded
+                  </span>
+                  <span *ngIf="b.status === 'CANCELLED' && b.refundStatus === 'FAILED_RETRYABLE'" class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 smaller px-2 py-1 rounded-pill">
+                    <i class="fa-solid fa-clock-rotate-left me-1"></i>Refund Pending
+                  </span>
+                  <div class="booking-card-price">
+                    ₹{{ b.totalAmount | number }}
+                  </div>
+                  <i class="fa-solid fa-chevron-right text-primary cursor-pointer fs-6 d-none d-md-inline-block" (click)="openDetails.emit(b)" title="View Details"></i>
+                </div>
+
+                <div class="d-flex align-items-center gap-2 justify-content-end w-100">
+                  <button class="btn btn-view-details" (click)="openDetails.emit(b)">
+                    View Details
+                  </button>
+                  <button *ngIf="b.isCancellable" class="btn btn-cancel-booking" (click)="cancelBooking.emit(b)">
+                    Cancel Booking
+                  </button>
+                  <button *ngIf="b.isCompleted" class="btn btn-outline-primary btn-sm rounded-3 px-3 py-1 fw-semibold" (click)="rateReview.emit(b.raw)">
+                    Rate & Review
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+
+          <!-- DEDICATED REDESIGNED HOTEL BOOKING CARD -->
+          <ng-template #hotelBookingCardTpl>
+            <app-hotel-booking-card
+              [booking]="b"
+              (openDetails)="openDetails.emit($event)"
+              (cancelBooking)="cancelBooking.emit($event)"
+              (rateReview)="rateReview.emit($event)"
+            ></app-hotel-booking-card>
+          </ng-template>
+        </ng-container>
 
         <!-- Pagination Footer -->
         <div *ngIf="totalPages > 1" class="d-flex justify-content-between align-items-center pt-3 pb-4 flex-wrap gap-3">

@@ -2,6 +2,7 @@ package com.traveleasy.payment.service;
 
 import com.razorpay.Order;
 import com.razorpay.OrderClient;
+import com.razorpay.Payment;
 import com.razorpay.RazorpayClient;
 import com.razorpay.Refund;
 import com.razorpay.RefundClient;
@@ -835,5 +836,190 @@ public class PaymentServiceTest {
         PaymentTransaction saved = savedCaptor.getValue();
         assertEquals("FAILED", saved.getRefundStatus());
         assertEquals("SUCCESS", saved.getStatus());
+    }
+
+    @Test
+    @DisplayName("processRefundByBooking recovers missing local PaymentTransaction from Razorpay paid order and refunds")
+    void testProcessRefundByBooking_RecoversMissingLocalTransactionFromGateway() throws Exception {
+        String bookingRef = "HTL-BKG-RECOVER-1";
+        String orderId = "order_recover_1";
+        String paymentId = "pay_recover_1";
+
+        when(paymentRepository.findByBookingRef(bookingRef)).thenReturn(Optional.empty());
+        when(paymentRepository.findByRazorpayPaymentId(paymentId)).thenReturn(Optional.empty());
+        when(paymentRepository.findByRazorpayOrderId(orderId)).thenReturn(Optional.empty());
+        when(paymentRepository.save(any(PaymentTransaction.class))).thenAnswer(i -> i.getArgument(0));
+
+        Map<String, Object> bookingRecord = new java.util.HashMap<>();
+        bookingRecord.put("bookingRef", bookingRef);
+        bookingRecord.put("customerId", 8L);
+        bookingRecord.put("totalAmount", 2499.0);
+        bookingRecord.put("status", "CANCELLED");
+        when(restTemplate.getForEntity(contains("/api/bookings/ref/" + bookingRef), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(bookingRecord));
+
+        OrderClient mockOrderClient = mock(OrderClient.class);
+        com.razorpay.PaymentClient mockPaymentClient = mock(com.razorpay.PaymentClient.class);
+        razorpayClient.orders = mockOrderClient;
+        razorpayClient.payments = mockPaymentClient;
+
+        JSONObject orderJson = new JSONObject()
+                .put("id", orderId)
+                .put("receipt", bookingRef)
+                .put("status", "paid")
+                .put("amount", 249900L)
+                .put("notes", new JSONObject().put("bookingRef", bookingRef).put("customerId", "8"));
+        when(mockOrderClient.fetchAll(any(JSONObject.class))).thenReturn(List.of(new Order(orderJson)));
+
+        JSONObject paymentJson = new JSONObject()
+                .put("id", paymentId)
+                .put("order_id", orderId)
+                .put("amount", 249900L)
+                .put("currency", "INR")
+                .put("status", "captured")
+                .put("captured", true);
+        when(mockOrderClient.fetchPayments(orderId)).thenReturn(List.of(new Payment(paymentJson)));
+
+        when(mockPaymentClient.fetchAllRefunds(paymentId)).thenReturn(Collections.emptyList());
+        JSONObject createdRefund = new JSONObject()
+                .put("id", "rfnd_recover_1")
+                .put("payment_id", paymentId)
+                .put("amount", 124950L)
+                .put("status", "processed");
+        when(mockPaymentClient.refund(eq(paymentId), any(JSONObject.class))).thenReturn(new Refund(createdRefund));
+
+        RefundResponse response = paymentService.processRefundByBooking(
+                bookingRef,
+                RefundRequest.builder()
+                        .amount(1249.50)
+                        .idempotencyKey("htl-rfnd-" + bookingRef)
+                        .reason("Found a better hotel option")
+                        .build());
+
+        assertEquals("PROCESSED", response.getRefundStatus());
+        assertEquals("rfnd_recover_1", response.getRefundId());
+        assertEquals(1249.50, response.getRefundAmount());
+        assertEquals(bookingRef, response.getBookingRef());
+        assertEquals(paymentId, response.getTransaction().getRazorpayPaymentId());
+        verify(mockPaymentClient, times(1)).refund(eq(paymentId), any(JSONObject.class));
+    }
+
+    @Test
+    @DisplayName("processRefundByBooking fails closed with 404 when gateway payment amount mismatches booking total")
+    void testProcessRefundByBooking_GatewayRecoveryRejectsAmountMismatch() throws Exception {
+        String bookingRef = "HTL-BKG-MISMATCH-1";
+        String orderId = "order_mismatch_1";
+        String paymentId = "pay_mismatch_1";
+
+        when(paymentRepository.findByBookingRef(bookingRef)).thenReturn(Optional.empty());
+
+        Map<String, Object> bookingRecord = new java.util.HashMap<>();
+        bookingRecord.put("bookingRef", bookingRef);
+        bookingRecord.put("customerId", 8L);
+        bookingRecord.put("totalAmount", 2499.0);
+        bookingRecord.put("status", "CANCELLED");
+        when(restTemplate.getForEntity(contains("/api/bookings/ref/" + bookingRef), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(bookingRecord));
+
+        OrderClient mockOrderClient = mock(OrderClient.class);
+        com.razorpay.PaymentClient mockPaymentClient = mock(com.razorpay.PaymentClient.class);
+        razorpayClient.orders = mockOrderClient;
+        razorpayClient.payments = mockPaymentClient;
+
+        JSONObject orderJson = new JSONObject()
+                .put("id", orderId)
+                .put("receipt", bookingRef)
+                .put("status", "paid");
+        when(mockOrderClient.fetchAll(any(JSONObject.class))).thenReturn(List.of(new Order(orderJson)));
+
+        JSONObject paymentJson = new JSONObject()
+                .put("id", paymentId)
+                .put("amount", 10000L) // ₹100.00 != ₹2499.00
+                .put("status", "captured")
+                .put("captured", true);
+        when(mockOrderClient.fetchPayments(orderId)).thenReturn(List.of(new Payment(paymentJson)));
+
+        PaymentException ex = assertThrows(PaymentException.class, () ->
+                paymentService.processRefundByBooking(bookingRef, RefundRequest.builder().amount(1249.50).build()));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+        verify(paymentRepository, never()).save(any(PaymentTransaction.class));
+        verify(mockPaymentClient, never()).refund(anyString(), any(JSONObject.class));
+    }
+
+    @Test
+    @DisplayName("processRefundByBooking throws 404 when neither local transaction nor Razorpay order exists")
+    void testProcessRefundByBooking_ThrowsNotFoundWhenAbsentEverywhere() throws Exception {
+        String bookingRef = "HTL-BKG-ABSENT-1";
+        when(paymentRepository.findByBookingRef(bookingRef)).thenReturn(Optional.empty());
+
+        Map<String, Object> bookingRecord = new java.util.HashMap<>();
+        bookingRecord.put("bookingRef", bookingRef);
+        bookingRecord.put("totalAmount", 2499.0);
+        when(restTemplate.getForEntity(contains("/api/bookings/ref/" + bookingRef), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(bookingRecord));
+
+        OrderClient mockOrderClient = mock(OrderClient.class);
+        razorpayClient.orders = mockOrderClient;
+        when(mockOrderClient.fetchAll(any(JSONObject.class))).thenReturn(Collections.emptyList());
+
+        PaymentException ex = assertThrows(PaymentException.class, () ->
+                paymentService.processRefundByBooking(bookingRef, RefundRequest.builder().amount(1249.50).build()));
+
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatus());
+    }
+
+    @Test
+    @DisplayName("reconcileRefundByBooking recovers missing local transaction from gateway and adopts existing refund")
+    void testReconcileRefundByBooking_RecoversMissingLocalTransaction() throws Exception {
+        String bookingRef = "HTL-BKG-REC-MISSING-1";
+        String orderId = "order_rec_missing_1";
+        String paymentId = "pay_rec_missing_1";
+
+        when(paymentRepository.findByBookingRef(bookingRef)).thenReturn(Optional.empty());
+        when(paymentRepository.findByRazorpayPaymentId(paymentId)).thenReturn(Optional.empty());
+        when(paymentRepository.findByRazorpayOrderId(orderId)).thenReturn(Optional.empty());
+        when(paymentRepository.save(any(PaymentTransaction.class))).thenAnswer(i -> i.getArgument(0));
+
+        Map<String, Object> bookingRecord = new java.util.HashMap<>();
+        bookingRecord.put("bookingRef", bookingRef);
+        bookingRecord.put("customerId", 8L);
+        bookingRecord.put("totalAmount", 2499.0);
+        when(restTemplate.getForEntity(contains("/api/bookings/ref/" + bookingRef), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(bookingRecord));
+
+        OrderClient mockOrderClient = mock(OrderClient.class);
+        com.razorpay.PaymentClient mockPaymentClient = mock(com.razorpay.PaymentClient.class);
+        razorpayClient.orders = mockOrderClient;
+        razorpayClient.payments = mockPaymentClient;
+
+        JSONObject orderJson = new JSONObject()
+                .put("id", orderId)
+                .put("receipt", bookingRef)
+                .put("status", "paid");
+        when(mockOrderClient.fetchAll(any(JSONObject.class))).thenReturn(List.of(new Order(orderJson)));
+
+        JSONObject paymentJson = new JSONObject()
+                .put("id", paymentId)
+                .put("amount", 249900L)
+                .put("currency", "INR")
+                .put("status", "captured")
+                .put("captured", true);
+        when(mockOrderClient.fetchPayments(orderId)).thenReturn(List.of(new Payment(paymentJson)));
+
+        JSONObject settledRefund = new JSONObject()
+                .put("id", "rfnd_existing_gateway_1")
+                .put("payment_id", paymentId)
+                .put("amount", 124950L)
+                .put("status", "processed");
+        when(mockPaymentClient.fetchAllRefunds(eq(paymentId))).thenReturn(List.of(new Refund(settledRefund)));
+
+        RefundResponse reconciled = paymentService.reconcileRefundByBooking(
+                bookingRef, "htl-rfnd-" + bookingRef, 1249.50);
+
+        assertEquals("PROCESSED", reconciled.getRefundStatus());
+        assertEquals("rfnd_existing_gateway_1", reconciled.getRefundId());
+        assertEquals(1249.50, reconciled.getRefundAmount());
+        verify(mockPaymentClient, never()).refund(anyString(), any(JSONObject.class));
     }
 }
