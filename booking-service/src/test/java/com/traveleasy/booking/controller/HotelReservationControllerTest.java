@@ -92,8 +92,8 @@ public class HotelReservationControllerTest {
                 .adults(2)
                 .children(0)
                 .occupants(List.of(
-                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).build(),
-                        RoomOccupantDto.builder().name("Adult Two").type(GuestType.ADULT).build()
+                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).age(33).gender(com.traveleasy.booking.model.GuestGender.MALE).build(),
+                        RoomOccupantDto.builder().name("Adult Two").type(GuestType.ADULT).age(29).gender(com.traveleasy.booking.model.GuestGender.FEMALE).build()
                 ))
                 .build();
 
@@ -245,8 +245,8 @@ public class HotelReservationControllerTest {
                                                 .adults(2)
                                                 .children(0)
                                                 .occupants(List.of(
-                                                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).build(),
-                                                        RoomOccupantDto.builder().name("Adult Two").type(GuestType.ADULT).build()
+                                                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).age(33).gender(com.traveleasy.booking.model.GuestGender.MALE).build(),
+                                                        RoomOccupantDto.builder().name("Adult Two").type(GuestType.ADULT).age(29).gender(com.traveleasy.booking.model.GuestGender.FEMALE).build()
                                                 ))
                                                 .build()
                                 ))
@@ -265,7 +265,9 @@ public class HotelReservationControllerTest {
                 .andExpect(jsonPath("$.paymentStatus").value("PAID"))
                 .andExpect(jsonPath("$.hotel.hotelName").value("Grand Heritage Hotel"))
                 .andExpect(jsonPath("$.primaryGuest.fullName").value("Rahul Sharma"))
-                .andExpect(jsonPath("$.allocations[0].rooms[0].occupants[0].name").value("Adult One"));
+                .andExpect(jsonPath("$.allocations[0].rooms[0].occupants[0].name").value("Adult One"))
+                .andExpect(jsonPath("$.allocations[0].rooms[0].occupants[0].age").value(33))
+                .andExpect(jsonPath("$.allocations[0].rooms[0].occupants[0].gender").value("MALE"));
     }
 
     @Test
@@ -302,5 +304,40 @@ public class HotelReservationControllerTest {
                         .header("Authorization", "Bearer valid-traveller-token"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Booking not found for reference: " + bookingRef));
+    }
+
+    @Test
+    @DisplayName("POST /api/bookings/hotel-reservations: Validation exception returns structured errors and fieldErrors")
+    void testInitiateHotelReservation_ValidationFailure_ReturnsStructuredFieldErrors() throws Exception {
+        HotelReservationInitiationRequest request = buildSampleRequest();
+
+        when(hotelOrchestrationService.initiateHotelReservation(any(), eq(99L), eq("traveller@example.com")))
+                .thenThrow(new com.traveleasy.booking.validator.GuestAllocationValidationException(
+                        List.of("Room 101 - Room 1, Guest 1: Gender is mandatory for ADULT occupants."),
+                        List.of(new com.traveleasy.booking.validator.GuestAllocationValidationException.ValidationErrorDetail(
+                                0, 101L, 1, 0, "gender", "Gender is mandatory for ADULT occupants."))));
+
+        mockMvc.perform(post("/api/bookings/hotel-reservations")
+                        .header("Authorization", "Bearer valid-traveller-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0]").value("Room 101 - Room 1, Guest 1: Gender is mandatory for ADULT occupants."))
+                .andExpect(jsonPath("$.fieldErrors[0].roomSequence").value(1))
+                .andExpect(jsonPath("$.fieldErrors[0].guestIndex").value(0))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("gender"));
+    }
+
+    @Test
+    @DisplayName("POST /api/bookings/hotel-reservations: Invalid enum gender value returns 400 Bad Request")
+    void testInitiateHotelReservation_InvalidGenderJson_ReturnsBadRequest() throws Exception {
+        String rawJson = objectMapper.writeValueAsString(buildSampleRequest())
+                .replace("\"MALE\"", "\"INVALID_GENDER_VALUE\"");
+
+        mockMvc.perform(post("/api/bookings/hotel-reservations")
+                        .header("Authorization", "Bearer valid-traveller-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(rawJson))
+                .andExpect(status().isBadRequest());
     }
 }

@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { HotelPublicDto } from '../models/hotel.model';
+import { HotelPublicDto, HotelDetailsResponseDto } from '../models/hotel.model';
 
 @Injectable({
   providedIn: 'root'
@@ -74,12 +74,12 @@ export class HotelService {
     return this.http.get<HotelPublicDto[]>(url);
   }
 
-  getHotelDetails(hotelId: number, checkIn?: string, checkOut?: string, rooms: number = 1): Observable<any> {
+  getHotelDetails(hotelId: number, checkIn?: string, checkOut?: string, rooms: number = 1): Observable<HotelDetailsResponseDto> {
     let url = `${this.apiUrl}/${hotelId}`;
     if (checkIn && checkOut) {
       url += `?checkIn=${encodeURIComponent(checkIn)}&checkOut=${encodeURIComponent(checkOut)}&rooms=${rooms}`;
     }
-    return this.http.get(url);
+    return this.http.get<HotelDetailsResponseDto>(url);
   }
 
   reserveRooms(roomId: number, count: number): Observable<any> {

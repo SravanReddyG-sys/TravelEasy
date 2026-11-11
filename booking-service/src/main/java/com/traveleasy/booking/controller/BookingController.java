@@ -245,6 +245,14 @@ public class BookingController {
             com.traveleasy.booking.dto.HotelReservationInitiationResponse response =
                     hotelOrchestrationService.initiateHotelReservation(request, callerUserId, callerEmail);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (com.traveleasy.booking.validator.GuestAllocationValidationException e) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("message", e.getReason() != null ? e.getReason() : "Guest allocation validation failed");
+            body.put("errors", e.getValidationErrors());
+            if (!e.getErrorDetails().isEmpty()) {
+                body.put("fieldErrors", e.getErrorDetails());
+            }
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
         } catch (org.springframework.web.server.ResponseStatusException e) {
             return ResponseEntity.status(e.getStatusCode())
                     .body(Map.of("message", e.getReason() != null ? e.getReason() : e.getMessage()));

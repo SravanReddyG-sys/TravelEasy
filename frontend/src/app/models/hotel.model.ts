@@ -261,4 +261,223 @@ export interface PriceRangeOverrideRequestDto {
   pricePerNight: number;
 }
 
+// --- WP-HB-UI-02: DATE-AWARE ROOM DISCOVERY & HOTEL DETAILS ---
+
+export interface DateAwareNightlyRateDto {
+  date: string;
+  price: number;
+  availableRooms: number;
+  override?: boolean;
+  isOverride?: boolean;
+}
+
+export interface DateAwareRoomTypeDto {
+  id: number;
+  hotelId: number;
+  roomTypeName: string;
+  maxOccupancy: number;
+  basePricePerNight?: number | null;
+  amenities?: string;
+  imageUrl?: string;
+  status: string;
+  availableAcrossStay: boolean;
+  availableRoomsAcrossStay: number;
+  minNightlyPrice?: number | null;
+  totalPriceForStay?: number | null;
+  nightlyBreakdown?: DateAwareNightlyRateDto[];
+}
+
+export interface HotelDetailsResponseDto {
+  hotel: HotelPublicDto;
+  rooms: DateAwareRoomTypeDto[];
+  images?: HotelImage[];
+}
+
+export interface SelectedRoomItem {
+  roomTypeId: number;
+  roomTypeName: string;
+  maxOccupancy: number;
+  quantity: number;
+  minNightlyPrice: number;
+  stayTotalPricePerRoom: number;
+  totalStayPrice: number;
+  imageUrl?: string | null;
+}
+
+export interface HotelStaySummary {
+  hotelId: number;
+  hotelName: string;
+  city: string;
+  propertyType?: string | null;
+  address?: string | null;
+  hotelImageUrl?: string | null;
+  checkIn: string;
+  checkOut: string;
+  totalNights: number;
+  requestedRooms: number;
+  adults: number;
+  children: number;
+  selectedItems: SelectedRoomItem[];
+  totalSelectedRooms: number;
+  estimatedTotalAmount: number;
+}
+
+export type GuestType = 'ADULT' | 'CHILD';
+
+export type GuestGender = 'MALE' | 'FEMALE' | 'OTHER' | 'PREFER_NOT_TO_SAY';
+
+export interface GuestFormEntry {
+  id: string;
+  type: GuestType;
+  name: string;
+  age: number | null;
+  gender: GuestGender | null;
+}
+
+export interface RoomValidationResult {
+  roomKey: string;
+  roomLabel: string;
+  valid: boolean;
+  totalGuests: number;
+  adultCount: number;
+  childCount: number;
+  atMaxCapacity: boolean;
+  roomErrors: string[];
+  guestErrors: Record<string, { name?: string; age?: string; gender?: string }>;
+}
+
+export interface PhysicalRoomAllocation {
+  roomKey: string;
+  roomTypeId: number;
+  roomTypeName: string;
+  roomSequenceOverall: number;
+  roomSequenceInType: number;
+  maxOccupancy: number;
+  nightlyPrice: number;
+  stayTotalPricePerRoom: number;
+  imageUrl?: string | null;
+  expanded: boolean;
+  selectedAddGuestType: GuestType;
+  occupants: GuestFormEntry[];
+}
+
+export interface PersistedGuestEntry {
+  id: string;
+  type: GuestType;
+  name: string;
+  age: number | null;
+  gender: GuestGender | null;
+}
+
+export interface PersistedPhysicalRoomState {
+  roomKey: string;
+  roomTypeId: number;
+  roomSequenceOverall: number;
+  roomSequenceInType: number;
+  selectedAddGuestType: GuestType;
+  occupants: PersistedGuestEntry[];
+}
+
+export interface GuestAllocationJourneyState {
+  staySummary: HotelStaySummary;
+  rooms: PersistedPhysicalRoomState[];
+  activeExpandedRoomKey: string | null;
+  updatedAt: string;
+}
+
+export interface HotelRoomOccupantPayload {
+  name: string;
+  type: GuestType;
+  age: number | null;
+  gender: GuestGender | null;
+}
+
+export interface HotelRoomGuestAllocationPayload {
+  roomSequence: number;
+  adults: number;
+  children: number;
+  occupants: HotelRoomOccupantPayload[];
+}
+
+export interface HotelReservationAllocationItemPayload {
+  roomId: number;
+  quantity: number;
+  rooms: HotelRoomGuestAllocationPayload[];
+}
+
+export interface HotelDetailsCriteria {
+  hotelId: number;
+  city: string;
+  checkIn: string;
+  checkOut: string;
+  rooms: number;
+  adults: number;
+  children: number;
+}
+
+export interface CountryDialCodeOption {
+  code: string;
+  name: string;
+  dialCode: string;
+  minDigits: number;
+  maxDigits: number;
+  pattern: RegExp;
+  placeholder: string;
+  formatHint: string;
+}
+
+export interface PrimaryGuestFormState {
+  fullName: string;
+  email: string;
+  dialCode: string;
+  nationalNumber: string;
+}
+
+export interface PrimaryGuestDtoPayload {
+  fullName: string;
+  email: string;
+  mobile: string;
+}
+
+export interface PrimaryGuestValidationErrors {
+  fullName?: string;
+  email?: string;
+  dialCode?: string;
+  nationalNumber?: string;
+}
+
+export interface PrimaryGuestValidationResult {
+  valid: boolean;
+  errors: PrimaryGuestValidationErrors;
+  payload: PrimaryGuestDtoPayload | null;
+}
+
+export interface ReservationReviewSummaryMetrics {
+  roomTypeRows: Array<{
+    roomTypeId: number;
+    roomTypeName: string;
+    quantity: number;
+    stayTotalPricePerRoom: number;
+    subtotalAmount: number;
+  }>;
+  estimatedTotalAmount: number;
+  pricingConsistent: boolean;
+  totalRooms: number;
+  totalAdults: number;
+  totalChildren: number;
+  totalGuests: number;
+}
+
+export interface ReservationReviewJourneyState {
+  userId?: number | null;
+  staySummary: HotelStaySummary;
+  rooms: PersistedPhysicalRoomState[];
+  primaryGuest: PrimaryGuestFormState;
+  primaryGuestPayload: PrimaryGuestDtoPayload;
+  summaryMetrics: ReservationReviewSummaryMetrics;
+  updatedAt: string;
+}
+
+
+
 

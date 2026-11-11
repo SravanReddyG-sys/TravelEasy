@@ -91,17 +91,20 @@ public class HotelGuestAllocationPersistenceIntegrationTest {
         HotelRoomGuest adult1 = HotelRoomGuest.builder()
                 .guestName("Rakesh Sharma")
                 .guestType(GuestType.ADULT)
-                .age(null) // Adult age remains null
+                .age(35)
+                .gender(com.traveleasy.booking.model.GuestGender.MALE)
                 .build();
         HotelRoomGuest adult2 = HotelRoomGuest.builder()
                 .guestName("Priya Sharma")
                 .guestType(GuestType.ADULT)
-                .age(null)
+                .age(32)
+                .gender(com.traveleasy.booking.model.GuestGender.FEMALE)
                 .build();
         HotelRoomGuest child1 = HotelRoomGuest.builder()
                 .guestName("Aarav Sharma")
                 .guestType(GuestType.CHILD)
-                .age(6) // Child age stored
+                .age(6) // Child age stored, gender remains null
+                .gender(null)
                 .build();
 
         room1.addOccupant(adult1);
@@ -119,7 +122,8 @@ public class HotelGuestAllocationPersistenceIntegrationTest {
         HotelRoomGuest adult3 = HotelRoomGuest.builder()
                 .guestName("Amit Sharma")
                 .guestType(GuestType.ADULT)
-                .age(null)
+                .age(28)
+                .gender(com.traveleasy.booking.model.GuestGender.PREFER_NOT_TO_SAY)
                 .build();
 
         room2.addOccupant(adult3);
@@ -153,11 +157,14 @@ public class HotelGuestAllocationPersistenceIntegrationTest {
         assertEquals(3, occupantsRoom1.size());
         assertEquals("Rakesh Sharma", occupantsRoom1.get(0).getGuestName());
         assertEquals(GuestType.ADULT, occupantsRoom1.get(0).getGuestType());
-        assertNull(occupantsRoom1.get(0).getAge());
+        assertEquals(35, occupantsRoom1.get(0).getAge());
+        assertEquals(com.traveleasy.booking.model.GuestGender.MALE, occupantsRoom1.get(0).getGender());
+        assertEquals(com.traveleasy.booking.model.GuestGender.FEMALE, occupantsRoom1.get(1).getGender());
 
         assertEquals("Aarav Sharma", occupantsRoom1.get(2).getGuestName());
         assertEquals(GuestType.CHILD, occupantsRoom1.get(2).getGuestType());
         assertEquals(6, occupantsRoom1.get(2).getAge());
+        assertNull(occupantsRoom1.get(2).getGender());
 
         // Verify Room 2
         HotelRoomGuestAllocation loadedRoom2 = loadedRooms.get(1);
@@ -170,7 +177,8 @@ public class HotelGuestAllocationPersistenceIntegrationTest {
         assertEquals(1, occupantsRoom2.size());
         assertEquals("Amit Sharma", occupantsRoom2.get(0).getGuestName());
         assertEquals(GuestType.ADULT, occupantsRoom2.get(0).getGuestType());
-        assertNull(occupantsRoom2.get(0).getAge());
+        assertEquals(28, occupantsRoom2.get(0).getAge());
+        assertEquals(com.traveleasy.booking.model.GuestGender.PREFER_NOT_TO_SAY, occupantsRoom2.get(0).getGender());
     }
 
     @Test
@@ -260,6 +268,57 @@ public class HotelGuestAllocationPersistenceIntegrationTest {
         assertTrue(rooms.isEmpty());
 
         // Cleanup
+        reservationSnapshotRepository.delete(saved);
+    }
+
+    @Test
+    @DisplayName("WP-HB-UI-03 Backward Compatibility: Historical adult guest records with null age and null gender remain readable")
+    void testPersistence_BackwardCompatibility_HistoricalAdultNullAgeGenderReadable() {
+        HotelReservationSnapshot legacySnapshot = HotelReservationSnapshot.builder()
+                .bookingId(testBookingId + 3)
+                .bookingRef(testBookingRef + "-LEGACY-ADULT")
+                .hotelId(99L)
+                .hotelName("Heritage Retreat")
+                .primaryGuestName("Legacy Primary")
+                .checkInDate(LocalDate.now().plusDays(15))
+                .checkOutDate(LocalDate.now().plusDays(17))
+                .totalNights(2)
+                .totalAmount(6000.0)
+                .currency("INR")
+                .status("CONFIRMED")
+                .build();
+
+        HotelAllocationSnapshot alloc = HotelAllocationSnapshot.builder()
+                .roomId(402L)
+                .roomTypeName("Classic Room")
+                .quantity(1)
+                .allocationTotal(6000.0)
+                .build();
+
+        HotelRoomGuestAllocation room = HotelRoomGuestAllocation.builder()
+                .roomSequence(1)
+                .adultCount(1)
+                .childCount(0)
+                .build();
+        room.addOccupant(HotelRoomGuest.builder()
+                .guestName("Historical Adult")
+                .guestType(GuestType.ADULT)
+                .age(null)
+                .gender(null)
+                .build());
+        alloc.addRoomAllocation(room);
+        legacySnapshot.addAllocation(alloc);
+
+        HotelReservationSnapshot saved = reservationSnapshotRepository.saveAndFlush(legacySnapshot);
+        List<HotelRoomGuestAllocation> rooms = roomGuestAllocationRepository
+                .findByAllocationSnapshotIdOrderByRoomSequenceAsc(saved.getAllocations().get(0).getId());
+        assertEquals(1, rooms.size());
+        List<HotelRoomGuest> guests = roomGuestRepository.findByRoomGuestAllocationIdOrderByIdAsc(rooms.get(0).getId());
+        assertEquals(1, guests.size());
+        assertEquals("Historical Adult", guests.get(0).getGuestName());
+        assertNull(guests.get(0).getAge());
+        assertNull(guests.get(0).getGender());
+
         reservationSnapshotRepository.delete(saved);
     }
 }

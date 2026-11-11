@@ -4,6 +4,7 @@ import com.traveleasy.booking.dto.PrimaryGuestDto;
 import com.traveleasy.booking.dto.ReservationAllocationItemDto;
 import com.traveleasy.booking.dto.RoomGuestAllocationDto;
 import com.traveleasy.booking.dto.RoomOccupantDto;
+import com.traveleasy.booking.model.GuestGender;
 import com.traveleasy.booking.model.GuestType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +23,15 @@ public class HotelGuestAllocationValidatorTest {
     @BeforeEach
     void setUp() {
         validator = new HotelGuestAllocationValidator();
+    }
+
+    private RoomOccupantDto validAdult(String name) {
+        return RoomOccupantDto.builder()
+                .name(name)
+                .type(GuestType.ADULT)
+                .age(30)
+                .gender(GuestGender.MALE)
+                .build();
     }
 
     // ==========================================
@@ -172,8 +182,8 @@ public class HotelGuestAllocationValidatorTest {
                                 .adults(2)
                                 .children(0)
                                 .occupants(List.of(
-                                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).build(),
-                                        RoomOccupantDto.builder().name("Adult Two").type(GuestType.ADULT).build()
+                                        validAdult("Adult One"),
+                                        validAdult("Adult Two")
                                 ))
                                 .build()
                 ))
@@ -194,8 +204,8 @@ public class HotelGuestAllocationValidatorTest {
                                 .adults(2)
                                 .children(1)
                                 .occupants(List.of(
-                                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).build(),
-                                        RoomOccupantDto.builder().name("Adult Two").type(GuestType.ADULT).build(),
+                                        validAdult("Adult One"),
+                                        validAdult("Adult Two"),
                                         RoomOccupantDto.builder().name("Child One").type(GuestType.CHILD).age(6).build()
                                 ))
                                 .build()
@@ -217,8 +227,8 @@ public class HotelGuestAllocationValidatorTest {
                                 .adults(2)
                                 .children(2)
                                 .occupants(List.of(
-                                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).build(),
-                                        RoomOccupantDto.builder().name("Adult Two").type(GuestType.ADULT).build(),
+                                        validAdult("Adult One"),
+                                        validAdult("Adult Two"),
                                         RoomOccupantDto.builder().name("Child One").type(GuestType.CHILD).age(4).build(),
                                         RoomOccupantDto.builder().name("Child Two").type(GuestType.CHILD).age(8).build()
                                 ))
@@ -296,7 +306,7 @@ public class HotelGuestAllocationValidatorTest {
                                 .adults(1)
                                 .children(1)
                                 .occupants(List.of(
-                                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).build(),
+                                        validAdult("Adult One"),
                                         RoomOccupantDto.builder().name("Infant Child").type(GuestType.CHILD).age(0).build()
                                 ))
                                 .build()
@@ -318,7 +328,7 @@ public class HotelGuestAllocationValidatorTest {
                                 .adults(1)
                                 .children(1)
                                 .occupants(List.of(
-                                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).build(),
+                                        validAdult("Adult One"),
                                         RoomOccupantDto.builder().name("Teen Child").type(GuestType.CHILD).age(17).build()
                                 ))
                                 .build()
@@ -340,7 +350,7 @@ public class HotelGuestAllocationValidatorTest {
                                 .adults(1)
                                 .children(1)
                                 .occupants(List.of(
-                                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).build(),
+                                        validAdult("Adult One"),
                                         RoomOccupantDto.builder().name("Over-age Child").type(GuestType.CHILD).age(18).build()
                                 ))
                                 .build()
@@ -366,7 +376,7 @@ public class HotelGuestAllocationValidatorTest {
                                 .adults(1)
                                 .children(1)
                                 .occupants(List.of(
-                                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).build(),
+                                        validAdult("Adult One"),
                                         RoomOccupantDto.builder().name("No-Age Child").type(GuestType.CHILD).age(null).build()
                                 ))
                                 .build()
@@ -381,8 +391,8 @@ public class HotelGuestAllocationValidatorTest {
     }
 
     @Test
-    @DisplayName("WP-HB-06.1 Children: Adult with omitted age accepted")
-    void testAdultWithOmittedAge_Accepted() {
+    @DisplayName("WP-HB-UI-03 Adults: Missing adult age rejected")
+    void testAdultWithOmittedAge_Rejected() {
         ReservationAllocationItemDto allocation = ReservationAllocationItemDto.builder()
                 .roomId(101L)
                 .quantity(1)
@@ -392,13 +402,17 @@ public class HotelGuestAllocationValidatorTest {
                                 .adults(1)
                                 .children(0)
                                 .occupants(List.of(
-                                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).age(null).build()
+                                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).age(null).gender(GuestGender.MALE).build()
                                 ))
                                 .build()
                 ))
                 .build();
 
-        assertDoesNotThrow(() -> validator.validateRoomAllocation(allocation, 2));
+        GuestAllocationValidationException ex = assertThrows(
+                GuestAllocationValidationException.class,
+                () -> validator.validateRoomAllocation(allocation, 2)
+        );
+        assertTrue(ex.getMessage().contains("Adult age is mandatory for adult occupants"));
     }
 
     // ==========================================
@@ -417,8 +431,8 @@ public class HotelGuestAllocationValidatorTest {
                                 .adults(2)
                                 .children(1)
                                 .occupants(List.of(
-                                        RoomOccupantDto.builder().name("Adult 1").type(GuestType.ADULT).build(),
-                                        RoomOccupantDto.builder().name("Adult 2").type(GuestType.ADULT).build(),
+                                        validAdult("Adult 1"),
+                                        validAdult("Adult 2"),
                                         RoomOccupantDto.builder().name("Child 1").type(GuestType.CHILD).age(10).build()
                                 ))
                                 .build()
@@ -440,7 +454,7 @@ public class HotelGuestAllocationValidatorTest {
                                 .adults(2) // Declared 2 adults
                                 .children(0)
                                 .occupants(List.of(
-                                        RoomOccupantDto.builder().name("Adult 1").type(GuestType.ADULT).build(),
+                                        validAdult("Adult 1"),
                                         RoomOccupantDto.builder().name("Child Mismatched").type(GuestType.CHILD).age(5).build() // Provided 1 adult, 1 child
                                 ))
                                 .build()
@@ -466,7 +480,7 @@ public class HotelGuestAllocationValidatorTest {
                                 .adults(1)
                                 .children(2) // Declared 2 children
                                 .occupants(List.of(
-                                        RoomOccupantDto.builder().name("Adult 1").type(GuestType.ADULT).build(),
+                                        validAdult("Adult 1"),
                                         RoomOccupantDto.builder().name("Child 1").type(GuestType.CHILD).age(5).build() // Only 1 child provided
                                 ))
                                 .build()
@@ -492,7 +506,7 @@ public class HotelGuestAllocationValidatorTest {
                                 .adults(1)
                                 .children(0)
                                 .occupants(List.of(
-                                        RoomOccupantDto.builder().name("   ").type(GuestType.ADULT).build()
+                                        RoomOccupantDto.builder().name("   ").type(GuestType.ADULT).age(25).gender(GuestGender.FEMALE).build()
                                 ))
                                 .build()
                 ))
@@ -543,7 +557,7 @@ public class HotelGuestAllocationValidatorTest {
                                 .roomSequence(1)
                                 .adults(1)
                                 .children(0)
-                                .occupants(List.of(RoomOccupantDto.builder().name("Solo Guest").type(GuestType.ADULT).build()))
+                                .occupants(List.of(validAdult("Solo Guest")))
                                 .build()
                 ))
                 .build();
@@ -563,8 +577,8 @@ public class HotelGuestAllocationValidatorTest {
                                 .adults(2)
                                 .children(0)
                                 .occupants(List.of(
-                                        RoomOccupantDto.builder().name("Guest A1").type(GuestType.ADULT).build(),
-                                        RoomOccupantDto.builder().name("Guest A2").type(GuestType.ADULT).build()
+                                        validAdult("Guest A1"),
+                                        validAdult("Guest A2")
                                 ))
                                 .build(),
                         RoomGuestAllocationDto.builder()
@@ -572,7 +586,7 @@ public class HotelGuestAllocationValidatorTest {
                                 .adults(1)
                                 .children(1)
                                 .occupants(List.of(
-                                        RoomOccupantDto.builder().name("Guest B1").type(GuestType.ADULT).build(),
+                                        validAdult("Guest B1"),
                                         RoomOccupantDto.builder().name("Guest B2").type(GuestType.CHILD).age(7).build()
                                 ))
                                 .build()
@@ -593,13 +607,13 @@ public class HotelGuestAllocationValidatorTest {
                                 .roomSequence(1)
                                 .adults(1)
                                 .children(0)
-                                .occupants(List.of(RoomOccupantDto.builder().name("Guest 1").type(GuestType.ADULT).build()))
+                                .occupants(List.of(validAdult("Guest 1")))
                                 .build(),
                         RoomGuestAllocationDto.builder()
                                 .roomSequence(1) // Duplicate sequence 1!
                                 .adults(1)
                                 .children(0)
-                                .occupants(List.of(RoomOccupantDto.builder().name("Guest 2").type(GuestType.ADULT).build()))
+                                .occupants(List.of(validAdult("Guest 2")))
                                 .build()
                 ))
                 .build();
@@ -622,7 +636,7 @@ public class HotelGuestAllocationValidatorTest {
                                 .roomSequence(1)
                                 .adults(1)
                                 .children(0)
-                                .occupants(List.of(RoomOccupantDto.builder().name("Solo Guest").type(GuestType.ADULT).build()))
+                                .occupants(List.of(validAdult("Solo Guest")))
                                 .build()
                 ))
                 .build();
@@ -632,5 +646,139 @@ public class HotelGuestAllocationValidatorTest {
                 () -> validator.validateRoomAllocation(allocation, 2)
         );
         assertTrue(ex.getMessage().contains("Number of physical-room entries (1) must equal allocation quantity (2)"));
+    }
+
+    // ==========================================
+    // 6. WP-HB-UI-03 GENDER & ADULT AGE TESTS
+    // ==========================================
+
+    @Test
+    @DisplayName("WP-HB-UI-03 Adults: All supported genders (MALE, FEMALE, OTHER, PREFER_NOT_TO_SAY) accepted")
+    void testAllSupportedGenders_Accepted() {
+        for (GuestGender g : GuestGender.values()) {
+            ReservationAllocationItemDto allocation = ReservationAllocationItemDto.builder()
+                    .roomId(101L)
+                    .quantity(1)
+                    .rooms(List.of(
+                            RoomGuestAllocationDto.builder()
+                                    .roomSequence(1)
+                                    .adults(1)
+                                    .children(0)
+                                    .occupants(List.of(
+                                            RoomOccupantDto.builder().name("Adult Guest").type(GuestType.ADULT).age(18).gender(g).build()
+                                    ))
+                                    .build()
+                    ))
+                    .build();
+            assertDoesNotThrow(() -> validator.validateRoomAllocation(allocation, 2), "Gender should be accepted: " + g);
+        }
+    }
+
+    @Test
+    @DisplayName("WP-HB-UI-03 Adults: Adult missing gender rejected with structured detail")
+    void testAdultMissingGender_Rejected() {
+        ReservationAllocationItemDto allocation = ReservationAllocationItemDto.builder()
+                .roomId(101L)
+                .quantity(1)
+                .rooms(List.of(
+                        RoomGuestAllocationDto.builder()
+                                .roomSequence(1)
+                                .adults(1)
+                                .children(0)
+                                .occupants(List.of(
+                                        RoomOccupantDto.builder().name("Rohit Sharma").type(GuestType.ADULT).age(32).gender(null).build()
+                                ))
+                                .build()
+                ))
+                .build();
+
+        GuestAllocationValidationException ex = assertThrows(
+                GuestAllocationValidationException.class,
+                () -> validator.validateRoomAllocation(allocation, 2)
+        );
+        assertTrue(ex.getMessage().contains("Adult gender is mandatory"));
+        assertEquals(1, ex.getErrorDetails().size());
+        assertEquals(1, ex.getErrorDetails().get(0).getRoomSequence());
+        assertEquals(0, ex.getErrorDetails().get(0).getGuestIndex());
+        assertTrue(ex.getErrorDetails().get(0).getField().endsWith(".gender"));
+    }
+
+    @Test
+    @DisplayName("WP-HB-UI-03 Adults: Adult age below 18 (e.g. 17 or negative) rejected")
+    void testAdultUnder18OrNegative_Rejected() {
+        for (int badAge : List.of(17, 0, -5)) {
+            ReservationAllocationItemDto allocation = ReservationAllocationItemDto.builder()
+                    .roomId(101L)
+                    .quantity(1)
+                    .rooms(List.of(
+                            RoomGuestAllocationDto.builder()
+                                    .roomSequence(1)
+                                    .adults(1)
+                                    .children(0)
+                                    .occupants(List.of(
+                                            RoomOccupantDto.builder().name("Young Guest").type(GuestType.ADULT).age(badAge).gender(GuestGender.OTHER).build()
+                                    ))
+                                    .build()
+                    ))
+                    .build();
+
+            GuestAllocationValidationException ex = assertThrows(
+                    GuestAllocationValidationException.class,
+                    () -> validator.validateRoomAllocation(allocation, 2)
+            );
+            assertTrue(ex.getMessage().contains("must be at least 18"));
+        }
+    }
+
+    @Test
+    @DisplayName("WP-HB-UI-03 Children: Child with populated gender rejected")
+    void testChildWithGenderPopulated_Rejected() {
+        ReservationAllocationItemDto allocation = ReservationAllocationItemDto.builder()
+                .roomId(101L)
+                .quantity(1)
+                .rooms(List.of(
+                        RoomGuestAllocationDto.builder()
+                                .roomSequence(1)
+                                .adults(1)
+                                .children(1)
+                                .occupants(List.of(
+                                        validAdult("Parent Guest"),
+                                        RoomOccupantDto.builder().name("Aarav").type(GuestType.CHILD).age(8).gender(GuestGender.MALE).build()
+                                ))
+                                .build()
+                ))
+                .build();
+
+        GuestAllocationValidationException ex = assertThrows(
+                GuestAllocationValidationException.class,
+                () -> validator.validateRoomAllocation(allocation, 3)
+        );
+        assertTrue(ex.getMessage().contains("Gender must not be populated (must be null) for child occupants"));
+    }
+
+    @Test
+    @DisplayName("WP-HB-UI-03 Room Rules: Room with only children and zero adults rejected")
+    void testOnlyChildren_ZeroAdults_Rejected() {
+        ReservationAllocationItemDto allocation = ReservationAllocationItemDto.builder()
+                .roomId(101L)
+                .quantity(1)
+                .rooms(List.of(
+                        RoomGuestAllocationDto.builder()
+                                .roomSequence(1)
+                                .adults(0)
+                                .children(2)
+                                .occupants(List.of(
+                                        RoomOccupantDto.builder().name("Child 1").type(GuestType.CHILD).age(6).build(),
+                                        RoomOccupantDto.builder().name("Child 2").type(GuestType.CHILD).age(9).build()
+                                ))
+                                .build()
+                ))
+                .build();
+
+        GuestAllocationValidationException ex = assertThrows(
+                GuestAllocationValidationException.class,
+                () -> validator.validateRoomAllocation(allocation, 3)
+        );
+        assertTrue(ex.getMessage().contains("At least 1 adult is required per physical room"));
     }
 }

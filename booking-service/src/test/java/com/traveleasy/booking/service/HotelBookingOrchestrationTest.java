@@ -113,8 +113,8 @@ public class HotelBookingOrchestrationTest {
                 .adults(2)
                 .children(0)
                 .occupants(List.of(
-                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).build(),
-                        RoomOccupantDto.builder().name("Adult Two").type(GuestType.ADULT).build()
+                        RoomOccupantDto.builder().name("Adult One").type(GuestType.ADULT).age(32).gender(com.traveleasy.booking.model.GuestGender.MALE).build(),
+                        RoomOccupantDto.builder().name("Adult Two").type(GuestType.ADULT).age(29).gender(com.traveleasy.booking.model.GuestGender.FEMALE).build()
                 ))
                 .build();
 
@@ -123,7 +123,7 @@ public class HotelBookingOrchestrationTest {
                 .adults(1)
                 .children(1)
                 .occupants(List.of(
-                        RoomOccupantDto.builder().name("Adult Three").type(GuestType.ADULT).build(),
+                        RoomOccupantDto.builder().name("Adult Three").type(GuestType.ADULT).age(36).gender(com.traveleasy.booking.model.GuestGender.OTHER).build(),
                         RoomOccupantDto.builder().name("Child One").type(GuestType.CHILD).age(7).build()
                 ))
                 .build();
@@ -139,7 +139,7 @@ public class HotelBookingOrchestrationTest {
                 .adults(1)
                 .children(0)
                 .occupants(List.of(
-                        RoomOccupantDto.builder().name("Adult Four").type(GuestType.ADULT).build()
+                        RoomOccupantDto.builder().name("Adult Four").type(GuestType.ADULT).age(41).gender(com.traveleasy.booking.model.GuestGender.PREFER_NOT_TO_SAY).build()
                 ))
                 .build();
 
@@ -239,6 +239,14 @@ public class HotelBookingOrchestrationTest {
         assertEquals("+919876543210", savedSnapshot.getPrimaryGuestMobile());
         assertEquals(2, savedSnapshot.getAllocations().size());
         assertEquals(2, savedSnapshot.getAllocations().get(0).getRoomAllocations().size());
+        HotelRoomGuest firstPersistedAdult = savedSnapshot.getAllocations().get(0)
+                .getRoomAllocations().get(0).getOccupants().get(0);
+        assertEquals(32, firstPersistedAdult.getAge());
+        assertEquals(com.traveleasy.booking.model.GuestGender.MALE, firstPersistedAdult.getGender());
+        HotelRoomGuest persistedChild = savedSnapshot.getAllocations().get(0)
+                .getRoomAllocations().get(1).getOccupants().get(1);
+        assertEquals(7, persistedChild.getAge());
+        assertNull(persistedChild.getGender());
     }
 
     @Test
@@ -573,5 +581,21 @@ public class HotelBookingOrchestrationTest {
         assertNull(details.getPrimaryGuest(), "Primary guest must be null (not fabricated)");
         assertTrue(details.getAllocations().isEmpty(), "Allocations must be empty for legacy booking");
         assertEquals(4500.0, details.getTotalAmount());
+    }
+
+    @Test
+    @DisplayName("WP-HB-UI-03: Adult missing gender or underage rejected before invoking inventory hold")
+    void testInitiateHotelReservation_InvalidAdultAgeOrGender_RejectedWithoutHold() {
+        HotelReservationInitiationRequest request = buildValidRequest();
+        request.getAllocations().get(0).getRooms().get(0).getOccupants().get(0).setGender(null);
+        request.getAllocations().get(0).getRooms().get(0).getOccupants().get(1).setAge(17);
+
+        GuestAllocationValidationException ex = assertThrows(GuestAllocationValidationException.class, () ->
+                orchestrationService.initiateHotelReservation(request, 99L, "rahul@example.com")
+        );
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertFalse(ex.getErrorDetails().isEmpty());
+        verify(restTemplate, never()).postForEntity(contains("/api/hotels/reservations"), any(), any());
+        verify(snapshotRepository, never()).save(any());
     }
 }

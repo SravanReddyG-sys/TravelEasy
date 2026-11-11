@@ -38,10 +38,19 @@ public class HotelRoomGuest {
     private GuestType guestType;
 
     /**
-     * Child's age (0 to 17); null for adults.
+     * Occupant age: required for ADULT (&gt;= 18) and CHILD (0 to 17).
+     * May be null on historical adult records created prior to WP-HB-UI-03.
      */
     @Column(name = "age")
     private Integer age;
+
+    /**
+     * Adult occupant gender identifier; nullable to support CHILD occupants
+     * and historical reservation records.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "gender", nullable = true, length = 30)
+    private GuestGender gender;
 
     @Builder.Default
     @Column(name = "created_at", nullable = false)

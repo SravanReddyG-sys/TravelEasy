@@ -534,9 +534,10 @@ public class HotelBookingOrchestrationService {
                     if (roomDto.getOccupants() != null) {
                         for (RoomOccupantDto occDto : roomDto.getOccupants()) {
                             HotelRoomGuest occ = HotelRoomGuest.builder()
-                                    .guestName(occDto.getName())
+                                    .guestName(occDto.getName() != null ? occDto.getName().trim() : null)
                                     .guestType(occDto.getType())
-                                    .age(occDto.getType() == GuestType.CHILD ? occDto.getAge() : null)
+                                    .age(occDto.getAge())
+                                    .gender(occDto.getType() == GuestType.ADULT ? occDto.getGender() : null)
                                     .createdAt(LocalDateTime.now())
                                     .updatedAt(LocalDateTime.now())
                                     .build();
@@ -591,39 +592,6 @@ public class HotelBookingOrchestrationService {
         List<HotelReservationInitiationResponse.AllocationSnapshotDto> allocDtos = new ArrayList<>();
         if (snapshot.getAllocations() != null) {
             for (HotelAllocationSnapshot a : snapshot.getAllocations()) {
-                List<RoomGuestAllocationDto> roomDtos = new ArrayList<>();
-                List<HotelRoomGuestAllocation> rAllocs = a.getRoomAllocations();
-                if ((rAllocs == null || rAllocs.isEmpty()) && a.getId() != null && roomAllocationRepository != null) {
-                    rAllocs = roomAllocationRepository.findByAllocationSnapshotIdOrderByRoomSequenceAsc(a.getId());
-                }
-
-                if (rAllocs != null) {
-                    for (HotelRoomGuestAllocation r : rAllocs) {
-                        List<RoomOccupantDto> occDtos = new ArrayList<>();
-                        List<HotelRoomGuest> occupants = r.getOccupants();
-                        if ((occupants == null || occupants.isEmpty()) && r.getId() != null && guestRepository != null) {
-                            occupants = guestRepository.findByRoomGuestAllocationIdOrderByIdAsc(r.getId());
-                        }
-
-                        if (occupants != null) {
-                            for (HotelRoomGuest occ : occupants) {
-                                occDtos.add(RoomOccupantDto.builder()
-                                        .name(occ.getGuestName())
-                                        .type(occ.getGuestType())
-                                        .age(occ.getAge())
-                                        .build());
-                            }
-                        }
-
-                        roomDtos.add(RoomGuestAllocationDto.builder()
-                                .roomSequence(r.getRoomSequence())
-                                .adults(r.getAdultCount())
-                                .children(r.getChildCount())
-                                .occupants(occDtos)
-                                .build());
-                    }
-                }
-
                 allocDtos.add(HotelReservationInitiationResponse.AllocationSnapshotDto.builder()
                         .allocationId(a.getId())
                         .roomId(a.getRoomId())
@@ -632,7 +600,7 @@ public class HotelBookingOrchestrationService {
                         .allocationTotal(a.getAllocationTotal())
                         .nightlyRatesJson(a.getNightlyRatesJson())
                         .status(a.getStatus())
-                        .rooms(roomDtos)
+                        .rooms(extractRoomGuestAllocations(a))
                         .build());
             }
         }
@@ -655,6 +623,43 @@ public class HotelBookingOrchestrationService {
                 .build();
     }
 
+    private List<RoomGuestAllocationDto> extractRoomGuestAllocations(HotelAllocationSnapshot a) {
+        List<RoomGuestAllocationDto> roomDtos = new ArrayList<>();
+        List<HotelRoomGuestAllocation> rAllocs = a.getRoomAllocations();
+        if ((rAllocs == null || rAllocs.isEmpty()) && a.getId() != null && roomAllocationRepository != null) {
+            rAllocs = roomAllocationRepository.findByAllocationSnapshotIdOrderByRoomSequenceAsc(a.getId());
+        }
+
+        if (rAllocs != null) {
+            for (HotelRoomGuestAllocation r : rAllocs) {
+                List<RoomOccupantDto> occDtos = new ArrayList<>();
+                List<HotelRoomGuest> occupants = r.getOccupants();
+                if ((occupants == null || occupants.isEmpty()) && r.getId() != null && guestRepository != null) {
+                    occupants = guestRepository.findByRoomGuestAllocationIdOrderByIdAsc(r.getId());
+                }
+
+                if (occupants != null) {
+                    for (HotelRoomGuest occ : occupants) {
+                        occDtos.add(RoomOccupantDto.builder()
+                                .name(occ.getGuestName())
+                                .type(occ.getGuestType())
+                                .age(occ.getAge())
+                                .gender(occ.getGender())
+                                .build());
+                    }
+                }
+
+                roomDtos.add(RoomGuestAllocationDto.builder()
+                        .roomSequence(r.getRoomSequence())
+                        .adults(r.getAdultCount())
+                        .children(r.getChildCount())
+                        .occupants(occDtos)
+                        .build());
+            }
+        }
+        return roomDtos;
+    }
+
     private HotelReservationDetailResponse mapSnapshotToDetailResponse(
             Booking booking, HotelReservationSnapshot snapshot) {
 
@@ -675,45 +680,12 @@ public class HotelBookingOrchestrationService {
 
         if (allocSnapshots != null) {
             for (HotelAllocationSnapshot a : allocSnapshots) {
-                List<RoomGuestAllocationDto> roomDtos = new ArrayList<>();
-                List<HotelRoomGuestAllocation> rAllocs = a.getRoomAllocations();
-                if ((rAllocs == null || rAllocs.isEmpty()) && a.getId() != null && roomAllocationRepository != null) {
-                    rAllocs = roomAllocationRepository.findByAllocationSnapshotIdOrderByRoomSequenceAsc(a.getId());
-                }
-
-                if (rAllocs != null) {
-                    for (HotelRoomGuestAllocation r : rAllocs) {
-                        List<RoomOccupantDto> occDtos = new ArrayList<>();
-                        List<HotelRoomGuest> occupants = r.getOccupants();
-                        if ((occupants == null || occupants.isEmpty()) && r.getId() != null && guestRepository != null) {
-                            occupants = guestRepository.findByRoomGuestAllocationIdOrderByIdAsc(r.getId());
-                        }
-
-                        if (occupants != null) {
-                            for (HotelRoomGuest occ : occupants) {
-                                occDtos.add(RoomOccupantDto.builder()
-                                        .name(occ.getGuestName())
-                                        .type(occ.getGuestType())
-                                        .age(occ.getAge())
-                                        .build());
-                            }
-                        }
-
-                        roomDtos.add(RoomGuestAllocationDto.builder()
-                                .roomSequence(r.getRoomSequence())
-                                .adults(r.getAdultCount())
-                                .children(r.getChildCount())
-                                .occupants(occDtos)
-                                .build());
-                    }
-                }
-
                 allocDtos.add(HotelReservationDetailResponse.AllocationDetailDto.builder()
                         .allocationId(a.getId())
                         .roomId(a.getRoomId())
                         .roomTypeName(a.getRoomTypeName())
                         .quantity(a.getQuantity())
-                        .rooms(roomDtos)
+                        .rooms(extractRoomGuestAllocations(a))
                         .pricing(HotelReservationDetailResponse.AllocationPricingDto.builder()
                                 .allocationTotal(a.getAllocationTotal())
                                 .nightlyRatesJson(a.getNightlyRatesJson())

@@ -103,8 +103,8 @@ public class HotelReservationEndToEndIntegrationTest {
                 .adults(2)
                 .children(1)
                 .occupants(List.of(
-                        RoomOccupantDto.builder().name("Primary Guest").type(GuestType.ADULT).build(),
-                        RoomOccupantDto.builder().name("Adult Companion").type(GuestType.ADULT).build(),
+                        RoomOccupantDto.builder().name("Primary Guest").type(GuestType.ADULT).age(34).gender(com.traveleasy.booking.model.GuestGender.MALE).build(),
+                        RoomOccupantDto.builder().name("Adult Companion").type(GuestType.ADULT).age(31).gender(com.traveleasy.booking.model.GuestGender.FEMALE).build(),
                         RoomOccupantDto.builder().name("Child One").type(GuestType.CHILD).age(6).build()
                 ))
                 .build();
@@ -114,7 +114,7 @@ public class HotelReservationEndToEndIntegrationTest {
                 .adults(1)
                 .children(0)
                 .occupants(List.of(
-                        RoomOccupantDto.builder().name("Solo Adult").type(GuestType.ADULT).build()
+                        RoomOccupantDto.builder().name("Solo Adult").type(GuestType.ADULT).age(40).gender(com.traveleasy.booking.model.GuestGender.OTHER).build()
                 ))
                 .build();
 
@@ -129,8 +129,8 @@ public class HotelReservationEndToEndIntegrationTest {
                 .adults(2)
                 .children(0)
                 .occupants(List.of(
-                        RoomOccupantDto.builder().name("Guest A").type(GuestType.ADULT).build(),
-                        RoomOccupantDto.builder().name("Guest B").type(GuestType.ADULT).build()
+                        RoomOccupantDto.builder().name("Guest A").type(GuestType.ADULT).age(28).gender(com.traveleasy.booking.model.GuestGender.FEMALE).build(),
+                        RoomOccupantDto.builder().name("Guest B").type(GuestType.ADULT).age(30).gender(com.traveleasy.booking.model.GuestGender.PREFER_NOT_TO_SAY).build()
                 ))
                 .build();
 
@@ -230,9 +230,13 @@ public class HotelReservationEndToEndIntegrationTest {
         List<HotelRoomGuest> occupantsRoom1 = guestRepository
                 .findByRoomGuestAllocationIdOrderByIdAsc(rooms1.get(0).getId());
         assertEquals(3, occupantsRoom1.size());
+        assertEquals("Primary Guest", occupantsRoom1.get(0).getGuestName());
+        assertEquals(34, occupantsRoom1.get(0).getAge());
+        assertEquals(com.traveleasy.booking.model.GuestGender.MALE, occupantsRoom1.get(0).getGender());
         assertEquals("Child One", occupantsRoom1.get(2).getGuestName());
         assertEquals(GuestType.CHILD, occupantsRoom1.get(2).getGuestType());
         assertEquals(6, occupantsRoom1.get(2).getAge());
+        assertNull(occupantsRoom1.get(2).getGender());
 
         // 3. Verify Detail Retrieval API by Authorized Traveller
         HotelReservationDetailResponse details = orchestrationService.getReservationDetails(
@@ -399,5 +403,25 @@ public class HotelReservationEndToEndIntegrationTest {
         assertEquals(2, response.getTotalNights());
         assertNull(response.getPrimaryGuest());
         assertTrue(response.getAllocations().isEmpty());
+    }
+
+    @Test
+    @DisplayName("WP-HB-UI-03 E2E: Missing adult gender or underage adult fails validation without persisting booking")
+    void testInitiation_MissingAdultGenderOrUnderage_RejectedWithoutPersisting() {
+        mockRoomCapacity(201L, 501L, "ACTIVE", 3);
+        mockRoomCapacity(202L, 501L, "ACTIVE", 2);
+
+        HotelReservationInitiationRequest request = buildMultiRoomRequest();
+        request.getAllocations().get(0).getRooms().get(0).getOccupants().get(0).setGender(null);
+        request.getAllocations().get(0).getRooms().get(0).getOccupants().get(1).setAge(17);
+
+        com.traveleasy.booking.validator.GuestAllocationValidationException ex = assertThrows(
+                com.traveleasy.booking.validator.GuestAllocationValidationException.class,
+                () -> orchestrationService.initiateHotelReservation(request, 99L, "vikram@example.com")
+        );
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+        assertFalse(ex.getErrorDetails().isEmpty());
+        assertFalse(bookingRepository.findByBookingRef(request.getBookingRef()).isPresent());
+        verify(restTemplate, never()).postForEntity(contains("/api/hotels/reservations"), any(), any());
     }
 }
