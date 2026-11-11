@@ -36,6 +36,7 @@ import { HotelResultCardComponent } from '../../features/traveller/hotel-booking
 import { HotelDetailsPageComponent } from '../../features/traveller/hotel-booking/components/hotel-details-page/hotel-details-page.component';
 import { GuestAllocationPageComponent } from '../../features/traveller/hotel-booking/components/guest-allocation-page/guest-allocation-page.component';
 import { ReservationReviewPageComponent } from '../../features/traveller/hotel-booking/components/reservation-review-page/reservation-review-page.component';
+import { HotelPaymentCheckoutPageComponent } from '../../features/traveller/hotel-booking/components/hotel-payment-checkout-page/hotel-payment-checkout-page.component';
 import {
   buildPhysicalRoomsFromStaySummary,
   formatGenderLabel,
@@ -71,6 +72,7 @@ export { Destination, DestinationAttraction };
     HotelDetailsPageComponent,
     GuestAllocationPageComponent,
     ReservationReviewPageComponent,
+    HotelPaymentCheckoutPageComponent,
     MyBookingsListComponent,
     BookingDetailsModalComponent
   ],
@@ -520,52 +522,21 @@ export { Destination, DestinationAttraction };
               (proceedToPayment)="onProceedToHotelPayment($event)"
             ></app-reservation-review-page>
 
-            <!-- STAGE 5 ENTRY PLACEHOLDER: WP-HB-UI-05 Payment Checkout -->
-            <div
+            <!-- STAGE 5: Hotel Reservation Payment Checkout (WP-HB-UI-05) -->
+            <app-hotel-payment-checkout-page
               *ngIf="hotelBookingStage === 'payment-entry'"
-              class="hotel-payment-entry bg-white rounded-4 border shadow-sm p-4 p-md-5"
-              data-testid="payment-entry-placeholder"
-            >
-              <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 pb-3 border-bottom">
-                <div>
-                  <span class="badge rounded-pill px-3 py-2 mb-2" style="background-color: #ECFEFF; color: #0E7490;">
-                    <i class="fa-solid fa-circle-check me-1"></i> Reservation Review Validated
-                  </span>
-                  <h2 class="h4 fw-bold text-navy mb-1">Payment Checkout (WP-HB-UI-05 Entry)</h2>
-                  <p class="text-muted small mb-0" *ngIf="guestAllocationSummary">
-                    {{ guestAllocationSummary.hotelName }} &bull; {{ guestAllocationSummary.totalSelectedRooms }}
-                    {{ guestAllocationSummary.totalSelectedRooms === 1 ? 'room' : 'rooms' }} ready for reservation initiation &amp; payment.
-                  </p>
-                </div>
-                <div *ngIf="guestAllocationSummary" class="text-end">
-                  <div class="text-muted small">Estimated Stay Total</div>
-                  <div class="fs-4 fw-bold text-navy">₹{{ guestAllocationSummary.estimatedTotalAmount | number:'1.0-0' }}</div>
-                </div>
-              </div>
-
-              <div *ngIf="validatedPrimaryGuest" class="rounded-3 border bg-light p-3 mb-4">
-                <div class="fw-bold text-navy small mb-1">Primary Guest (Booking Contact)</div>
-                <div class="small text-secondary">
-                  <strong class="text-navy">{{ validatedPrimaryGuest.fullName }}</strong>
-                  &bull; {{ validatedPrimaryGuest.email }}
-                  &bull; {{ validatedPrimaryGuest.mobile }}
-                </div>
-              </div>
-
-              <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  class="btn btn-outline-secondary rounded-3 px-4 py-2 fw-semibold"
-                  (click)="onBackFromPaymentEntry()"
-                  data-testid="back-to-reservation-review"
-                >
-                  <i class="fa-solid fa-arrow-left me-2"></i>Back to Reservation Review
-                </button>
-                <span class="text-muted small">
-                  Reservation initiation, room inventory hold &amp; Razorpay payment will be implemented in WP-HB-UI-05.
-                </span>
-              </div>
-            </div>
+              [staySummary]="guestAllocationSummary"
+              [allocatedRooms]="validatedGuestRooms"
+              [primaryGuest]="validatedPrimaryGuest"
+              [currentUser]="currentUser"
+              [requestedHotelId]="selectedHotelId"
+              [initiationToken]="hotelPaymentInitiationToken"
+              (backToReview)="onBackFromPaymentEntry()"
+              (backToSearch)="onHotelPaymentBackToSearch()"
+              (backToHotelDetails)="onHotelPaymentBackToDetails($event)"
+              (viewMyBookings)="onHotelPaymentViewMyBookings()"
+              (reservationConfirmed)="onHotelReservationConfirmed()"
+            ></app-hotel-payment-checkout-page>
 
             <!-- STAGE 2: Hotel Details & Date-Aware Room Discovery -->
             <app-hotel-details-page
@@ -1336,6 +1307,7 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
   selectedHotel: any = null;
   selectedHotelId: number | null = null;
   hotelBookingStage: 'search' | 'details' | 'guests' | 'review-entry' | 'payment-entry' = 'search';
+  hotelPaymentInitiationToken = 0;
   guestAllocationSummary: HotelStaySummary | null = null;
   validatedGuestRooms: PhysicalRoomAllocation[] = [];
   validatedPrimaryGuest: PrimaryGuestDtoPayload | null = null;
@@ -3148,6 +3120,7 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
     this.validatedPrimaryGuest = event.primaryGuest;
     this.validatedReviewSummaryMetrics = event.summaryMetrics;
     this.selectedHotelId = event.staySummary.hotelId;
+    this.hotelPaymentInitiationToken += 1;
     this.hotelBookingStage = 'payment-entry';
 
     this.router.navigate(['/customer/hotels', event.staySummary.hotelId, 'payment'], {
@@ -3158,6 +3131,49 @@ export class CustomerDashboardComponent implements OnInit, OnDestroy {
         rooms: event.staySummary.requestedRooms || this.hotelRoomsCount,
         adults: event.staySummary.adults || this.hotelAdultsCount,
         children: event.staySummary.children ?? this.hotelChildrenCount
+      }
+    });
+  }
+
+  onHotelReservationConfirmed() {
+    this.loadMyBookings();
+    this.loadDashboardData();
+  }
+
+  onHotelPaymentViewMyBookings() {
+    this.loadMyBookings();
+    this.switchTab('my-bookings');
+  }
+
+  onHotelPaymentBackToSearch() {
+    const summary = this.guestAllocationSummary || loadStaySummaryFromSession();
+    this.selectedHotelId = null;
+    this.hotelBookingStage = 'search';
+    this.router.navigate(['/customer/hotels'], {
+      queryParams: {
+        city: summary?.city || this.hotelCity,
+        checkIn: summary?.checkIn || this.checkInDate,
+        checkOut: summary?.checkOut || this.checkOutDate,
+        rooms: summary?.requestedRooms || this.hotelRoomsCount,
+        adults: summary?.adults || this.hotelAdultsCount,
+        children: summary?.children ?? this.hotelChildrenCount
+      }
+    });
+  }
+
+  onHotelPaymentBackToDetails(hotelId: number) {
+    const summary = this.guestAllocationSummary || loadStaySummaryFromSession();
+    this.selectedHotelId = hotelId;
+    this.hotelBookingStage = 'details';
+    this.router.navigate(['/customer/hotels'], {
+      queryParams: {
+        hotelId,
+        city: summary?.city || this.hotelCity,
+        checkIn: summary?.checkIn || this.checkInDate,
+        checkOut: summary?.checkOut || this.checkOutDate,
+        rooms: summary?.requestedRooms || this.hotelRoomsCount,
+        adults: summary?.adults || this.hotelAdultsCount,
+        children: summary?.children ?? this.hotelChildrenCount
       }
     });
   }

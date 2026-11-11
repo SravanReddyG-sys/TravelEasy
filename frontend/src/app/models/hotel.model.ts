@@ -478,6 +478,196 @@ export interface ReservationReviewJourneyState {
   updatedAt: string;
 }
 
+export interface HotelReservationInitiationRequest {
+  bookingRef?: string;
+  customerId?: number;
+  customerName?: string;
+  customerEmail?: string;
+  primaryGuest: PrimaryGuestDtoPayload;
+  hotelId: number;
+  hotelName?: string;
+  checkInDate: string;
+  checkOutDate: string;
+  allocations: HotelReservationAllocationItemPayload[];
+  guestDetailsJson?: string;
+}
+
+export interface HotelReservationAllocationSnapshotDto {
+  allocationId: number;
+  roomId: number;
+  roomTypeName: string;
+  quantity: number;
+  allocationTotal: number;
+  nightlyRatesJson?: string | null;
+  status: string;
+  rooms: HotelRoomGuestAllocationPayload[];
+}
+
+export interface HotelReservationInitiationResponse {
+  bookingId: number;
+  bookingRef: string;
+  status: string;
+  totalAmount: number;
+  currency: string;
+  expiresAt: string;
+  hotelId: number;
+  hotelName: string;
+  checkInDate: string;
+  checkOutDate: string;
+  totalNights: number;
+  idempotent?: boolean;
+  primaryGuest?: PrimaryGuestDtoPayload | null;
+  allocations?: HotelReservationAllocationSnapshotDto[];
+}
+
+export interface HotelReservationDetailResponse {
+  bookingId: number;
+  bookingRef: string;
+  bookingStatus: string;
+  hotel?: {
+    hotelId?: number | null;
+    hotelName?: string | null;
+  } | null;
+  checkInDate?: string | null;
+  checkOutDate?: string | null;
+  totalNights?: number | null;
+  primaryGuest?: PrimaryGuestDtoPayload | null;
+  allocations?: Array<{
+    allocationId: number;
+    roomId: number;
+    roomTypeName: string;
+    quantity: number;
+    rooms: HotelRoomGuestAllocationPayload[];
+    pricing?: {
+      allocationTotal?: number;
+      nightlyRatesJson?: string | null;
+    } | null;
+    status?: string;
+    guestAllocationJson?: string | null;
+  }>;
+  totalAmount: number;
+  currency: string;
+  paymentStatus?: string;
+  expiresAt?: string | null;
+  bookingDate?: string | null;
+  cancellation?: {
+    cancelled?: boolean;
+    cancelledAt?: string | null;
+    cancellationReason?: string | null;
+    refundAmount?: number | null;
+    refundStatus?: string | null;
+  } | null;
+}
+
+export interface PaymentConfigResponse {
+  keyId: string;
+  currency: string;
+}
+
+export interface PaymentCreateOrderRequest {
+  bookingRef: string;
+  amount: number;
+  customerId?: number;
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  paymentMethod?: string;
+}
+
+export interface PaymentCreateOrderResponse {
+  orderId: string;
+  transactionRef: string;
+  bookingRef: string;
+  amount: number;
+  amountInPaise: number;
+  currency: string;
+  keyId: string;
+  status: string;
+}
+
+export interface VerifyPaymentRequest {
+  bookingRef: string;
+  razorpayOrderId: string;
+  razorpayPaymentId: string;
+  razorpaySignature: string;
+}
+
+export interface PaymentTransactionDto {
+  id?: number;
+  transactionRef?: string;
+  bookingRef?: string;
+  customerId?: number;
+  amount?: number;
+  currency?: string;
+  paymentMethod?: string;
+  status?: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  refundId?: string | null;
+  refundStatus?: string | null;
+  refundAmount?: number | null;
+  refundedAt?: string | null;
+  errorCode?: string | null;
+  errorDescription?: string | null;
+  timestamp?: string | null;
+}
+
+export interface PaymentVerificationResponse {
+  verified: boolean;
+  message: string;
+  bookingRef: string;
+  transactionRef?: string | null;
+  paymentId?: string | null;
+  status?: string | null;
+  transaction?: PaymentTransactionDto | null;
+}
+
+export interface HotelPaymentCheckoutSessionState {
+  userId?: number | null;
+  bookingRef: string;
+  hotelId: number;
+  staySignature: string;
+  allocationsSignature: string;
+  lastKnownOrderId?: string | null;
+  updatedAt: string;
+}
+
+export interface HotelActiveReservation {
+  bookingId: number;
+  bookingRef: string;
+  bookingStatus: string;
+  totalAmount: number;
+  currency: string;
+  expiresAt: string | null;
+  hotelId: number;
+  hotelName: string;
+  checkInDate: string;
+  checkOutDate: string;
+  totalNights: number;
+  paymentStatus?: string | null;
+  primaryGuest?: PrimaryGuestDtoPayload | null;
+  allocationsSummary: Array<{
+    roomId: number;
+    roomTypeName: string;
+    quantity: number;
+    adultsCount?: number | null;
+    childrenCount?: number | null;
+  }>;
+  cancellation?: HotelReservationDetailResponse['cancellation'];
+}
+
+export type HotelPaymentUiState =
+  | 'INITIATING'
+  | 'INITIATION_FAILED'
+  | 'PENDING_PAYMENT'
+  | 'PROCESSING'
+  | 'CONFIRMED'
+  | 'PAYMENT_FAILED'
+  | 'EXPIRED'
+  | 'REFUND_INITIATED'
+  | 'CONFIRMATION_PENDING';
+
+
 
 
 

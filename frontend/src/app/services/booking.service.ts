@@ -137,6 +137,25 @@ export class BookingService {
   getHotelRevenueSummary(request: { hotelId?: number; bookingRefs?: string[]; startDate: string; endDate: string }): Observable<HotelRevenueReportResponse> {
     return this.http.post<HotelRevenueReportResponse>(`${this.apiUrl}/payments/hotel/revenue-summary`, request);
   }
+
+  /** Initiates an idempotent hotel reservation with inventory hold and guest allocations (WP-HB-06 / WP-HB-UI-05). */
+  initiateHotelReservation(
+    request: import('../models/hotel.model').HotelReservationInitiationRequest
+  ): Observable<import('../models/hotel.model').HotelReservationInitiationResponse> {
+    return this.http.post<import('../models/hotel.model').HotelReservationInitiationResponse>(
+      `${this.apiUrl}/bookings/hotel-reservations`,
+      request
+    );
+  }
+
+  /** Fetches authoritative hotel reservation details, pricing snapshot, and lifecycle status by bookingRef. */
+  getHotelReservationDetails(
+    bookingRef: string
+  ): Observable<import('../models/hotel.model').HotelReservationDetailResponse> {
+    return this.http.get<import('../models/hotel.model').HotelReservationDetailResponse>(
+      `${this.apiUrl}/bookings/ref/${encodeURIComponent(bookingRef)}/hotel-reservation-details`
+    );
+  }
 }
 
 
