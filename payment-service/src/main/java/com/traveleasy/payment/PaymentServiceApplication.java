@@ -2,6 +2,7 @@ package com.traveleasy.payment;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.io.BufferedReader;
 import java.nio.file.Files;
@@ -9,14 +10,15 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 @SpringBootApplication
+@EnableScheduling
 public class PaymentServiceApplication {
 
     public static void main(String[] args) {
-        loadDotEnvIfPresent();
+        loadDotEnv();
         SpringApplication.run(PaymentServiceApplication.class, args);
     }
 
-    public static void loadDotEnvIfPresent() {
+    private static void loadDotEnv() {
         String[] possiblePaths = {".env", "../.env", "../../.env"};
         for (String p : possiblePaths) {
             Path path = Paths.get(p);
@@ -25,19 +27,26 @@ public class PaymentServiceApplication {
                     String line;
                     while ((line = reader.readLine()) != null) {
                         line = line.trim();
-                        if (line.isEmpty() || line.startsWith("#") || !line.contains("=")) {
+                        if (line.isEmpty() || line.startsWith("#")) {
                             continue;
                         }
-                        int idx = line.indexOf('=');
-                        String key = line.substring(0, idx).trim();
-                        String val = line.substring(idx + 1).trim();
-                        if (System.getenv(key) == null && System.getProperty(key) == null) {
-                            System.setProperty(key, val);
+                        int eqIdx = line.indexOf('=');
+                        if (eqIdx > 0) {
+                            String key = line.substring(0, eqIdx).trim();
+                            String value = line.substring(eqIdx + 1).trim();
+                            if (value.startsWith("\"") && value.endsWith("\"") && value.length() >= 2) {
+                                value = value.substring(1, value.length() - 1);
+                            } else if (value.startsWith("'") && value.endsWith("'") && value.length() >= 2) {
+                                value = value.substring(1, value.length() - 1);
+                            }
+                            if (System.getProperty(key) == null && System.getenv(key) == null) {
+                                System.setProperty(key, value);
+                            }
                         }
                     }
+                    break;
                 } catch (Exception ignored) {
                 }
-                break;
             }
         }
     }

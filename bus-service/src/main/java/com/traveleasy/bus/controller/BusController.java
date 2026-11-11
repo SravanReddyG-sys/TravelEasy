@@ -28,6 +28,7 @@ import com.traveleasy.bus.repository.SeatRepository;
 
 import com.traveleasy.bus.service.SeatLayoutService;
 import com.traveleasy.bus.service.ScheduleService;
+import com.traveleasy.bus.service.BusStateTransitionService;
 import com.traveleasy.bus.security.BusSecurityService;
 
 import lombok.RequiredArgsConstructor;
@@ -94,6 +95,7 @@ public class BusController {
     private final com.traveleasy.bus.repository.RoutePointRepository routePointRepository;
     private final BusImageStorageService imageStorageService;
     private final BusValidationService validationService;
+    private final BusStateTransitionService busStateTransitionService;
 
 
 
@@ -712,51 +714,27 @@ public class BusController {
                     .body(Map.of("message", "Access denied: Missing or invalid user identity in token"));
         }
 
-        Bus bus = busRepository.findById(id).orElse(null);
-        if (bus == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("message", "Bus not found with id: " + id));
-        }
-
-        // TEST-03: Bus Ownership Enforcement
-        if (isOperator && (bus.getOperatorId() == null || !bus.getOperatorId().equals(callerUserId))) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "You do not have permission to modify this bus."));
-        }
-
-        // TEST-04: Deactivation Guard on Future Trips
-        LocalDate today = LocalDate.now();
-        java.time.LocalTime now = java.time.LocalTime.now();
-        List<BusSchedule> candidates = scheduleRepository.findActiveUpcomingSchedulesByBusId(id, today);
-        List<BusSchedule> activeUpcoming = candidates.stream().filter(s -> {
-            if (s.getTravelDate().isAfter(today)) {
-                return true;
-            }
-            if (s.getTravelDate().isEqual(today)) {
-                if (s.getDepartureTime() != null) {
-                    try {
-                        java.time.LocalTime depTime = java.time.LocalTime.parse(s.getDepartureTime());
-                        return depTime.isAfter(now);
-                    } catch (Exception e) {
-                        return true;
+        String callerEmail = securityService.extractEmail(token);
+        try {
+            Bus saved = busStateTransitionService.deactivateBus(id, "Deactivated by operator/admin", callerUserId, callerEmail, isAdmin);
+            return ResponseEntity.ok(saved);
+        } catch (org.springframework.web.server.ResponseStatusException rse) {
+            if (rse.getStatusCode() == HttpStatus.CONFLICT) {
+                String msg = rse.getReason();
+                int count = 1;
+                try {
+                    String[] parts = msg.split(" ");
+                    if (parts.length >= 4) {
+                        count = Integer.parseInt(parts[3]);
                     }
-                }
-                return true;
+                } catch (Exception ignored) {}
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                        "message", msg,
+                        "activeDeparturesCount", count
+                ));
             }
-            return false;
-        }).toList();
-
-        if (!activeUpcoming.isEmpty()) {
-            int count = activeUpcoming.size();
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
-                    "message", "Cannot deactivate bus: " + count + (count == 1 ? " active upcoming departure exists." : " active upcoming departures exist."),
-                    "activeDeparturesCount", count
-            ));
+            return ResponseEntity.status(rse.getStatusCode()).body(Map.of("message", rse.getReason()));
         }
-
-        bus.setStatus("INACTIVE");
-        Bus saved = busRepository.save(bus);
-        return ResponseEntity.ok(saved);
     }
 
     @PutMapping("/{id}/activate")
@@ -794,20 +772,13 @@ public class BusController {
                     .body(Map.of("message", "Access denied: Missing or invalid user identity in token"));
         }
 
-        Bus bus = busRepository.findById(id).orElse(null);
-        if (bus == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("message", "Bus not found with id: " + id));
+        String callerEmail = securityService.extractEmail(token);
+        try {
+            Bus saved = busStateTransitionService.activateBus(id, callerUserId, callerEmail, isAdmin);
+            return ResponseEntity.ok(saved);
+        } catch (org.springframework.web.server.ResponseStatusException rse) {
+            return ResponseEntity.status(rse.getStatusCode()).body(Map.of("message", rse.getReason()));
         }
-
-        if (isOperator && (bus.getOperatorId() == null || !bus.getOperatorId().equals(callerUserId))) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("message", "You do not have permission to modify this bus."));
-        }
-
-        bus.setStatus("ACTIVE");
-        Bus saved = busRepository.save(bus);
-        return ResponseEntity.ok(saved);
     }
 
     // ==================== TRIP SCHEDULE & SEAT INVENTORY ====================
@@ -886,7 +857,8 @@ public class BusController {
                     .body(Map.of("message", "Access denied: Missing or invalid user identity in token"));
         }
 
-        BusSchedule savedSchedule = scheduleService.createSchedule(callerUserId, isAdmin, schedule);
+        String callerEmail = securityService.extractEmail(token);
+        BusSchedule savedSchedule = scheduleService.createSchedule(callerUserId, callerEmail, isAdmin, schedule);
         return ResponseEntity.status(HttpStatus.CREATED).body(savedSchedule);
     }
 
@@ -1175,7 +1147,6 @@ public class BusController {
         ));
     }
 
-    @Transactional
     @PutMapping("/schedules/{scheduleId}/status")
     public ResponseEntity<?> updateScheduleStatus(
             @PathVariable Long scheduleId,
@@ -1183,13 +1154,11 @@ public class BusController {
             @RequestHeader(value = "Authorization", required = false) String authHeader,
             @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
 
-        BusSchedule schedule = scheduleRepository.findByIdWithLock(scheduleId).orElse(null);
-        if (schedule == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("message", "Schedule not found with id: " + scheduleId));
-        }
-
         boolean isInternal = "booking-service".equalsIgnoreCase(internalService);
+        Long callerUserId = null;
+        String callerEmail = null;
+        boolean isAdmin = false;
+
         if (!isInternal) {
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -1201,37 +1170,32 @@ public class BusController {
                         .body(Map.of("message", "Invalid or expired authorization token"));
             }
             String callerRole = securityService.extractRole(token);
-            boolean isAdmin = "ROLE_ADMIN".equalsIgnoreCase(callerRole);
+            isAdmin = "ROLE_ADMIN".equalsIgnoreCase(callerRole);
             boolean isOperator = "ROLE_BUS_OPERATOR".equalsIgnoreCase(callerRole);
             if (!isAdmin && !isOperator) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body(Map.of("message", "Access denied: Bus Operator or Admin role required"));
             }
-            Long callerUserId = securityService.extractUserId(token);
+            callerUserId = securityService.extractUserId(token);
             if (callerUserId == null || callerUserId <= 0) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body(Map.of("message", "Access denied: Missing or invalid user identity in token"));
             }
-            if (isOperator) {
-                Long ownerId = schedule.getOperatorId();
-                if (ownerId == null && schedule.getBusId() != null) {
-                    Bus bus = busRepository.findById(schedule.getBusId()).orElse(null);
-                    if (bus != null) ownerId = bus.getOperatorId();
-                }
-                if (ownerId == null || !ownerId.equals(callerUserId)) {
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                            .body(Map.of("message", "You do not have permission to modify this schedule."));
-                }
-            }
+            callerEmail = securityService.extractEmail(token);
         }
 
-        schedule.setStatus(status.toUpperCase().trim());
-        BusSchedule saved = scheduleRepository.save(schedule);
-        return ResponseEntity.ok(Map.of(
-                "message", "Schedule status updated successfully",
-                "scheduleId", scheduleId,
-                "status", saved.getStatus()
-        ));
+        try {
+            BusSchedule saved = busStateTransitionService.updateScheduleStatus(
+                    scheduleId, status, "Schedule status updated via controller",
+                    callerUserId, callerEmail, isAdmin, isInternal);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Schedule status updated successfully",
+                    "scheduleId", scheduleId,
+                    "status", saved.getStatus()
+            ));
+        } catch (org.springframework.web.server.ResponseStatusException rse) {
+            return ResponseEntity.status(rse.getStatusCode()).body(Map.of("message", rse.getReason()));
+        }
     }
 
     @Transactional

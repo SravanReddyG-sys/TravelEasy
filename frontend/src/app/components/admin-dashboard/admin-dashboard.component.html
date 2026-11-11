@@ -1,0 +1,872 @@
+<div class="admin-shell">
+  <!-- ==================== TOP HEADER ==================== -->
+  <header class="shell-header d-flex align-items-center justify-content-between px-4">
+    <!-- Left: Brand Logo & Mobile Trigger -->
+    <div class="d-flex align-items-center gap-3">
+      <button 
+        type="button" 
+        class="btn btn-sm btn-light border-0 d-md-none text-muted" 
+        (click)="toggleMobileSidebar()" 
+        title="Toggle Menu"
+      >
+        <i class="fa-solid fa-bars fs-5"></i>
+      </button>
+      <a class="te-brand" routerLink="/admin" role="button" title="TravelEasy Admin Dashboard">
+        <span class="te-logo-icon">
+          <i class="fa-solid fa-paper-plane"></i>
+        </span>
+        <span class="te-brand-title">Travel<span class="te-brand-blue">Easy</span></span>
+      </a>
+    </div>
+
+    <!-- Right: Notifications & Administrator Profile -->
+    <div class="d-flex align-items-center gap-3">
+      <!-- Notification Bell & Dropdown -->
+      <div class="position-relative">
+        <button 
+          type="button" 
+          class="btn btn-light rounded-circle position-relative p-2 border-0" 
+          (click)="toggleNotifications($event)" 
+          title="Notifications"
+          style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;"
+        >
+          <i class="fa-solid fa-bell text-secondary fs-5"></i>
+          <span 
+            *ngIf="((unreadCount$ | async) || 0) > 0" 
+            class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-white" 
+            style="font-size: 10px;"
+          >
+            {{ ((unreadCount$ | async) || 0) > 99 ? '99+' : (unreadCount$ | async) }}
+          </span>
+        </button>
+
+        <!-- Notifications Dropdown -->
+        <div 
+          *ngIf="isNotificationOpen" 
+          class="notifications-dropdown position-absolute end-0 mt-2 bg-white shadow-lg rounded-4 border p-3" 
+          style="width: 320px; z-index: 1050;"
+          (click)="$event.stopPropagation()"
+        >
+          <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+            <span class="fw-bold text-dark">Platform Notifications</span>
+            <button 
+              *ngIf="((unreadCount$ | async) || 0) > 0" 
+              class="btn btn-link btn-sm text-primary p-0 text-decoration-none fw-semibold" 
+              (click)="markAllNotificationsRead()"
+            >
+              Mark all as read
+            </button>
+          </div>
+          <div class="py-3 text-center text-muted small" *ngIf="((unreadCount$ | async) || 0) === 0">
+            <i class="fa-regular fa-bell-slash fs-4 d-block mb-1 opacity-50"></i>
+            No new unread notifications
+          </div>
+          <div class="d-grid mt-2" *ngIf="((unreadCount$ | async) || 0) > 0">
+            <button class="btn btn-outline-primary btn-sm rounded-pill" (click)="markAllNotificationsRead()">
+              Mark all as read
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Administrator Profile Pill & Dropdown -->
+      <div class="dropdown position-relative">
+        <div 
+          class="d-flex align-items-center gap-2 cursor-pointer p-1 rounded-pill pe-3 hover-bg"
+          id="adminUserDropdown"
+          (click)="toggleProfileMenu($event)" 
+          role="button"
+          aria-expanded="false"
+        >
+          <!-- Avatar -->
+          <div class="operator-avatar">
+            <span>{{ getInitials() }}</span>
+          </div>
+          <!-- Name & Role -->
+          <div class="d-none d-sm-block text-start lh-sm">
+            <div class="fw-bold text-dark small">{{ currentUser?.fullName || 'Platform Administrator' }}</div>
+            <div class="text-muted" style="font-size: 11px;">Platform Administrator</div>
+          </div>
+          <i class="fa-solid fa-chevron-down text-muted ms-1" style="font-size: 11px;"></i>
+        </div>
+        <ul 
+          *ngIf="isProfileOpen" 
+          class="dropdown-menu dropdown-menu-end shadow-sm border-0 mt-2 rounded-3 show position-absolute end-0" 
+          aria-labelledby="adminUserDropdown" 
+          style="display: block; min-width: 220px; z-index: 1050;"
+          (click)="$event.stopPropagation()"
+        >
+          <li>
+            <div class="px-3 py-2 border-bottom">
+              <div class="fw-bold text-dark small">{{ currentUser?.fullName || 'Platform Administrator' }}</div>
+              <small class="text-muted">{{ currentUser?.email || 'admin@traveleasy.com' }}</small>
+            </div>
+          </li>
+          <li>
+            <a class="dropdown-item py-2 small" (click)="onSelectNavItem('settings')" role="button">
+              <i class="fa-solid fa-user-gear me-2 text-primary"></i>Profile & Account
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item py-2 small" (click)="onSelectNavItem('analytics')" role="button">
+              <i class="fa-solid fa-chart-line me-2 text-info"></i>Analytics & Reports
+            </a>
+          </li>
+          <li><hr class="dropdown-divider my-1"></li>
+          <li>
+            <a class="dropdown-item py-2 small text-danger" (click)="logout()" role="button">
+              <i class="fa-solid fa-right-from-bracket me-2"></i>Sign Out
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== BODY (SIDEBAR + MAIN CONTENT) ==================== -->
+  <div class="admin-shell-body">
+    <!-- Mobile Sidebar Backdrop -->
+    <div 
+      *ngIf="isMobileSidebarOpen" 
+      class="sidebar-backdrop" 
+      (click)="toggleMobileSidebar()"
+    ></div>
+
+    <!-- Collapsible Left Sidebar -->
+    <aside 
+      class="admin-sidebar py-3 px-2" 
+      [class.collapsed]="isSidebarCollapsed" 
+      [class.mobile-open]="isMobileSidebarOpen"
+    >
+      <!-- Sidebar Toggle Header -->
+      <div class="d-flex align-items-center mb-3 px-2" [class.justify-content-center]="isSidebarCollapsed" [class.justify-content-between]="!isSidebarCollapsed">
+        <span *ngIf="!isSidebarCollapsed" class="fw-bold text-uppercase text-muted" style="font-size: 11px; letter-spacing: 0.5px;">Navigation</span>
+        <button 
+          type="button" 
+          class="btn btn-sm btn-light border-0 rounded-circle text-muted d-none d-md-flex align-items-center justify-content-center"
+          style="width: 32px; height: 32px;"
+          (click)="toggleSidebarCollapse()"
+          [title]="isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        >
+          <i class="fa-solid" [class.fa-angles-right]="isSidebarCollapsed" [class.fa-angles-left]="!isSidebarCollapsed"></i>
+        </button>
+      </div>
+
+      <!-- Navigation Links -->
+      <nav class="nav flex-column gap-1">
+        <a 
+          *ngFor="let item of navItems" 
+          class="nav-link-custom" 
+          [class.active]="activeNavItem === item.id"
+          (click)="onSelectNavItem(item.id)"
+          [title]="item.label"
+          role="button"
+        >
+          <i [class]="item.icon + ' sidebar-icon'"></i>
+          <span *ngIf="!isSidebarCollapsed">{{ item.label }}</span>
+        </a>
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer mt-auto pt-3 border-top">
+        <a 
+          class="nav-link-custom" 
+          [class.active]="activeNavItem === 'settings'"
+          (click)="onSelectNavItem('settings')"
+          title="Settings"
+          role="button"
+        >
+          <i class="fa-solid fa-gear sidebar-icon"></i>
+          <span *ngIf="!isSidebarCollapsed">Settings</span>
+        </a>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="dashboard-content">
+
+      <!-- Welcome Header -->
+      <section class="welcome-header">
+        <h1 class="welcome-title">Welcome, Admin!</h1>
+        <p class="welcome-subtitle">Monitor and manage the TravelEasy platform operations.</p>
+      </section>
+
+      <!-- Feedback Alert (if provider approved/rejected) -->
+      <div 
+        *ngIf="actionFeedbackMessage" 
+        class="alert alert-dismissible fade show d-flex align-items-center shadow-sm"
+        [class.alert-success]="isActionSuccess"
+        [class.alert-danger]="!isActionSuccess"
+        role="alert"
+      >
+        <i class="fa-solid me-2 fs-5" [class.fa-circle-check]="isActionSuccess" [class.fa-triangle-exclamation]="!isActionSuccess"></i>
+        <div class="flex-grow-1 fw-medium">{{ actionFeedbackMessage }}</div>
+        <button type="button" class="btn-close" (click)="actionFeedbackMessage = null" aria-label="Close"></button>
+      </div>
+
+      <!-- ==================== 4 KPI CARDS ==================== -->
+      <section class="kpi-grid">
+        <!-- KPI 1: Total Users -->
+        <div class="kpi-card">
+          <div class="kpi-icon-wrap icon-blue">
+            <i class="fa-solid fa-users"></i>
+          </div>
+          <div class="kpi-details">
+            <span class="kpi-label">Total Users</span>
+            <div *ngIf="loadingUsers" class="skeleton-pulse" style="width: 100px; height: 32px;"></div>
+            <span *ngIf="!loadingUsers && !userError" class="kpi-value">
+              {{ (userStats?.totalUsers || 0) | number }}
+            </span>
+            <span *ngIf="userError" class="text-danger small fw-semibold">Failed to load</span>
+            <div class="kpi-meta" [class.neutral]="userError">
+              <span *ngIf="!userError && userStats">
+                <i class="fa-solid fa-circle-info me-1"></i>
+                {{ userStats.travellers }} travellers • {{ (userStats.busOperators + userStats.hotelOperators) }} partners
+              </span>
+              <button *ngIf="userError" class="btn btn-link btn-sm p-0 text-decoration-none text-danger" (click)="loadUserStats()">Retry</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- KPI 2: Platform Bookings -->
+        <div class="kpi-card">
+          <div class="kpi-icon-wrap icon-cyan">
+            <i class="fa-solid fa-ticket"></i>
+          </div>
+          <div class="kpi-details">
+            <span class="kpi-label">Platform Bookings</span>
+            <div *ngIf="loadingBookings" class="skeleton-pulse" style="width: 100px; height: 32px;"></div>
+            <span *ngIf="!loadingBookings && !bookingError" class="kpi-value">
+              {{ (bookingStats?.totalBookings || 0) | number }}
+            </span>
+            <span *ngIf="bookingError" class="text-danger small fw-semibold">Failed to load</span>
+            <div class="kpi-meta" [class.neutral]="bookingError">
+              <span *ngIf="!bookingError && bookingStats">
+                <i class="fa-solid fa-check-double me-1"></i>
+                Confirmed bookings
+              </span>
+              <button *ngIf="bookingError" class="btn btn-link btn-sm p-0 text-decoration-none text-danger" (click)="loadBookingStats()">Retry</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- KPI 3: Total Revenue -->
+        <div class="kpi-card">
+          <div class="kpi-icon-wrap icon-orange">
+            <i class="fa-solid fa-wallet"></i>
+          </div>
+          <div class="kpi-details">
+            <span class="kpi-label">Total Revenue</span>
+            <div *ngIf="loadingPayments" class="skeleton-pulse" style="width: 130px; height: 32px;"></div>
+            <span *ngIf="!loadingPayments && !paymentError" class="kpi-value">
+              {{ formatINR(paymentStats?.netCollections || 0) }}
+            </span>
+            <span *ngIf="paymentError" class="text-danger small fw-semibold">Failed to load</span>
+            <div class="kpi-meta" [class.neutral]="paymentError">
+              <span *ngIf="!paymentError && paymentStats">
+                <i class="fa-solid fa-arrow-trend-up me-1"></i>
+                Net Collections (INR)
+              </span>
+              <button *ngIf="paymentError" class="btn btn-link btn-sm p-0 text-decoration-none text-danger" (click)="loadPaymentStats()">Retry</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- KPI 4: User Reviews -->
+        <div class="kpi-card">
+          <div class="kpi-icon-wrap icon-purple">
+            <i class="fa-solid fa-star"></i>
+          </div>
+          <div class="kpi-details">
+            <span class="kpi-label">User Reviews</span>
+            <div *ngIf="loadingReviews" class="skeleton-pulse" style="width: 80px; height: 32px;"></div>
+            <span *ngIf="!loadingReviews && !reviewError" class="kpi-value">
+              {{ (reviewStats?.totalReviews || 0) | number }}
+            </span>
+            <span *ngIf="reviewError" class="text-danger small fw-semibold">Failed to load</span>
+            <div class="kpi-meta" [class.neutral]="reviewError">
+              <span *ngIf="!reviewError && reviewStats">
+                <i class="fa-solid fa-shield-heart me-1"></i>
+                Verified reviews
+              </span>
+              <button *ngIf="reviewError" class="btn btn-link btn-sm p-0 text-decoration-none text-danger" (click)="loadReviewStats()">Retry</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== QUICK ACTIONS ==================== -->
+      <section class="quick-actions-section">
+        <h2 class="section-heading">Quick Actions</h2>
+        <div class="quick-actions-grid">
+          <!-- Action 1: Verify Providers -->
+          <div class="action-card" (click)="scrollToSection('pending-providers-section')">
+            <div class="action-left">
+              <div class="action-icon-circle icon-blue">
+                <i class="fa-solid fa-user-check"></i>
+              </div>
+              <span class="action-title">Verify Providers</span>
+            </div>
+            <i class="fa-solid fa-arrow-right action-arrow"></i>
+          </div>
+
+          <!-- Action 2: Manage Buses -->
+          <div class="action-card" (click)="navigateOrScroll('/bus-operator')">
+            <div class="action-left">
+              <div class="action-icon-circle icon-cyan">
+                <i class="fa-solid fa-bus"></i>
+              </div>
+              <span class="action-title">Manage Buses</span>
+            </div>
+            <i class="fa-solid fa-arrow-right action-arrow"></i>
+          </div>
+
+          <!-- Action 3: Manage Hotels -->
+          <div class="action-card" (click)="navigateOrScroll('/hotel-manager')">
+            <div class="action-left">
+              <div class="action-icon-circle icon-blue">
+                <i class="fa-solid fa-hotel"></i>
+              </div>
+              <span class="action-title">Manage Hotels</span>
+            </div>
+            <i class="fa-solid fa-arrow-right action-arrow"></i>
+          </div>
+
+          <!-- Action 4: View Bookings -->
+          <div class="action-card" (click)="scrollToSection('recent-bookings-section')">
+            <div class="action-left">
+              <div class="action-icon-circle icon-cyan">
+                <i class="fa-solid fa-ticket"></i>
+              </div>
+              <span class="action-title">View Bookings</span>
+            </div>
+            <i class="fa-solid fa-arrow-right action-arrow"></i>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== ANALYTICS & CHARTS ==================== -->
+      <section class="charts-grid">
+        <!-- Left: Booking Trends Line Chart -->
+        <div class="dashboard-card">
+          <div class="card-header-custom">
+            <div class="card-title-wrap">
+              <i class="fa-solid fa-chart-simple"></i>
+              <h3 class="card-title-text">Booking Trends</h3>
+            </div>
+            <div class="toggle-pill-group">
+              <button 
+                type="button" 
+                class="toggle-btn" 
+                [class.active]="trendMode === 'bookings'"
+                (click)="setTrendMode('bookings')"
+              >
+                Bookings
+              </button>
+              <button 
+                type="button" 
+                class="toggle-btn" 
+                [class.active]="trendMode === 'revenue'"
+                (click)="setTrendMode('revenue')"
+              >
+                Revenue
+              </button>
+            </div>
+          </div>
+
+          <div class="card-body-custom">
+            <!-- Loading Skeleton -->
+            <div *ngIf="loadingTrends" class="skeleton-pulse" style="width: 100%; height: 260px;"></div>
+
+            <!-- Error State -->
+            <div *ngIf="!loadingTrends && trendsError" class="error-state-wrap">
+              <i class="fa-solid fa-triangle-exclamation fs-3 mb-2"></i>
+              <span>{{ trendsError }}</span>
+              <button class="btn-retry" (click)="loadTrends()">Retry</button>
+            </div>
+
+            <!-- Empty State -->
+            <div *ngIf="!loadingTrends && !trendsError && chartPoints.length === 0" class="empty-state-wrap">
+              <i class="fa-solid fa-chart-line"></i>
+              <p class="empty-state-text">No trend data available for the last 7 days.</p>
+            </div>
+
+            <!-- SVG Responsive Line Chart -->
+            <div *ngIf="!loadingTrends && !trendsError && chartPoints.length > 0" class="chart-container">
+              <svg 
+                class="chart-svg" 
+                viewBox="0 0 600 240" 
+                preserveAspectRatio="xMidYMid meet"
+                (mouseleave)="hoveredTrendIndex = null"
+              >
+                <defs>
+                  <linearGradient id="bookingAreaGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#2563eb" stop-opacity="0.30"/>
+                    <stop offset="100%" stop-color="#2563eb" stop-opacity="0.01"/>
+                  </linearGradient>
+                </defs>
+
+                <!-- Horizontal Grid Lines & Y-axis labels -->
+                <g *ngFor="let line of gridLines">
+                  <line 
+                    x1="45" 
+                    [attr.y1]="line.y" 
+                    x2="580" 
+                    [attr.y2]="line.y" 
+                    class="grid-line" 
+                  />
+                  <text 
+                    x="40" 
+                    [attr.y]="line.y + 4" 
+                    text-anchor="end" 
+                    class="axis-text"
+                  >
+                    {{ line.label }}
+                  </text>
+                </g>
+
+                <!-- Gradient Area Fill -->
+                <path [attr.d]="svgAreaPath" class="trend-area"></path>
+
+                <!-- Smooth Trend Line -->
+                <path [attr.d]="svgLinePath" class="trend-line"></path>
+
+                <!-- Active Vertical Hover Guide Line -->
+                <line 
+                  *ngIf="hoveredTrendIndex !== null && chartPoints[hoveredTrendIndex]"
+                  [attr.x1]="chartPoints[hoveredTrendIndex].x"
+                  y1="20"
+                  [attr.x2]="chartPoints[hoveredTrendIndex].x"
+                  y2="200"
+                  stroke="#94a3b8"
+                  stroke-width="1.5"
+                  stroke-dasharray="3 3"
+                />
+
+                <!-- Data Points -->
+                <circle 
+                  *ngFor="let pt of chartPoints; let idx = index" 
+                  [attr.cx]="pt.x" 
+                  [attr.cy]="pt.y" 
+                  r="5" 
+                  class="trend-point"
+                  [class.active]="hoveredTrendIndex === idx"
+                  (mouseenter)="hoveredTrendIndex = idx"
+                />
+
+                <!-- X-Axis Labels -->
+                <g *ngFor="let pt of chartPoints">
+                  <text 
+                    [attr.x]="pt.x" 
+                    y="222" 
+                    text-anchor="middle" 
+                    class="axis-text"
+                  >
+                    {{ pt.dateLabel }}
+                  </text>
+                </g>
+
+                <!-- Floating Tooltip Box on Hover -->
+                <g 
+                  *ngIf="hoveredTrendIndex !== null && chartPoints[hoveredTrendIndex]" 
+                  class="chart-tooltip-box"
+                  [attr.transform]="'translate(' + getTooltipX(chartPoints[hoveredTrendIndex].x) + ',' + getTooltipY(chartPoints[hoveredTrendIndex].y) + ')'"
+                >
+                  <rect 
+                    x="0" 
+                    y="0" 
+                    width="110" 
+                    height="46" 
+                    rx="8" 
+                    fill="#0f172a" 
+                    opacity="0.95"
+                  />
+                  <text x="12" y="18" fill="#94a3b8" font-size="10.5" font-weight="500">
+                    {{ chartPoints[hoveredTrendIndex].fullDate }}
+                  </text>
+                  <text x="12" y="36" fill="#ffffff" font-size="12.5" font-weight="700">
+                    {{ trendMode === 'bookings' ? 'Bookings: ' + chartPoints[hoveredTrendIndex].value : formatINR(chartPoints[hoveredTrendIndex].value) }}
+                  </text>
+                </g>
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Bookings by Service Donut Chart -->
+        <div class="dashboard-card">
+          <div class="card-header-custom">
+            <div class="card-title-wrap">
+              <i class="fa-solid fa-chart-pie"></i>
+              <h3 class="card-title-text">Bookings by Service</h3>
+            </div>
+          </div>
+
+          <div class="card-body-custom">
+            <div *ngIf="loadingBookings" class="skeleton-pulse" style="width: 100%; height: 240px;"></div>
+
+            <div *ngIf="!loadingBookings && bookingStats" class="donut-layout">
+              <!-- SVG Donut Chart -->
+              <div class="donut-svg-wrap">
+                <svg viewBox="0 0 160 160" width="100%" height="100%">
+                  <!-- Background Track -->
+                  <circle 
+                    cx="80" 
+                    cy="80" 
+                    r="58" 
+                    fill="none" 
+                    stroke="#f1f5f9" 
+                    stroke-width="22"
+                  />
+                  <!-- Hotel Bookings Arc (Cyan base) -->
+                  <circle 
+                    cx="80" 
+                    cy="80" 
+                    r="58" 
+                    fill="none" 
+                    stroke="#06b6d4" 
+                    stroke-width="22"
+                  />
+                  <!-- Bus Bookings Arc (Blue primary) -->
+                  <circle 
+                    cx="80" 
+                    cy="80" 
+                    r="58" 
+                    fill="none" 
+                    stroke="#2563eb" 
+                    stroke-width="22"
+                    stroke-linecap="round"
+                    [attr.stroke-dasharray]="donutBusDashArray"
+                    stroke-dashoffset="0"
+                    transform="rotate(-90 80 80)"
+                  />
+                  <!-- Center Total Label -->
+                  <text x="80" y="74" text-anchor="middle" font-weight="800" font-size="18" fill="#0f172a">
+                    {{ (bookingStats.totalBookings || 0) | number }}
+                  </text>
+                  <text x="80" y="93" text-anchor="middle" font-weight="600" font-size="10.5" fill="#64748b">
+                    Total Bookings
+                  </text>
+                </svg>
+              </div>
+
+              <!-- Donut Legend -->
+              <div class="donut-legend">
+                <!-- Bus Bookings -->
+                <div class="legend-item">
+                  <div class="legend-icon-badge icon-blue">
+                    <i class="fa-solid fa-bus"></i>
+                  </div>
+                  <div class="legend-info">
+                    <span class="legend-label">Bus Bookings</span>
+                    <span class="legend-value">
+                      {{ (bookingStats.serviceBreakdown?.bus?.count || 0) | number }}
+                      <small class="fw-normal text-muted">
+                        ({{ (bookingStats.serviceBreakdown?.bus?.percentage || 0) | number:'1.1-1' }}%)
+                      </small>
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Hotel Bookings -->
+                <div class="legend-item">
+                  <div class="legend-icon-badge icon-cyan">
+                    <i class="fa-solid fa-hotel"></i>
+                  </div>
+                  <div class="legend-info">
+                    <span class="legend-label">Hotel Bookings</span>
+                    <span class="legend-value">
+                      {{ (bookingStats.serviceBreakdown?.hotel?.count || 0) | number }}
+                      <small class="fw-normal text-muted">
+                        ({{ (bookingStats.serviceBreakdown?.hotel?.percentage || 0) | number:'1.1-1' }}%)
+                      </small>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Empty / Error state -->
+            <div *ngIf="!loadingBookings && !bookingStats" class="empty-state-wrap">
+              <i class="fa-solid fa-chart-pie"></i>
+              <p class="empty-state-text">No booking breakdown available.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TABLES SECTION ==================== -->
+      <section class="tables-grid">
+        <!-- Table 1: Pending Provider Verifications -->
+        <div class="dashboard-card" id="pending-providers-section">
+          <div class="card-header-custom">
+            <div class="card-title-wrap">
+              <i class="fa-regular fa-file-lines"></i>
+              <h3 class="card-title-text">Pending Provider Verifications</h3>
+            </div>
+            <a class="view-all-link" (click)="refreshProviders()" title="Refresh List">
+              <span>View All</span>
+              <i class="fa-solid fa-arrow-right"></i>
+            </a>
+          </div>
+
+          <div class="card-body-custom p-0">
+            <!-- Loading Skeleton -->
+            <div *ngIf="loadingProviders" class="p-4">
+              <div class="skeleton-pulse mb-3" style="width: 100%; height: 36px;"></div>
+              <div class="skeleton-pulse mb-3" style="width: 100%; height: 36px;"></div>
+              <div class="skeleton-pulse" style="width: 100%; height: 36px;"></div>
+            </div>
+
+            <!-- Error State -->
+            <div *ngIf="!loadingProviders && providersError" class="error-state-wrap">
+              <i class="fa-solid fa-circle-exclamation fs-3 mb-2"></i>
+              <span>{{ providersError }}</span>
+              <button class="btn-retry" (click)="loadPendingProviders()">Retry</button>
+            </div>
+
+            <!-- Table Content -->
+            <div *ngIf="!loadingProviders && !providersError && pendingProviders.length > 0" class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Provider</th>
+                    <th>Type</th>
+                    <th>Submitted On</th>
+                    <th class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let p of pendingProviders">
+                    <td class="provider-name-cell">{{ p.legalOrganizationName || 'Pending Organization' }}</td>
+                    <td>
+                      <span class="type-pill">
+                        <i class="fa-solid" [class.fa-bus]="p.providerType === 'BUS_OPERATOR'" [class.fa-hotel]="p.providerType !== 'BUS_OPERATOR'"></i>
+                        {{ p.providerType === 'BUS_OPERATOR' ? 'Bus Operator' : 'Hotel Operator' }}
+                      </span>
+                    </td>
+                    <td>{{ formatDisplayDate(p.submittedOn) }}</td>
+                    <td class="text-end">
+                      <div class="d-flex justify-content-end gap-2">
+                        <button 
+                          type="button" 
+                          class="btn-action-outline" 
+                          (click)="openProviderDetailsModal(p.id)"
+                        >
+                          Review
+                        </button>
+                        <button 
+                          type="button" 
+                          class="btn-action-primary" 
+                          (click)="approveProviderQuick(p)"
+                        >
+                          Approve
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Empty State -->
+            <div *ngIf="!loadingProviders && !providersError && pendingProviders.length === 0" class="empty-state-wrap">
+              <i class="fa-solid fa-circle-check text-success"></i>
+              <p class="empty-state-text">No pending provider verifications. All partner accounts are up to date!</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Table 2: Recent Bookings -->
+        <div class="dashboard-card" id="recent-bookings-section">
+          <div class="card-header-custom">
+            <div class="card-title-wrap">
+              <i class="fa-solid fa-ticket"></i>
+              <h3 class="card-title-text">Recent Bookings</h3>
+            </div>
+            <a class="view-all-link" (click)="refreshRecentBookings()" title="Refresh List">
+              <span>View All</span>
+              <i class="fa-solid fa-arrow-right"></i>
+            </a>
+          </div>
+
+          <div class="card-body-custom p-0">
+            <!-- Loading Skeleton -->
+            <div *ngIf="loadingRecentBookings" class="p-4">
+              <div class="skeleton-pulse mb-3" style="width: 100%; height: 36px;"></div>
+              <div class="skeleton-pulse mb-3" style="width: 100%; height: 36px;"></div>
+              <div class="skeleton-pulse" style="width: 100%; height: 36px;"></div>
+            </div>
+
+            <!-- Error State -->
+            <div *ngIf="!loadingRecentBookings && recentBookingsError" class="error-state-wrap">
+              <i class="fa-solid fa-circle-exclamation fs-3 mb-2"></i>
+              <span>{{ recentBookingsError }}</span>
+              <button class="btn-retry" (click)="loadRecentBookings()">Retry</button>
+            </div>
+
+            <!-- Table Content -->
+            <div *ngIf="!loadingRecentBookings && !recentBookingsError && recentBookings.length > 0" class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Booking ID</th>
+                    <th>Service</th>
+                    <th>User</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let b of recentBookings">
+                    <td class="booking-ref-cell">#{{ b.bookingRef }}</td>
+                    <td>
+                      <span class="type-pill">
+                        <i class="fa-solid" [class.fa-bus]="b.serviceType === 'BUS'" [class.fa-bed]="b.serviceType !== 'BUS'"></i>
+                        {{ b.serviceType === 'BUS' ? 'Bus' : 'Hotel' }}
+                      </span>
+                    </td>
+                    <td>{{ b.customerName || 'Traveller' }}</td>
+                    <td class="amount-cell">{{ formatINR(b.totalAmount || 0) }}</td>
+                    <td>
+                      <span 
+                        [class.status-badge-confirmed]="b.status === 'CONFIRMED'"
+                        [class.status-badge-cancelled]="b.status === 'CANCELLED'"
+                        [class.status-badge-pending]="b.status !== 'CONFIRMED' && b.status !== 'CANCELLED'"
+                      >
+                        {{ b.status === 'CONFIRMED' ? 'Confirmed' : (b.status === 'CANCELLED' ? 'Cancelled' : b.status) }}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Empty State -->
+            <div *ngIf="!loadingRecentBookings && !recentBookingsError && recentBookings.length === 0" class="empty-state-wrap">
+              <i class="fa-regular fa-calendar-xmark"></i>
+              <p class="empty-state-text">No recent bookings recorded.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<!-- ==================== PROVIDER DETAILS REVIEW MODAL ==================== -->
+<div 
+  *ngIf="showProviderModal" 
+  class="modal-backdrop-custom" 
+  (click)="closeProviderModal()"
+>
+  <div 
+    class="modal-dialog-custom" 
+    (click)="$event.stopPropagation()"
+  >
+    <div class="modal-header-custom">
+      <h4 class="modal-title-custom">
+        <i class="fa-solid fa-building-circle-check text-primary me-2"></i>
+        Provider Verification Review
+      </h4>
+      <button type="button" class="btn-close" (click)="closeProviderModal()"></button>
+    </div>
+
+    <div class="modal-body-custom">
+      <!-- Loading Provider Details -->
+      <div *ngIf="loadingProviderDetails" class="p-3 text-center">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="text-muted small mt-2">Loading provider KYC and application records...</p>
+      </div>
+
+      <!-- Loaded Details -->
+      <div *ngIf="!loadingProviderDetails && selectedProvider" class="modal-detail-grid">
+        <div class="modal-detail-item">
+          <span class="detail-label">Legal Organization Name</span>
+          <span class="detail-val">{{ selectedProvider.legalOrganizationName || 'N/A' }}</span>
+        </div>
+
+        <div class="modal-detail-item">
+          <span class="detail-label">Provider Type</span>
+          <span class="detail-val">
+            {{ selectedProvider.providerType === 'BUS_OPERATOR' ? 'Bus Operator Service' : 'Hotel Partner / Operator' }}
+          </span>
+        </div>
+
+        <div class="modal-detail-item">
+          <span class="detail-label">Authorized Representative</span>
+          <span class="detail-val">
+            {{ selectedProvider.representativeName || 'N/A' }}
+            <small *ngIf="selectedProvider.representativeDesignation" class="text-muted">
+              ({{ selectedProvider.representativeDesignation }})
+            </small>
+          </span>
+        </div>
+
+        <div class="modal-detail-item">
+          <span class="detail-label">Email & Phone</span>
+          <span class="detail-val">{{ selectedProvider.email }} • {{ selectedProvider.phone || 'N/A' }}</span>
+        </div>
+
+        <div class="modal-detail-item">
+          <span class="detail-label">Business Structure</span>
+          <span class="detail-val">{{ selectedProvider.businessStructure || 'Private Enterprise' }}</span>
+        </div>
+
+        <div class="modal-detail-item">
+          <span class="detail-label">License / Permit Number</span>
+          <span class="detail-val">{{ selectedProvider.licensePermitNumber || 'N/A' }}</span>
+        </div>
+
+        <div class="modal-detail-item">
+          <span class="detail-label">Business PAN Number</span>
+          <span class="detail-val">{{ selectedProvider.businessPanNumber || 'N/A' }}</span>
+        </div>
+
+        <div class="modal-detail-item">
+          <span class="detail-label">GSTIN Number</span>
+          <span class="detail-val">{{ selectedProvider.gstinNumber || 'N/A' }}</span>
+        </div>
+
+        <div class="modal-detail-item col-span-2" style="grid-column: span 2;">
+          <span class="detail-label">Registered Commercial Address</span>
+          <span class="detail-val">{{ selectedProvider.registeredAddress || 'Registered commercial premises on file' }}</span>
+        </div>
+
+        <div class="modal-detail-item">
+          <span class="detail-label">Verification Status</span>
+          <span class="detail-val">
+            <span class="badge bg-warning text-dark">{{ selectedProvider.verificationStatus || 'UNDER_REVIEW' }}</span>
+          </span>
+        </div>
+
+        <div class="modal-detail-item">
+          <span class="detail-label">Account Operational Status</span>
+          <span class="detail-val">
+            <span class="badge bg-secondary">{{ selectedProvider.accountStatus || 'ACTIVE' }}</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer-custom">
+      <button type="button" class="btn btn-light rounded-pill px-3 fw-medium" (click)="closeProviderModal()">
+        Cancel
+      </button>
+      <button 
+        type="button" 
+        class="btn btn-outline-danger rounded-pill px-3 fw-medium" 
+        (click)="executeModalVerification(false)"
+      >
+        Reject Provider
+      </button>
+      <button 
+        type="button" 
+        class="btn btn-primary rounded-pill px-4 fw-medium" 
+        (click)="executeModalVerification(true)"
+      >
+        Approve Provider
+      </button>
+    </div>
+  </div>
+</div>

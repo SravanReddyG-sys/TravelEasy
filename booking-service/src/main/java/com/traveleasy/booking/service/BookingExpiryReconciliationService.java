@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -29,6 +30,9 @@ import java.util.regex.Pattern;
 public class BookingExpiryReconciliationService {
 
     private final BookingRepository bookingRepository;
+    private final BookingStateTransitionService stateTransitionService;
+    private final BookingInternalTokenService internalTokenService;
+    private final com.traveleasy.booking.repository.HotelReservationSnapshotRepository snapshotRepository;
     private RestTemplate restTemplate = new RestTemplate();
 
     public void setRestTemplate(RestTemplate restTemplate) {
@@ -51,11 +55,16 @@ public class BookingExpiryReconciliationService {
     @Scheduled(fixedRate = 30000)
     @Transactional
     public void reconcileExpiredBookings() {
-        LocalDateTime threshold = LocalDateTime.now().minusMinutes(15);
-        List<Booking> candidates = bookingRepository.findByStatusInAndBookingDateBefore(
-                List.of("PENDING_PAYMENT", "INITIATED"), threshold);
+        LocalDateTime now = LocalDateTime.now();
+        List<Booking> candidates = bookingRepository.findByStatusInAndExpiresAtBefore(
+                List.of("PENDING_PAYMENT", "INITIATED"), now);
 
-        if (candidates.isEmpty()) {
+        if (candidates == null || candidates.isEmpty()) {
+            candidates = bookingRepository.findByStatusInAndBookingDateBefore(
+                    List.of("PENDING_PAYMENT", "INITIATED"), now.minusMinutes(15));
+        }
+
+        if (candidates == null || candidates.isEmpty()) {
             return;
         }
 
@@ -76,40 +85,79 @@ public class BookingExpiryReconciliationService {
                 .orElse(false);
     }
 
-    private boolean expireSingleBooking(Booking booking) {
-        if ("CONFIRMED".equalsIgnoreCase(booking.getStatus()) || "CANCELLED".equalsIgnoreCase(booking.getStatus())) {
+    @Transactional
+    public boolean expireSingleBooking(Booking booking) {
+        if (booking == null || booking.getBookingRef() == null) {
+            return false;
+        }
+
+        // Concurrency-safe pessimistic write lock to coordinate with payment confirmation (WP-HB-05 Part A)
+        Optional<Booking> lockedOpt = bookingRepository.findByBookingRefForUpdate(booking.getBookingRef());
+        if (lockedOpt.isEmpty()) {
+            lockedOpt = bookingRepository.findByBookingRef(booking.getBookingRef());
+        }
+        if (lockedOpt.isEmpty()) {
+            lockedOpt = Optional.of(booking);
+        }
+        Booking lockedBooking = lockedOpt.get();
+
+        if ("CONFIRMED".equalsIgnoreCase(lockedBooking.getStatus()) 
+                || "CANCELLED".equalsIgnoreCase(lockedBooking.getStatus()) 
+                || "EXPIRED".equalsIgnoreCase(lockedBooking.getStatus())) {
             return false;
         }
 
         // 1. Verify with Payment Service before expiring
-        boolean paymentCaptured = isPaymentSuccessful(booking.getBookingRef());
+        boolean paymentCaptured = isPaymentSuccessful(lockedBooking.getBookingRef());
 
         if (paymentCaptured) {
-            log.info("Booking {} has confirmed payment. Attempting authoritative seat confirmation.", booking.getBookingRef());
-            boolean seatsConfirmed = confirmSeatsInBusService(booking);
-            if (seatsConfirmed) {
-                booking.setStatus("CONFIRMED");
-                bookingRepository.save(booking);
-                log.info("Booking {} successfully recovered and marked CONFIRMED.", booking.getBookingRef());
+            log.info("Booking {} has confirmed payment. Attempting authoritative seat/room confirmation.", lockedBooking.getBookingRef());
+            boolean seatsConfirmed = confirmSeatsInBusService(lockedBooking);
+            boolean roomsConfirmed = confirmRoomsInHotelService(lockedBooking);
+            if (seatsConfirmed && roomsConfirmed) {
+                stateTransitionService.confirmBooking(lockedBooking);
+                snapshotRepository.findByBookingId(lockedBooking.getId()).ifPresent(snapshot -> {
+                    snapshot.setStatus("CONFIRMED");
+                    if (snapshot.getAllocations() != null) {
+                        snapshot.getAllocations().forEach(a -> a.setStatus("CONFIRMED"));
+                    }
+                    snapshotRepository.save(snapshot);
+                });
+                log.info("Booking {} successfully recovered and marked CONFIRMED.", lockedBooking.getBookingRef());
                 return false;
             } else {
-                // Race condition: payment arrived late, but seats are already taken!
-                log.warn("Late payment detected for booking {}, but seats are already allocated to another traveller. Initiating automatic refund.",
-                        booking.getBookingRef());
-                processRefund(booking.getBookingRef(), booking.getTotalAmount(), "Seat hold expired and seats allocated to another traveller");
-                booking.setStatus("EXPIRED");
-                bookingRepository.save(booking);
+                // Race condition: payment arrived late, but inventory is already taken!
+                log.warn("Late payment detected for booking {}, but inventory is already allocated to another traveller. Initiating automatic refund.",
+                        lockedBooking.getBookingRef());
+                processRefund(lockedBooking.getBookingRef(), lockedBooking.getTotalAmount(), "Inventory hold expired and allocated to another traveller");
+                lockedBooking.setStatus("EXPIRED");
+                bookingRepository.save(lockedBooking);
+                snapshotRepository.findByBookingId(lockedBooking.getId()).ifPresent(snapshot -> {
+                    snapshot.setStatus("EXPIRED");
+                    if (snapshot.getAllocations() != null) {
+                        snapshot.getAllocations().forEach(a -> a.setStatus("EXPIRED"));
+                    }
+                    snapshotRepository.save(snapshot);
+                });
                 return true;
             }
         }
 
         // 2. Unpaid: transition status to EXPIRED
-        log.warn("Expiring unpaid booking {} (held for customer {})", booking.getBookingRef(), booking.getCustomerId());
-        booking.setStatus("EXPIRED");
-        bookingRepository.save(booking);
+        log.warn("Expiring unpaid booking {} (held for customer {})", lockedBooking.getBookingRef(), lockedBooking.getCustomerId());
+        lockedBooking.setStatus("EXPIRED");
+        bookingRepository.save(lockedBooking);
+        snapshotRepository.findByBookingId(lockedBooking.getId()).ifPresent(snapshot -> {
+            snapshot.setStatus("EXPIRED");
+            if (snapshot.getAllocations() != null) {
+                snapshot.getAllocations().forEach(a -> a.setStatus("EXPIRED"));
+            }
+            snapshotRepository.save(snapshot);
+        });
 
-        // 3. Release any remaining held seats in bus-service
-        releaseSeatsInBusService(booking);
+        // 3. Release any remaining held seats or rooms in provider services
+        releaseSeatsInBusService(lockedBooking);
+        releaseRoomsInHotelService(lockedBooking);
         return true;
     }
 
@@ -170,6 +218,92 @@ public class BookingExpiryReconciliationService {
             log.info("Released expired seats {} for schedule {} via bus-service", seats, booking.getServiceId());
         } catch (Exception e) {
             log.error("Failed to release seats in bus-service for booking {}: {}", booking.getBookingRef(), e.getMessage());
+        }
+    }
+
+    private boolean confirmRoomsInHotelService(Booking booking) {
+        if (!"HOTEL".equalsIgnoreCase(booking.getServiceType()) || booking.getServiceId() == null) {
+            return true;
+        }
+        if (booking.getBookingRef() == null || booking.getBookingRef().isBlank()) {
+            return true;
+        }
+        if (!booking.isDateWiseBooking()) {
+            return true;
+        }
+        try {
+            String url = hotelServiceUrl + "/api/hotels/rooms/confirm-stay?bookingRef=" + booking.getBookingRef();
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            String internalToken = internalTokenService.generateInternalToken();
+            headers.set("Authorization", "Bearer " + internalToken);
+            headers.set("X-Internal-Token", internalToken);
+            headers.set("X-Internal-Service", "booking-service");
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<Map> resp = restTemplate.exchange(url, HttpMethod.PUT, entity, Map.class);
+            boolean success = resp.getStatusCode().is2xxSuccessful();
+            if (success) {
+                log.info("Confirmed stay inventory for bookingRef {} via hotel-service", booking.getBookingRef());
+            }
+            return success;
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            log.warn("Stay allocation in hotel-service rejected confirmation for bookingRef {}: {}", booking.getBookingRef(), e.getMessage());
+            return false;
+        } catch (Exception e) {
+            log.warn("Failed to confirm rooms in hotel-service for bookingRef {}: {}", booking.getBookingRef(), e.getMessage());
+            return false;
+        }
+    }
+
+    private void releaseRoomsInHotelService(Booking booking) {
+        if (!"HOTEL".equalsIgnoreCase(booking.getServiceType())) {
+            return;
+        }
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            String internalToken = internalTokenService.generateInternalToken();
+            headers.set("Authorization", "Bearer " + internalToken);
+            headers.set("X-Internal-Token", internalToken);
+            headers.set("X-Internal-Service", "booking-service");
+
+            // 1. Authoritative date-wise release for all date-wise bookings (WP-03)
+            if (booking.isDateWiseBooking()) {
+                if (booking.getBookingRef() != null && !booking.getBookingRef().isBlank()) {
+                    try {
+                        String stayUrl = hotelServiceUrl + "/api/hotels/rooms/release-stay?bookingRef=" + booking.getBookingRef();
+                        HttpEntity<Void> stayEntity = new HttpEntity<>(headers);
+                        ResponseEntity<Map> stayResp = restTemplate.exchange(stayUrl, HttpMethod.POST, stayEntity, Map.class);
+                        if (stayResp.getStatusCode().is2xxSuccessful()) {
+                            log.info("Authoritatively released expired stay inventory for bookingRef {} via hotel-service", booking.getBookingRef());
+                            return;
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to release date-wise stay inventory for booking {}: {}", booking.getBookingRef(), e.getMessage());
+                    }
+                }
+                // Date-wise bookings must NEVER fall back to legacy count-based release
+                return;
+            }
+
+            // 2. Genuine legacy bookings fallback to count-based release
+            if (booking.getServiceId() == null) {
+                return;
+            }
+            int count = 1;
+            if (booking.getDetailsJson() != null) {
+                Pattern pattern = Pattern.compile("Rooms?:\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
+                Matcher matcher = pattern.matcher(booking.getDetailsJson());
+                if (matcher.find()) {
+                    count = Integer.parseInt(matcher.group(1));
+                }
+            }
+            String url = hotelServiceUrl + "/api/hotels/rooms/" + booking.getServiceId() + "/release?count=" + count;
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            restTemplate.exchange(url, HttpMethod.PUT, entity, Map.class);
+            log.info("Released expired rooms (count {}) for legacy booking {} via hotel-service", count, booking.getBookingRef());
+        } catch (Exception e) {
+            log.warn("Failed to release rooms in hotel-service for booking {}: {}", booking.getBookingRef(), e.getMessage());
         }
     }
 

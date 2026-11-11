@@ -43,7 +43,7 @@ public class GatewayController {
     @Value("${traveller.service.url:http://localhost:8088}")
     private String travellerServiceUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = new RestTemplate(new org.springframework.http.client.JdkClientHttpRequestFactory());
 
     @RequestMapping("/api/**")
     public ResponseEntity<byte[]> proxyRequest(@RequestBody(required = false) byte[] body,
@@ -103,7 +103,7 @@ public class GatewayController {
                 Enumeration<String> headerNames = request.getHeaderNames();
                 while (headerNames.hasMoreElements()) {
                     String name = headerNames.nextElement();
-                    if (!name.equalsIgnoreCase("host") && !name.equalsIgnoreCase("content-length") && !name.equalsIgnoreCase("content-type")) {
+                    if (!name.equalsIgnoreCase("host") && !name.equalsIgnoreCase("content-length") && !name.equalsIgnoreCase("content-type") && !name.equalsIgnoreCase("x-internal-service") && !name.toLowerCase().startsWith("x-internal-")) {
                         headers.add(name, request.getHeader(name));
                     }
                 }
@@ -119,7 +119,7 @@ public class GatewayController {
             Enumeration<String> headerNames = request.getHeaderNames();
             while (headerNames.hasMoreElements()) {
                 String name = headerNames.nextElement();
-                if (!name.equalsIgnoreCase("host") && !name.equalsIgnoreCase("content-length")) {
+                if (!name.equalsIgnoreCase("host") && !name.equalsIgnoreCase("content-length") && !name.equalsIgnoreCase("x-internal-service") && !name.toLowerCase().startsWith("x-internal-")) {
                     headers.add(name, request.getHeader(name));
                 }
             }

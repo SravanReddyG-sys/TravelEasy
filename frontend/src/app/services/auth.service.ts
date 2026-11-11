@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, tap } from 'rxjs';
 import { User } from '../models/user.model';
 import { ApplicationDetails } from '../models/application-details.model';
+import { AdminUserStats, AdminPendingProvidersPage, AdminProviderDetails } from '../models/admin-dashboard.model';
 
 @Injectable({
   providedIn: 'root'
@@ -170,5 +171,17 @@ export class AuthService {
 
   verifyProvider(userId: number, verified: boolean): Observable<any> {
     return this.http.put(`${this.apiUrl}/users/${userId}/verify?verified=${verified}`, {});
+  }
+
+  getUserStats(): Observable<AdminUserStats> {
+    return this.http.get<AdminUserStats>(this.apiUrl + '/users/admin/stats');
+  }
+
+  getPendingProviders(page = 0, size = 10): Observable<AdminPendingProvidersPage> {
+    return this.http.get<AdminPendingProvidersPage>(this.apiUrl + '/users/admin/pending-providers?page=' + page + '&size=' + size);
+  }
+
+  getProviderDetails(id: number): Observable<AdminProviderDetails> {
+    return this.http.get<AdminProviderDetails>(this.apiUrl + '/users/admin/providers/' + id);
   }
 }

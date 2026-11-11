@@ -1,7 +1,11 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { NotificationService } from '../../services/notification.service';
+import { FormattedNotification } from '../../models/notification.model';
+import { Subscription, timeout, finalize, filter, forkJoin, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, NavigationEnd, Router, RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { BusService } from '../../services/bus.service';
 import { HotelService } from '../../services/hotel.service';
@@ -19,9 +23,43 @@ import { BusResultsListComponent } from '../../features/traveller/bus-booking/co
 import { BusSeatPickerComponent } from '../../features/traveller/bus-booking/components/bus-seat-picker/bus-seat-picker.component';
 import { DestinationDetailsComponent } from '../../features/traveller/destination-details/destination-details.component';
 import { HotelSearchPanelComponent } from '../../features/traveller/hotel-booking/components/hotel-search-panel/hotel-search-panel.component';
+import { HotelFilterPanelComponent, PropertyTypeOption, AmenityOption } from '../../features/traveller/hotel-booking/components/hotel-filter-panel/hotel-filter-panel.component';
+import { HotelResultsListComponent } from '../../features/traveller/hotel-booking/components/hotel-results-list/hotel-results-list.component';
+import {
+  HotelDetailsResponseDto,
+  HotelPublicDto,
+  HotelReservationDetailResponse,
+  HotelSearchCriteria,
+  HotelStaySummary,
+  PaymentTransactionDto,
+  PhysicalRoomAllocation,
+  PrimaryGuestDtoPayload,
+  ReservationReviewSummaryMetrics
+} from '../../models/hotel.model';
 import { HotelResultCardComponent } from '../../features/traveller/hotel-booking/components/hotel-result-card/hotel-result-card.component';
+import { HotelDetailsPageComponent } from '../../features/traveller/hotel-booking/components/hotel-details-page/hotel-details-page.component';
+import { GuestAllocationPageComponent } from '../../features/traveller/hotel-booking/components/guest-allocation-page/guest-allocation-page.component';
+import { ReservationReviewPageComponent } from '../../features/traveller/hotel-booking/components/reservation-review-page/reservation-review-page.component';
+import { HotelPaymentCheckoutPageComponent } from '../../features/traveller/hotel-booking/components/hotel-payment-checkout-page/hotel-payment-checkout-page.component';
+import {
+  buildPhysicalRoomsFromStaySummary,
+  formatGenderLabel,
+  formatStayDisplayDate,
+  loadGuestAllocationState,
+  loadStaySummaryFromSession,
+  saveStaySummaryToSession
+} from '../../shared/utils/guest-allocation.util';
+import { loadReservationReviewState } from '../../shared/utils/reservation-review.util';
 import { MyBookingsListComponent } from '../../features/traveller/bookings/components/my-bookings-list/my-bookings-list.component';
 import { BookingDetailsModalComponent } from '../../features/traveller/bookings/components/booking-details-modal/booking-details-modal.component';
+import { HotelBookingDetailsModalComponent } from '../../features/traveller/bookings/components/hotel-booking-details-modal/hotel-booking-details-modal.component';
+import { HotelCancellationModalComponent } from '../../features/traveller/bookings/components/hotel-cancellation-modal/hotel-cancellation-modal.component';
+import { HotelBookingCardViewModel } from '../../features/traveller/bookings/models/hotel-booking-view.model';
+import { HotelCancellationResultViewModel } from '../../features/traveller/bookings/models/hotel-cancellation.model';
+import {
+  buildHotelBookingCardViewModel,
+  resolveHotelCoverImageUrl
+} from '../../features/traveller/bookings/utils/hotel-booking-presenter.util';
 
 export { Destination, DestinationAttraction };
 
@@ -40,9 +78,17 @@ export { Destination, DestinationAttraction };
     BusSeatPickerComponent,
     DestinationDetailsComponent,
     HotelSearchPanelComponent,
+    HotelFilterPanelComponent,
+    HotelResultsListComponent,
     HotelResultCardComponent,
+    HotelDetailsPageComponent,
+    GuestAllocationPageComponent,
+    ReservationReviewPageComponent,
+    HotelPaymentCheckoutPageComponent,
     MyBookingsListComponent,
-    BookingDetailsModalComponent
+    BookingDetailsModalComponent,
+    HotelBookingDetailsModalComponent,
+    HotelCancellationModalComponent
   ],
   template: `
     <div class="dashboard-wrapper d-flex flex-column min-vh-100">
@@ -64,6 +110,7 @@ export { Destination, DestinationAttraction };
         (clearSearch)="clearSearch()"
         (toggleNotifications)="toggleNotifications()"
         (markNotificationsRead)="markNotificationsRead()"
+        (notificationClick)="handleNotificationClick($event)"
         (toggleUserMenu)="toggleUserMenu()"
         (logout)="logout()"
       ></app-traveller-header>
@@ -80,7 +127,7 @@ export { Destination, DestinationAttraction };
         ></app-traveller-sidebar>
 
         <!-- ==================== MAIN CONTENT AREA ==================== -->
-        <main class="main-content flex-grow-1" [ngClass]="busViewMode === 'seat-selection' ? 'p-2 px-md-3 py-md-1' : 'p-4'" style="background-color: #F5F9FE;">
+        <main class="main-content flex-grow-1" [ngClass]="busViewMode === 'seat-selection' ? 'p-2 px-md-3 py-md-1' : 'p-4'" style="background-color: #F5F9FE; min-width: 0;">
 
           <!-- #################### TAB 0: DASHBOARD #################### -->
           <div *ngIf="activeTab === 'dashboard'">
@@ -468,51 +515,193 @@ export { Destination, DestinationAttraction };
 
           <!-- #################### TAB 2: HOTEL BOOKING #################### -->
           <div *ngIf="activeTab === 'hotel'">
-            <app-hotel-search-panel
+
+            <!-- STAGE 3: Multi-Room Guest Allocation -->
+            <app-guest-allocation-page
+              *ngIf="hotelBookingStage === 'guests'"
+              [staySummary]="guestAllocationSummary"
+              [requestedHotelId]="selectedHotelId"
+              (backToRoomSelection)="onBackFromGuestAllocation()"
+              (continueToReservationReview)="onProceedToReservationReview($event)"
+            ></app-guest-allocation-page>
+
+            <!-- STAGE 4: Primary Guest & Reservation Review (WP-HB-UI-04) -->
+            <app-reservation-review-page
+              *ngIf="hotelBookingStage === 'review-entry'"
+              [staySummary]="guestAllocationSummary"
+              [allocatedRooms]="validatedGuestRooms"
+              [requestedHotelId]="selectedHotelId"
+              [cachedProfileData]="profileData"
+              (backToGuestDetails)="onBackFromReviewEntry()"
+              (proceedToPayment)="onProceedToHotelPayment($event)"
+            ></app-reservation-review-page>
+
+            <!-- STAGE 5: Hotel Reservation Payment Checkout (WP-HB-UI-05) -->
+            <app-hotel-payment-checkout-page
+              *ngIf="hotelBookingStage === 'payment-entry'"
+              [staySummary]="guestAllocationSummary"
+              [allocatedRooms]="validatedGuestRooms"
+              [primaryGuest]="validatedPrimaryGuest"
+              [currentUser]="currentUser"
+              [requestedHotelId]="selectedHotelId"
+              [initiationToken]="hotelPaymentInitiationToken"
+              (backToReview)="onBackFromPaymentEntry()"
+              (backToSearch)="onHotelPaymentBackToSearch()"
+              (backToHotelDetails)="onHotelPaymentBackToDetails($event)"
+              (viewMyBookings)="onHotelPaymentViewMyBookings()"
+              (reservationConfirmed)="onHotelReservationConfirmed()"
+            ></app-hotel-payment-checkout-page>
+
+            <!-- STAGE 2: Hotel Details & Date-Aware Room Discovery -->
+            <app-hotel-details-page
+              *ngIf="hotelBookingStage === 'details' && selectedHotelId"
+              [hotelId]="selectedHotelId"
               [city]="hotelCity"
               [checkIn]="checkInDate"
               [checkOut]="checkOutDate"
-              (cityChange)="hotelCity = $event"
-              (checkInChange)="checkInDate = $event"
-              (checkOutChange)="checkOutDate = $event"
-              (search)="onSearchHotels()"
-            ></app-hotel-search-panel>
+              [rooms]="hotelRoomsCount"
+              [adults]="hotelAdultsCount"
+              [children]="hotelChildrenCount"
+              [savedHotelIds]="savedHotelIds"
+              (backToResults)="clearSelectedHotel()"
+              (toggleFavourite)="toggleHotelFavourite($event)"
+              (searchModified)="onHotelDetailsSearchModified($event)"
+              (proceedToGuestAllocation)="onProceedToGuestAllocation($event)"
+            ></app-hotel-details-page>
 
-            <!-- Hotel Search Results -->
-            <div *ngIf="hotelsSearched">
-              <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="fw-bold text-navy mb-0">Hotels in {{ hotelCity }} ({{ hotelResults.length }})</h5>
-                <div *ngIf="hotelResults.length > 0" class="d-flex align-items-center gap-2">
-                  <span class="text-muted small">Sort by:</span>
-                  <select class="form-select form-select-sm rounded-pill w-auto" [(ngModel)]="hotelSortBy" (change)="sortHotels()">
-                    <option value="popularity">Popularity</option>
-                    <option value="priceLow">Price: Low to High</option>
-                    <option value="priceHigh">Price: High to Low</option>
-                    <option value="rating">Rating</option>
-                  </select>
+            <!-- STAGE 1: Hotel Search & Search Results -->
+            <div *ngIf="hotelBookingStage === 'search'">
+              <!-- Hotel Search Banner & 5-Control Floating Search Bar -->
+              <app-hotel-search-panel
+                [city]="hotelCity"
+                [checkIn]="checkInDate"
+                [checkOut]="checkOutDate"
+                [rooms]="hotelRoomsCount"
+                [adults]="hotelAdultsCount"
+                [children]="hotelChildrenCount"
+                [isSearching]="isSearchingHotels"
+                (cityChange)="hotelCity = $event"
+                (checkInChange)="checkInDate = $event"
+                (checkOutChange)="checkOutDate = $event"
+                (roomsChange)="hotelRoomsCount = $event"
+                (adultsChange)="hotelAdultsCount = $event"
+                (childrenChange)="hotelChildrenCount = $event"
+                (search)="onSearchHotels($event)"
+              ></app-hotel-search-panel>
+
+              <!-- Loading Spinner State -->
+              <div *ngIf="isSearchingHotels" class="text-center py-5">
+                <div class="spinner-border mb-3" role="status" style="color: #0891B2;"></div>
+                <h6 class="fw-bold text-navy">Searching hotels in {{ hotelCity }}...</h6>
+                <p class="text-muted small">Checking live inventory and best available rates</p>
+              </div>
+
+              <!-- Error State with Retry -->
+              <div *ngIf="!isSearchingHotels && hotelSearchError" class="alert alert-danger rounded-4 border-0 shadow-sm p-4 text-center my-4">
+                <i class="fa-solid fa-triangle-exclamation fs-3 text-danger mb-2"></i>
+                <h6 class="fw-bold text-navy mb-1">{{ hotelSearchError }}</h6>
+                <p class="text-secondary small mb-3">Unable to retrieve hotels right now. Please verify your connection or try again.</p>
+                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-4 fw-bold" (click)="onSearchHotels()">
+                  <i class="fa-solid fa-rotate-right me-1"></i> Retry Search
+                </button>
+              </div>
+
+              <!-- Initial Discovery State (Before user performs first search) -->
+              <div *ngIf="!isSearchingHotels && !hotelsSearched && !hotelSearchError" class="hotel-discovery-panel bg-white rounded-4 border p-4 shadow-sm my-3 text-center">
+                <div class="mb-3">
+                  <i class="fa-solid fa-hotel fs-1" style="color: #0891B2;"></i>
+                </div>
+                <h5 class="fw-bold text-navy mb-1">Discover Handpicked Stays Across Popular Destinations</h5>
+                <p class="text-muted small mb-3" style="max-width: 540px; margin: 0 auto;">
+                  Select your travel dates and number of guests above, or pick one of these popular cities to find top-rated hotels, resorts, and apartments.
+                </p>
+                <div class="d-flex flex-wrap justify-content-center gap-2">
+                  <button type="button" class="btn btn-outline-teal btn-sm rounded-pill px-3 py-2 fw-semibold" (click)="searchQuickHotelCity('Hyderabad')">
+                    <i class="fa-solid fa-location-dot me-1 text-primary"></i> Hyderabad
+                  </button>
+                  <button type="button" class="btn btn-outline-teal btn-sm rounded-pill px-3 py-2 fw-semibold" (click)="searchQuickHotelCity('Vijayawada')">
+                    <i class="fa-solid fa-location-dot me-1 text-primary"></i> Vijayawada
+                  </button>
+                  <button type="button" class="btn btn-outline-teal btn-sm rounded-pill px-3 py-2 fw-semibold" (click)="searchQuickHotelCity('Bengaluru')">
+                    <i class="fa-solid fa-location-dot me-1 text-primary"></i> Bengaluru
+                  </button>
+                  <button type="button" class="btn btn-outline-teal btn-sm rounded-pill px-3 py-2 fw-semibold" (click)="searchQuickHotelCity('Goa')">
+                    <i class="fa-solid fa-location-dot me-1 text-primary"></i> Goa
+                  </button>
                 </div>
               </div>
 
-              <!-- Strict Empty State for Hotels -->
-              <div *ngIf="hotelResults.length === 0" class="alert alert-info rounded-4 border-0 shadow-sm p-4 text-center">
-                <i class="fa-solid fa-circle-info fs-3 text-info mb-2"></i>
-                <h6 class="fw-bold text-navy mb-1">No hotels found in "{{ hotelCity }}"</h6>
-                <p class="mb-0 text-muted small">No active hotel properties matched your destination and dates. Try searching for cities with registered hotels (e.g. Vijayawada or Hyderabad).</p>
-              </div>
+              <!-- Search Results State -->
+              <div *ngIf="!isSearchingHotels && hotelsSearched && !hotelSearchError">
 
-              <!-- Hotel Cards List (Strict real data) -->
-              <div *ngFor="let h of hotelResults">
-                <app-hotel-result-card
-                  [hotel]="h"
-                  [isSelected]="selectedHotel?.id === h.id"
-                  [rooms]="hotelRoomTypes"
-                  [isSaved]="isHotelSaved(h.id)"
-                  (viewRooms)="viewHotelRooms(h)"
-                  (bookRoom)="proceedToHotelCheckout($event.hotel, $event.room)"
-                  (saveToFavourites)="saveHotelToFavourites(h)"
-                ></app-hotel-result-card>
+                <!-- Destination Empty State (Backend returned 0 hotels for destination) -->
+                <div *ngIf="rawHotelResults.length === 0" class="empty-state-card bg-white rounded-4 border p-5 text-center shadow-sm">
+                  <div class="empty-icon-wrap mx-auto mb-3">
+                    <i class="fa-solid fa-hotel fs-2" style="color: #0891B2;"></i>
+                  </div>
+                  <h5 class="fw-bold text-navy mb-2">No hotels found in "{{ hotelCity }}"</h5>
+                  <p class="text-secondary small mb-4" style="max-width: 520px; margin: 0 auto;">
+                    No active hotel properties matched your destination and dates. Try searching for cities with registered hotel inventory:
+                  </p>
+                  <div class="d-flex flex-wrap justify-content-center gap-2">
+                    <button type="button" class="btn btn-outline-teal btn-sm rounded-pill px-3 py-2 fw-semibold" (click)="searchQuickHotelCity('Hyderabad')">
+                      <i class="fa-solid fa-location-dot me-1"></i> Search Hyderabad
+                    </button>
+                    <button type="button" class="btn btn-outline-teal btn-sm rounded-pill px-3 py-2 fw-semibold" (click)="searchQuickHotelCity('Vijayawada')">
+                      <i class="fa-solid fa-location-dot me-1"></i> Search Vijayawada
+                    </button>
+                  </div>
+                </div>
+
+                <!-- When Hotels Found: Two-Column Layout matching approved mockup -->
+                <div *ngIf="rawHotelResults.length > 0" class="row g-4 align-items-start">
+                  
+                  <!-- LEFT COLUMN: FILTERS SIDEBAR -->
+                  <div class="col-xl-3 col-lg-4">
+                    <app-hotel-filter-panel
+                      [minPriceLimit]="hotelMinPriceLimit"
+                      [maxPriceLimit]="hotelMaxPriceLimit"
+                      [minPriceSelected]="hotelMinPriceSelected"
+                      [maxPriceSelected]="hotelMaxPriceSelected"
+                      [availablePropertyTypes]="hotelAvailablePropertyTypes"
+                      [selectedPropertyTypes]="hotelSelectedPropertyTypes"
+                      [availableAmenities]="hotelAvailableAmenities"
+                      [selectedAmenities]="hotelSelectedAmenities"
+                      (priceChange)="onHotelPriceChange($event)"
+                      (propertyTypeChange)="onHotelPropertyTypeChange($event)"
+                      (amenityChange)="onHotelAmenityChange($event)"
+                      (clearAll)="onHotelClearAllFilters()"
+                    ></app-hotel-filter-panel>
+                  </div>
+
+                  <!-- RIGHT COLUMN: RESULTS OVERVIEW & HOTEL CARDS -->
+                  <div class="col-xl-9 col-lg-8">
+                    <app-hotel-results-list
+                      [city]="hotelCity"
+                      [hotels]="filteredHotelResults"
+                      [totalCount]="rawHotelResults.length"
+                      [savedHotelIds]="savedHotelIds"
+                      [nights]="hotelStayNights"
+                      [roomsCount]="hotelRoomsCount"
+                      [adultsCount]="hotelAdultsCount"
+                      [childrenCount]="hotelChildrenCount"
+                      [checkInDate]="checkInDate"
+                      [checkOutDate]="checkOutDate"
+                      [sortBy]="hotelSortBy"
+                      [pageSize]="hotelPageSize"
+                      [currentPage]="hotelCurrentPage"
+                      (sortByChange)="onHotelSortChange($event)"
+                      (pageChange)="hotelCurrentPage = $event"
+                      (clearFilters)="onHotelClearAllFilters()"
+                      (viewRooms)="onViewHotelRooms($event)"
+                      (toggleFavourite)="toggleHotelFavourite($event)"
+                    ></app-hotel-results-list>
+                  </div>
+
+                </div>
               </div>
             </div>
+
           </div>
 
           <!-- #################### TAB 3: MY BOOKINGS #################### -->
@@ -860,9 +1049,41 @@ export { Destination, DestinationAttraction };
         (rateReview)="closeBookingDetails(); openReviewModal($event)"
       ></app-booking-details-modal>
 
+      <!-- ==================== DEDICATED HOTEL BOOKING DETAILS MODAL ==================== -->
+      <app-hotel-booking-details-modal
+        [showDetailsModal]="showHotelDetailsModal"
+        [bookingCard]="selectedHotelBookingCard"
+        [hotelDetails]="selectedHotelDetailsDto"
+        [reservationDetails]="selectedHotelReservationDto"
+        [paymentTransaction]="selectedHotelPaymentDto"
+        [reviews]="selectedHotelReviews"
+        [isLoadingDetails]="isLoadingHotelModalDetails"
+        [detailsError]="hotelModalDetailsError"
+        (closeDetails)="closeHotelBookingDetails()"
+      ></app-hotel-booking-details-modal>
+
+      <!-- ==================== DEDICATED HOTEL CANCELLATION MODAL ==================== -->
+      <app-hotel-cancellation-modal
+        [showModal]="showHotelCancellationModal"
+        [bookingCard]="selectedHotelCancellationCard"
+        (closeModal)="closeHotelCancellationModal()"
+        (bookingUpdated)="onHotelBookingCancellationUpdated($event)"
+        (viewBookingAfterCancel)="onHotelCancellationCompletedViewBookings($event)"
+        (refreshBookings)="loadMyBookings()"
+      ></app-hotel-cancellation-modal>
+
     </div>
   `,
   styles: [`
+    .btn-outline-teal {
+      color: #0891B2;
+      border-color: #0891B2;
+    }
+    .btn-outline-teal:hover {
+      background-color: #0891B2;
+      color: #FFFFFF;
+    }
+
     :host {
       --primary-blue: #0875E1;
       --dark-navy: #102A56;
@@ -1009,7 +1230,7 @@ export { Destination, DestinationAttraction };
     }
   `]
 })
-export class CustomerDashboardComponent implements OnInit {
+export class CustomerDashboardComponent implements OnInit, OnDestroy {
   Math = Math;
   currentUser: User | null = null;
   activeTab = 'dashboard';
@@ -1023,7 +1244,8 @@ export class CustomerDashboardComponent implements OnInit {
   showNotifications = false;
   showUserMenu = false;
   unreadNotificationsCount = 0;
-  notificationList: any[] = [];
+  notificationList: FormattedNotification[] = [];
+  private notificationSubs: Subscription[] = [];
 
   // Bus Search & Results State
   busOrigin = 'Bengaluru';
@@ -1105,14 +1327,42 @@ export class CustomerDashboardComponent implements OnInit {
   };
 
   // Hotel Search State
-  hotelCity = 'Vijayawada';
-  checkInDate = new Date().toISOString().split('T')[0];
-  checkOutDate = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+  hotelCity = '';
+  checkInDate = '';
+  checkOutDate = '';
+  hotelRoomsCount = 1;
+  hotelAdultsCount = 1;
+  hotelChildrenCount = 0;
+  isSearchingHotels = false;
   hotelsSearched = false;
-  hotelResults: any[] = [];
+  hotelSearchError = '';
+  private lastSearchedHotelKey = '';
+  private hotelSearchRequestId = 0;
+  hotelResults: HotelPublicDto[] = [];
+  rawHotelResults: HotelPublicDto[] = [];
+  filteredHotelResults: HotelPublicDto[] = [];
   selectedHotel: any = null;
+  selectedHotelId: number | null = null;
+  hotelBookingStage: 'search' | 'details' | 'guests' | 'review-entry' | 'payment-entry' = 'search';
+  hotelPaymentInitiationToken = 0;
+  guestAllocationSummary: HotelStaySummary | null = null;
+  validatedGuestRooms: PhysicalRoomAllocation[] = [];
+  validatedPrimaryGuest: PrimaryGuestDtoPayload | null = null;
+  validatedReviewSummaryMetrics: ReservationReviewSummaryMetrics | null = null;
   hotelRoomTypes: any[] = [];
-  hotelSortBy = 'popularity';
+  hotelSortBy = 'price_asc';
+  hotelCurrentPage = 1;
+  hotelPageSize = 6;
+
+  // Hotel Filters State
+  hotelMinPriceLimit = 1000;
+  hotelMaxPriceLimit = 10000;
+  hotelMinPriceSelected = 1000;
+  hotelMaxPriceSelected = 10000;
+  hotelAvailablePropertyTypes: PropertyTypeOption[] = [];
+  hotelSelectedPropertyTypes: string[] = [];
+  hotelAvailableAmenities: AmenityOption[] = [];
+  hotelSelectedAmenities: string[] = [];
 
   // Checkout State
   showCheckoutModal = false;
@@ -1140,6 +1390,24 @@ export class CustomerDashboardComponent implements OnInit {
   showNewBookingMenu = false;
   selectedBookingDetails: any = null;
   showBookingDetailsModal = false;
+  showHotelDetailsModal = false;
+  selectedHotelRawBooking: any = null;
+  selectedHotelBookingCard: HotelBookingCardViewModel | null = null;
+  selectedHotelDetailsDto: HotelDetailsResponseDto | null = null;
+  selectedHotelReservationDto: HotelReservationDetailResponse | null = null;
+  selectedHotelPaymentDto: PaymentTransactionDto | null = null;
+  selectedHotelReviews: any[] | null = null;
+  isLoadingHotelModalDetails = false;
+  hotelModalDetailsError: string | null = null;
+  hotelDetailsCache: Record<number, HotelDetailsResponseDto> = {};
+  hotelReservationCache: Record<string, HotelReservationDetailResponse> = {};
+  hotelReviewsCache: Record<number, any[]> = {};
+  hotelPaymentCache: Record<string, PaymentTransactionDto | null> = {};
+  showHotelCancellationModal = false;
+  selectedHotelCancellationCard: HotelBookingCardViewModel | null = null;
+  private hotelBookingsEnrichmentSub: Subscription | null = null;
+  private hotelModalEnrichmentSub: Subscription | null = null;
+  private hotelCancellationRefreshSub: Subscription | null = null;
   bookingToCancel: any = null;
   showCancelConfirmModal = false;
   isCancellingBooking = false;
@@ -1166,6 +1434,13 @@ export class CustomerDashboardComponent implements OnInit {
   };
   favouritesList: any[] = [];
   favouriteFilter = '';
+
+  get savedHotelIds(): number[] {
+    if (!this.favouritesList) return [];
+    return this.favouritesList
+      .filter((f: any) => f.itemType === 'HOTEL' && f.itemId != null)
+      .map((f: any) => f.itemId);
+  }
   supportTickets: any[] = [];
   ticketModel: any = { category: 'BOOKING', subject: '', message: '' };
 
@@ -1289,36 +1564,35 @@ export class CustomerDashboardComponent implements OnInit {
     private bookingService: BookingService,
     private travellerService: TravellerService,
     private route: ActivatedRoute,
-    private router: Router
+    private router: Router,
+    private notificationService: NotificationService
   ) {}
 
   ngOnInit() {
     this.currentUser = this.authService.currentUserValue;
 
     // Detect path from URL
-    const url = this.router.url.split('?')[0].split('#')[0];
-    if (url.includes('/destinations/')) {
-      const slug = url.split('/destinations/')[1];
-      this.selectDestinationBySlug(slug);
-    } else if (url.endsWith('/buses')) {
-      this.activeTab = 'bus';
-    } else if (url.endsWith('/hotels')) {
-      this.activeTab = 'hotel';
-    } else if (url.endsWith('/bookings')) {
-      this.activeTab = 'my-bookings';
-    } else if (url.endsWith('/favourites')) {
-      this.activeTab = 'favourites';
-    } else if (url.endsWith('/profile')) {
-      this.activeTab = 'profile';
-    } else if (url.endsWith('/settings')) {
-      this.activeTab = 'settings';
-    } else if (url.endsWith('/support')) {
-      this.activeTab = 'support';
-    } else {
-      this.activeTab = 'dashboard';
-    }
+    this.syncHotelAndTabFromUrl(this.router.url);
+
+    this.notificationSubs.push(
+      this.router.events
+        .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
+        .subscribe(event => {
+          this.syncHotelAndTabFromUrl(event.urlAfterRedirects || event.url);
+        })
+    );
 
     // Query parameters & fragments
+    this.route.params.subscribe(params => {
+      if (params['id']) {
+        const hid = parseInt(params['id'], 10);
+        if (!isNaN(hid) && hid > 0) {
+          this.selectedHotelId = hid;
+          this.activeTab = 'hotel';
+        }
+      }
+    });
+
     this.route.queryParams.subscribe(params => {
       if (params['tab']) {
         this.activeTab = params['tab'];
@@ -1341,9 +1615,24 @@ export class CustomerDashboardComponent implements OnInit {
       if (params['checkOut']) {
         this.checkOutDate = params['checkOut'];
       }
+      if (params['rooms']) {
+        const r = parseInt(params['rooms'], 10);
+        if (!isNaN(r) && r >= 1) this.hotelRoomsCount = r;
+      }
+      if (params['adults']) {
+        const a = parseInt(params['adults'], 10);
+        if (!isNaN(a) && a >= 1) this.hotelAdultsCount = a;
+      }
+      if (params['children'] !== undefined) {
+        const c = parseInt(params['children'], 10);
+        if (!isNaN(c) && c >= 0) this.hotelChildrenCount = c;
+      }
+      this.syncHotelAndTabFromUrl(this.router.url);
 
-      if (this.activeTab === 'hotel') {
-        this.onSearchHotels();
+      if (this.activeTab === 'hotel' && this.hotelBookingStage === 'search') {
+        if (this.hotelCity) {
+          this.executeHotelSearchIfChanged();
+        }
       } else if (this.activeTab === 'bus') {
         this.onSearchBuses();
       } else if (this.activeTab === 'dashboard') {
@@ -1356,7 +1645,7 @@ export class CustomerDashboardComponent implements OnInit {
     this.route.fragment.subscribe(fragment => {
       if (fragment === 'hotels') {
         this.activeTab = 'hotel';
-        if (!this.hotelsSearched) this.onSearchHotels();
+        if (this.hotelCity && !this.hotelsSearched) this.executeHotelSearchIfChanged();
       } else if (fragment === 'buses') {
         this.activeTab = 'bus';
         if (!this.busesSearched) this.onSearchBuses();
@@ -1375,6 +1664,24 @@ export class CustomerDashboardComponent implements OnInit {
 
     // Load initial tab data
     this.loadTabData(this.activeTab);
+
+    this.notificationSubs.push(
+      this.notificationService.notifications$.subscribe(notifs => {
+        this.notificationList = notifs;
+      })
+    );
+    this.notificationSubs.push(
+      this.notificationService.unreadCount$.subscribe(count => {
+        this.unreadNotificationsCount = count;
+      })
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.notificationSubs.forEach(s => s.unsubscribe());
+    this.hotelBookingsEnrichmentSub?.unsubscribe();
+    this.hotelModalEnrichmentSub?.unsubscribe();
+    this.hotelCancellationRefreshSub?.unsubscribe();
   }
 
   getFirstName(): string {
@@ -1398,6 +1705,10 @@ export class CustomerDashboardComponent implements OnInit {
   // --- TAB NAVIGATION ---
   switchTab(tab: string) {
     this.activeTab = tab;
+    if (tab === 'hotel') {
+      this.hotelBookingStage = 'search';
+      this.selectedHotelId = null;
+    }
     let targetPath = '/customer';
     if (tab === 'bus') targetPath = '/customer/buses';
     else if (tab === 'hotel') targetPath = '/customer/hotels';
@@ -1417,7 +1728,7 @@ export class CustomerDashboardComponent implements OnInit {
       this.loadMyBookings();
       this.loadFavourites();
     } else if (tab === 'hotel' && !this.hotelsSearched) {
-      this.onSearchHotels();
+      this.executeHotelSearchIfChanged();
     } else if (tab === 'bus' && !this.busesSearched) {
       this.onSearchBuses();
     } else if (tab === 'my-bookings') {
@@ -1520,11 +1831,26 @@ export class CustomerDashboardComponent implements OnInit {
   toggleNotifications() {
     this.showNotifications = !this.showNotifications;
     this.showUserMenu = false;
+    if (this.showNotifications) {
+      this.notificationService.fetchNotifications().subscribe();
+    }
   }
 
   markNotificationsRead() {
-    this.unreadNotificationsCount = 0;
-    this.notificationList.forEach(n => n.read = true);
+    this.notificationService.markAllAsRead().subscribe();
+  }
+
+  handleNotificationClick(n: FormattedNotification) {
+    this.notificationService.markAsRead(n.id).subscribe();
+    this.showNotifications = false;
+    if (n.actionUrl) {
+      const url = n.actionUrl.trim();
+      if (url.includes('booking') || url === '/my-bookings' || url === '/customer?tab=my-bookings') {
+        this.switchTab('my-bookings');
+      } else if (this.notificationService.isSafeActionUrl(url)) {
+        this.router.navigateByUrl(url);
+      }
+    }
   }
 
   toggleUserMenu() {
@@ -2407,29 +2733,656 @@ export class CustomerDashboardComponent implements OnInit {
     this.showCheckoutModal = true;
   }
 
+  get hotelStayNights(): number {
+    if (!this.checkInDate || !this.checkOutDate) return 1;
+    try {
+      const d1 = new Date(this.checkInDate);
+      const d2 = new Date(this.checkOutDate);
+      const diffMs = d2.getTime() - d1.getTime();
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      return diffDays > 0 ? diffDays : 1;
+    } catch {
+      return 1;
+    }
+  }
+
   // --- HOTEL WORKFLOWS ---
-  onSearchHotels() {
-    this.hotelService.searchHotels(this.hotelCity, this.checkInDate, this.checkOutDate).subscribe({
-      next: (res) => {
-        this.hotelResults = res || [];
+  searchQuickHotelCity(city: string) {
+    this.hotelCity = city;
+    this.onSearchHotels();
+  }
+
+  private getNormalizedHotelSearchKey(criteria?: HotelSearchCriteria): string {
+    const city = (criteria?.city ?? this.hotelCity ?? '').trim().toLowerCase();
+    const checkIn = (criteria?.checkIn ?? this.checkInDate ?? '').trim();
+    const checkOut = (criteria?.checkOut ?? this.checkOutDate ?? '').trim();
+    const rooms = criteria?.rooms ?? this.hotelRoomsCount ?? 1;
+    const adults = criteria?.adults ?? this.hotelAdultsCount ?? 1;
+    const children = criteria?.children ?? this.hotelChildrenCount ?? 0;
+    return `${city}|${checkIn}|${checkOut}|${rooms}|${adults}|${children}`;
+  }
+
+  executeHotelSearchIfChanged(criteria?: HotelSearchCriteria): void {
+    const key = this.getNormalizedHotelSearchKey(criteria);
+    if (this.isSearchingHotels || (this.hotelsSearched && this.lastSearchedHotelKey === key)) {
+      return;
+    }
+    this.onSearchHotels(criteria);
+  }
+
+  onSearchHotels(criteria?: HotelSearchCriteria) {
+    if (criteria) {
+      this.hotelCity = criteria.city;
+      this.checkInDate = criteria.checkIn;
+      this.checkOutDate = criteria.checkOut;
+      this.hotelRoomsCount = criteria.rooms || 1;
+      this.hotelAdultsCount = criteria.adults || 1;
+      this.hotelChildrenCount = criteria.children || 0;
+    }
+
+    const cityTrimmed = (this.hotelCity || '').trim();
+    if (!cityTrimmed) return;
+
+    const currentKey = this.getNormalizedHotelSearchKey();
+    this.lastSearchedHotelKey = currentKey;
+    const currentRequestId = ++this.hotelSearchRequestId;
+
+    this.isSearchingHotels = true;
+    this.hotelSearchError = '';
+    this.selectedHotel = null;
+
+    console.debug('[Hotel Search] Initiating search for:', cityTrimmed, this.checkInDate, this.checkOutDate, 'rooms:', this.hotelRoomsCount, 'adults:', this.hotelAdultsCount, 'children:', this.hotelChildrenCount, 'requestId:', currentRequestId);
+
+    const totalGuests = this.hotelAdultsCount + this.hotelChildrenCount;
+
+    this.hotelService.searchHotels(
+      cityTrimmed,
+      this.checkInDate,
+      this.checkOutDate,
+      this.hotelRoomsCount,
+      totalGuests
+    ).pipe(
+      timeout(30000),
+      finalize(() => {
+        if (this.hotelSearchRequestId === currentRequestId) {
+          this.isSearchingHotels = false;
+        }
+      })
+    ).subscribe({
+      next: (res: HotelPublicDto[]) => {
+        if (this.hotelSearchRequestId !== currentRequestId) {
+          console.debug('[Hotel Search] Ignoring stale response for requestId:', currentRequestId);
+          return;
+        }
+        console.debug('[Hotel Search] Received response for requestId:', currentRequestId, 'count:', res?.length);
+        this.rawHotelResults = res || [];
         this.hotelsSearched = true;
-        this.sortHotels();
+        this.hotelCurrentPage = 1;
+        this.initHotelFilters(this.rawHotelResults);
+        this.applyHotelFiltersAndSorting();
       },
-      error: () => {
-        this.hotelResults = [];
+      error: (err: any) => {
+        if (this.hotelSearchRequestId !== currentRequestId) {
+          return;
+        }
+        console.error('[Hotel Search] Search error for requestId:', currentRequestId, err);
+        this.rawHotelResults = [];
+        this.filteredHotelResults = [];
         this.hotelsSearched = true;
+        if (err?.name === 'TimeoutError') {
+          this.hotelSearchError = 'The hotel search is taking longer than expected. Please try again.';
+        } else {
+          this.hotelSearchError = 'Failed to load hotels for ' + cityTrimmed + '. Please try again.';
+        }
       }
     });
   }
 
-  sortHotels() {
-    if (this.hotelSortBy === 'priceLow') {
-      this.hotelResults.sort((a, b) => (a.pricePerNight || 0) - (b.pricePerNight || 0));
-    } else if (this.hotelSortBy === 'priceHigh') {
-      this.hotelResults.sort((a, b) => (b.pricePerNight || 0) - (a.pricePerNight || 0));
-    } else if (this.hotelSortBy === 'rating') {
-      this.hotelResults.sort((a, b) => (b.starRating || 0) - (a.starRating || 0));
+  initHotelFilters(hotels: HotelPublicDto[]) {
+    const validPrices = hotels
+      .map(h => h.minPrice)
+      .filter((p): p is number => typeof p === 'number' && p > 0);
+
+    if (validPrices.length > 0) {
+      const minP = Math.floor(Math.min(...validPrices) / 500) * 500;
+      const maxP = Math.ceil(Math.max(...validPrices) / 1000) * 1000;
+      this.hotelMinPriceLimit = minP > 0 ? minP : 1000;
+      this.hotelMaxPriceLimit = maxP > this.hotelMinPriceLimit ? maxP : (this.hotelMinPriceLimit + 5000);
+    } else {
+      this.hotelMinPriceLimit = 1000;
+      this.hotelMaxPriceLimit = 10000;
     }
+    this.hotelMinPriceSelected = this.hotelMinPriceLimit;
+    this.hotelMaxPriceSelected = this.hotelMaxPriceLimit;
+
+    // Derive property types with counts
+    const propertyTypeCounts = new Map<string, number>();
+    const standardTypes = ['Hotel', 'Resort', 'Guest House', 'Apartment / Serviced Stay'];
+    standardTypes.forEach(t => propertyTypeCounts.set(t, 0));
+
+    hotels.forEach(h => {
+      const pType = h.propertyType ? this.normalizePropertyType(h.propertyType) : 'Hotel';
+      propertyTypeCounts.set(pType, (propertyTypeCounts.get(pType) || 0) + 1);
+    });
+
+    this.hotelAvailablePropertyTypes = Array.from(propertyTypeCounts.entries())
+      .map(([type, count]) => ({ type, label: type, count }))
+      .filter(item => item.count > 0 || standardTypes.includes(item.type));
+
+    // Derive amenities with counts
+    const standardAmenities: { key: string; label: string }[] = [
+      { key: 'Free Wi-Fi', label: 'Free Wi-Fi' },
+      { key: 'Breakfast Included', label: 'Breakfast Included' },
+      { key: 'Swimming Pool', label: 'Swimming Pool' },
+      { key: 'Parking', label: 'Parking' },
+      { key: 'Restaurant', label: 'Restaurant' },
+      { key: 'Spa', label: 'Spa' },
+      { key: 'Gym', label: 'Gym' }
+    ];
+
+    const amenityCounts = new Map<string, number>();
+    standardAmenities.forEach(a => amenityCounts.set(a.key, 0));
+
+    hotels.forEach(h => {
+      const amString = (h.amenities || '').toLowerCase();
+      standardAmenities.forEach(a => {
+        const searchWord = a.key.toLowerCase().replace('free ', '').replace(' included', '');
+        if (amString.includes(searchWord) || (a.key === 'Free Wi-Fi' && (amString.includes('wifi') || amString.includes('wi-fi')))) {
+          amenityCounts.set(a.key, (amenityCounts.get(a.key) || 0) + 1);
+        }
+      });
+    });
+
+    this.hotelAvailableAmenities = standardAmenities.map(a => ({
+      key: a.key,
+      label: a.label,
+      count: amenityCounts.get(a.key) || 0
+    }));
+
+    this.hotelSelectedPropertyTypes = [];
+    this.hotelSelectedAmenities = [];
+  }
+
+  normalizePropertyType(raw: string): string {
+    const r = (raw || '').trim().toUpperCase();
+    if (r === 'HOTEL') return 'Hotel';
+    if (r === 'RESORT') return 'Resort';
+    if (r === 'GUEST_HOUSE' || r === 'GUESTHOUSE') return 'Guest House';
+    if (r === 'APARTMENT' || r === 'SERVICED_APARTMENT' || r.includes('APARTMENT')) return 'Apartment / Serviced Stay';
+    if (r === 'VILLA') return 'Resort';
+    return (raw || '').charAt(0).toUpperCase() + (raw || '').slice(1).toLowerCase();
+  }
+
+  applyHotelFiltersAndSorting() {
+    let list = [...this.rawHotelResults];
+
+    // Filter by price (only filter out hotels with known price exceeding the maximum)
+    list = list.filter(h => {
+      if (typeof h.minPrice === 'number' && h.minPrice > 0) {
+        return h.minPrice <= this.hotelMaxPriceSelected && h.minPrice >= this.hotelMinPriceSelected;
+      }
+      return true; // Keep hotels with unavailable price visible
+    });
+
+    // Filter by property types (if any selected)
+    if (this.hotelSelectedPropertyTypes.length > 0) {
+      list = list.filter(h => {
+        const pType = h.propertyType ? this.normalizePropertyType(h.propertyType) : 'Hotel';
+        return this.hotelSelectedPropertyTypes.includes(pType);
+      });
+    }
+
+    // Filter by amenities (AND condition: hotel must contain all selected amenities)
+    if (this.hotelSelectedAmenities.length > 0) {
+      list = list.filter(h => {
+        const amString = (h.amenities || '').toLowerCase();
+        return this.hotelSelectedAmenities.every(a => {
+          const searchWord = a.toLowerCase().replace('free ', '').replace(' included', '');
+          return amString.includes(searchWord) || (a === 'Free Wi-Fi' && (amString.includes('wifi') || amString.includes('wi-fi')));
+        });
+      });
+    }
+
+    // Sorting
+    if (this.hotelSortBy === 'price_asc' || this.hotelSortBy === 'priceLow') {
+      list.sort((a, b) => {
+        const pA = typeof a.minPrice === 'number' && a.minPrice > 0 ? a.minPrice : Number.MAX_SAFE_INTEGER;
+        const pB = typeof b.minPrice === 'number' && b.minPrice > 0 ? b.minPrice : Number.MAX_SAFE_INTEGER;
+        return pA - pB;
+      });
+    } else if (this.hotelSortBy === 'price_desc' || this.hotelSortBy === 'priceHigh') {
+      list.sort((a, b) => {
+        const pA = typeof a.minPrice === 'number' && a.minPrice > 0 ? a.minPrice : -1;
+        const pB = typeof b.minPrice === 'number' && b.minPrice > 0 ? b.minPrice : -1;
+        return pB - pA;
+      });
+    } else if (this.hotelSortBy === 'name_asc') {
+      list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    } else if (this.hotelSortBy === 'name_desc') {
+      list.sort((a, b) => (b.name || '').localeCompare(a.name || ''));
+    }
+
+    this.filteredHotelResults = list;
+    this.hotelResults = list;
+  }
+
+  onHotelPriceChange(range: { min: number; max: number }) {
+    this.hotelMinPriceSelected = range.min;
+    this.hotelMaxPriceSelected = range.max;
+    this.applyHotelFiltersAndSorting();
+  }
+
+  onHotelPropertyTypeChange(types: string[]) {
+    this.hotelSelectedPropertyTypes = types;
+    this.applyHotelFiltersAndSorting();
+  }
+
+  onHotelAmenityChange(amenities: string[]) {
+    this.hotelSelectedAmenities = amenities;
+    this.applyHotelFiltersAndSorting();
+  }
+
+  onHotelClearAllFilters() {
+    this.hotelMinPriceSelected = this.hotelMinPriceLimit;
+    this.hotelMaxPriceSelected = this.hotelMaxPriceLimit;
+    this.hotelSelectedPropertyTypes = [];
+    this.hotelSelectedAmenities = [];
+    this.applyHotelFiltersAndSorting();
+  }
+
+  onHotelSortChange(newSort: string) {
+    this.hotelSortBy = newSort;
+    this.applyHotelFiltersAndSorting();
+  }
+
+  toggleHotelFavourite(hotel: HotelPublicDto) {
+    const isSaved = this.isHotelSaved(hotel.id);
+    if (isSaved) {
+      const fav = this.favouritesList.find(f => f.itemType === 'HOTEL' && f.itemId === hotel.id);
+      if (fav && fav.id) {
+        this.removeFavourite(fav.id);
+      }
+    } else {
+      this.saveHotelToFavourites(hotel);
+    }
+  }
+
+  onViewHotelRooms(hotel: HotelPublicDto) {
+    this.selectedHotel = hotel;
+    this.selectedHotelId = hotel.id;
+    this.hotelBookingStage = 'details';
+    this.router.navigate(['/customer/hotels'], {
+      queryParams: {
+        hotelId: hotel.id,
+        city: this.hotelCity,
+        checkIn: this.checkInDate,
+        checkOut: this.checkOutDate,
+        rooms: this.hotelRoomsCount,
+        adults: this.hotelAdultsCount,
+        children: this.hotelChildrenCount
+      },
+      queryParamsHandling: 'merge'
+    });
+  }
+
+  clearSelectedHotel() {
+    this.selectedHotelId = null;
+    this.selectedHotel = null;
+    this.hotelBookingStage = 'search';
+    this.router.navigate(['/customer/hotels'], {
+      queryParams: {
+        hotelId: null,
+        city: this.hotelCity,
+        checkIn: this.checkInDate,
+        checkOut: this.checkOutDate,
+        rooms: this.hotelRoomsCount,
+        adults: this.hotelAdultsCount,
+        children: this.hotelChildrenCount
+      },
+      queryParamsHandling: 'merge'
+    });
+  }
+
+  onHotelDetailsSearchModified(criteria: HotelSearchCriteria) {
+    if (criteria.city) this.hotelCity = criteria.city;
+    if (criteria.checkIn) this.checkInDate = criteria.checkIn;
+    if (criteria.checkOut) this.checkOutDate = criteria.checkOut;
+    if (criteria.rooms) this.hotelRoomsCount = criteria.rooms;
+    if (criteria.adults) this.hotelAdultsCount = criteria.adults;
+    if (criteria.children !== undefined) this.hotelChildrenCount = criteria.children;
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        city: this.hotelCity,
+        checkIn: this.checkInDate,
+        checkOut: this.checkOutDate,
+        rooms: this.hotelRoomsCount,
+        adults: this.hotelAdultsCount,
+        children: this.hotelChildrenCount
+      },
+      queryParamsHandling: 'merge'
+    });
+  }
+
+  onProceedToGuestAllocation(summary: HotelStaySummary) {
+    this.guestAllocationSummary = summary;
+    this.selectedHotelId = summary.hotelId;
+    this.hotelBookingStage = 'guests';
+    saveStaySummaryToSession(summary);
+
+    this.router.navigate(['/customer/hotels', summary.hotelId, 'guest-allocation'], {
+      queryParams: {
+        city: summary.city || this.hotelCity,
+        checkIn: summary.checkIn || this.checkInDate,
+        checkOut: summary.checkOut || this.checkOutDate,
+        rooms: summary.requestedRooms || this.hotelRoomsCount,
+        adults: summary.adults || this.hotelAdultsCount,
+        children: summary.children ?? this.hotelChildrenCount
+      }
+    });
+  }
+
+  onBackFromGuestAllocation() {
+    const summary = this.guestAllocationSummary || loadStaySummaryFromSession();
+    const targetHotelId = summary?.hotelId || this.selectedHotelId;
+    if (!targetHotelId) {
+      this.hotelBookingStage = 'search';
+      this.router.navigate(['/customer/hotels']);
+      return;
+    }
+
+    this.selectedHotelId = targetHotelId;
+    this.hotelBookingStage = 'details';
+    this.router.navigate(['/customer/hotels'], {
+      queryParams: {
+        hotelId: targetHotelId,
+        city: summary?.city || this.hotelCity,
+        checkIn: summary?.checkIn || this.checkInDate,
+        checkOut: summary?.checkOut || this.checkOutDate,
+        rooms: summary?.requestedRooms || this.hotelRoomsCount,
+        adults: summary?.adults || this.hotelAdultsCount,
+        children: summary?.children ?? this.hotelChildrenCount
+      }
+    });
+  }
+
+  onProceedToReservationReview(event: { staySummary: HotelStaySummary; rooms: PhysicalRoomAllocation[] }) {
+    this.guestAllocationSummary = event.staySummary;
+    this.validatedGuestRooms = event.rooms;
+    this.selectedHotelId = event.staySummary.hotelId;
+    this.hotelBookingStage = 'review-entry';
+
+    this.router.navigate(['/customer/hotels', event.staySummary.hotelId, 'reservation-review'], {
+      queryParams: {
+        city: event.staySummary.city || this.hotelCity,
+        checkIn: event.staySummary.checkIn || this.checkInDate,
+        checkOut: event.staySummary.checkOut || this.checkOutDate,
+        rooms: event.staySummary.requestedRooms || this.hotelRoomsCount,
+        adults: event.staySummary.adults || this.hotelAdultsCount,
+        children: event.staySummary.children ?? this.hotelChildrenCount
+      }
+    });
+  }
+
+  onBackFromReviewEntry() {
+    const summary = this.guestAllocationSummary || loadStaySummaryFromSession();
+    const targetHotelId = summary?.hotelId || this.selectedHotelId;
+    if (!targetHotelId) {
+      this.hotelBookingStage = 'search';
+      this.router.navigate(['/customer/hotels']);
+      return;
+    }
+
+    // If no stay/room selection exists at all (e.g., direct navigation without Stage 2 summary),
+    // recover directly back to hotel details room selection instead of chaining through an empty Stage 3 screen.
+    if (!summary || !Array.isArray(summary.selectedItems) || summary.selectedItems.length === 0) {
+      this.selectedHotelId = targetHotelId;
+      this.hotelBookingStage = 'details';
+      this.router.navigate(['/customer/hotels'], {
+        queryParams: {
+          hotelId: targetHotelId,
+          city: this.hotelCity,
+          checkIn: this.checkInDate,
+          checkOut: this.checkOutDate,
+          rooms: this.hotelRoomsCount,
+          adults: this.hotelAdultsCount,
+          children: this.hotelChildrenCount
+        }
+      });
+      return;
+    }
+
+    this.selectedHotelId = targetHotelId;
+    this.hotelBookingStage = 'guests';
+    this.router.navigate(['/customer/hotels', targetHotelId, 'guest-allocation'], {
+      queryParams: {
+        city: summary.city || this.hotelCity,
+        checkIn: summary.checkIn || this.checkInDate,
+        checkOut: summary.checkOut || this.checkOutDate,
+        rooms: summary.requestedRooms || this.hotelRoomsCount,
+        adults: summary.adults || this.hotelAdultsCount,
+        children: summary.children ?? this.hotelChildrenCount
+      }
+    });
+  }
+
+  onProceedToHotelPayment(event: {
+    staySummary: HotelStaySummary;
+    rooms: PhysicalRoomAllocation[];
+    primaryGuest: PrimaryGuestDtoPayload;
+    summaryMetrics: ReservationReviewSummaryMetrics;
+  }) {
+    this.guestAllocationSummary = event.staySummary;
+    this.validatedGuestRooms = event.rooms;
+    this.validatedPrimaryGuest = event.primaryGuest;
+    this.validatedReviewSummaryMetrics = event.summaryMetrics;
+    this.selectedHotelId = event.staySummary.hotelId;
+    this.hotelPaymentInitiationToken += 1;
+    this.hotelBookingStage = 'payment-entry';
+
+    this.router.navigate(['/customer/hotels', event.staySummary.hotelId, 'payment'], {
+      queryParams: {
+        city: event.staySummary.city || this.hotelCity,
+        checkIn: event.staySummary.checkIn || this.checkInDate,
+        checkOut: event.staySummary.checkOut || this.checkOutDate,
+        rooms: event.staySummary.requestedRooms || this.hotelRoomsCount,
+        adults: event.staySummary.adults || this.hotelAdultsCount,
+        children: event.staySummary.children ?? this.hotelChildrenCount
+      }
+    });
+  }
+
+  onHotelReservationConfirmed() {
+    this.loadMyBookings();
+    this.loadDashboardData();
+  }
+
+  onHotelPaymentViewMyBookings() {
+    this.loadMyBookings();
+    this.switchTab('my-bookings');
+  }
+
+  onHotelPaymentBackToSearch() {
+    const summary = this.guestAllocationSummary || loadStaySummaryFromSession();
+    this.selectedHotelId = null;
+    this.hotelBookingStage = 'search';
+    this.router.navigate(['/customer/hotels'], {
+      queryParams: {
+        city: summary?.city || this.hotelCity,
+        checkIn: summary?.checkIn || this.checkInDate,
+        checkOut: summary?.checkOut || this.checkOutDate,
+        rooms: summary?.requestedRooms || this.hotelRoomsCount,
+        adults: summary?.adults || this.hotelAdultsCount,
+        children: summary?.children ?? this.hotelChildrenCount
+      }
+    });
+  }
+
+  onHotelPaymentBackToDetails(hotelId: number) {
+    const summary = this.guestAllocationSummary || loadStaySummaryFromSession();
+    this.selectedHotelId = hotelId;
+    this.hotelBookingStage = 'details';
+    this.router.navigate(['/customer/hotels'], {
+      queryParams: {
+        hotelId,
+        city: summary?.city || this.hotelCity,
+        checkIn: summary?.checkIn || this.checkInDate,
+        checkOut: summary?.checkOut || this.checkOutDate,
+        rooms: summary?.requestedRooms || this.hotelRoomsCount,
+        adults: summary?.adults || this.hotelAdultsCount,
+        children: summary?.children ?? this.hotelChildrenCount
+      }
+    });
+  }
+
+  onBackFromPaymentEntry() {
+    const summary = this.guestAllocationSummary || loadStaySummaryFromSession();
+    const targetHotelId = summary?.hotelId || this.selectedHotelId;
+    if (!targetHotelId) {
+      this.hotelBookingStage = 'search';
+      this.router.navigate(['/customer/hotels']);
+      return;
+    }
+
+    this.selectedHotelId = targetHotelId;
+    this.hotelBookingStage = 'review-entry';
+    this.router.navigate(['/customer/hotels', targetHotelId, 'reservation-review'], {
+      queryParams: {
+        city: summary?.city || this.hotelCity,
+        checkIn: summary?.checkIn || this.checkInDate,
+        checkOut: summary?.checkOut || this.checkOutDate,
+        rooms: summary?.requestedRooms || this.hotelRoomsCount,
+        adults: summary?.adults || this.hotelAdultsCount,
+        children: summary?.children ?? this.hotelChildrenCount
+      }
+    });
+  }
+
+  formatGuestGender(gender: any): string {
+    return formatGenderLabel(gender);
+  }
+
+  private syncHotelAndTabFromUrl(rawUrl: string): void {
+    const [pathPart, queryPart] = rawUrl.split('#')[0].split('?');
+    const searchParams = new URLSearchParams(queryPart || '');
+
+    if (pathPart.includes('/destinations/')) {
+      const slug = pathPart.split('/destinations/')[1];
+      this.selectDestinationBySlug(slug);
+      return;
+    }
+
+    if (pathPart.endsWith('/buses')) {
+      this.activeTab = 'bus';
+      return;
+    }
+    if (pathPart.endsWith('/bookings')) {
+      this.activeTab = 'my-bookings';
+      return;
+    }
+    if (pathPart.endsWith('/favourites')) {
+      this.activeTab = 'favourites';
+      return;
+    }
+    if (pathPart.endsWith('/profile')) {
+      this.activeTab = 'profile';
+      return;
+    }
+    if (pathPart.endsWith('/settings')) {
+      this.activeTab = 'settings';
+      return;
+    }
+    if (pathPart.endsWith('/support')) {
+      this.activeTab = 'support';
+      return;
+    }
+
+    if (!pathPart.includes('/hotels')) {
+      this.activeTab = 'dashboard';
+      return;
+    }
+
+    this.activeTab = 'hotel';
+    const guestRouteMatch = pathPart.match(/\/hotels\/(\d+)\/guest-allocation\/?$/);
+    const reviewRouteMatch = pathPart.match(/\/hotels\/(\d+)\/reservation-review\/?$/);
+    const paymentRouteMatch = pathPart.match(/\/hotels\/(\d+)\/payment\/?$/);
+    const detailsPathMatch = pathPart.match(/\/hotels\/(\d+)\/?$/);
+
+    if (guestRouteMatch || pathPart.endsWith('/hotels/guest-allocation')) {
+      this.hotelBookingStage = 'guests';
+      const routeId = guestRouteMatch ? parseInt(guestRouteMatch[1], 10) : NaN;
+      if (!isNaN(routeId) && routeId > 0) {
+        this.selectedHotelId = routeId;
+      }
+      const storedSummary = loadStaySummaryFromSession();
+      if (!this.guestAllocationSummary || (!isNaN(routeId) && this.guestAllocationSummary.hotelId !== routeId)) {
+        this.guestAllocationSummary = storedSummary;
+      }
+      return;
+    }
+
+    if (paymentRouteMatch) {
+      this.hotelBookingStage = 'payment-entry';
+      const routeId = parseInt(paymentRouteMatch[1], 10);
+      if (!isNaN(routeId) && routeId > 0) {
+        this.selectedHotelId = routeId;
+      }
+      const savedReview = loadReservationReviewState(this.guestAllocationSummary, undefined, this.currentUser?.id ?? null);
+      const savedAlloc = loadGuestAllocationState();
+      const resolvedSummary = savedReview?.staySummary || savedAlloc?.staySummary || this.guestAllocationSummary || null;
+      if (resolvedSummary && (!routeId || resolvedSummary.hotelId === routeId)) {
+        this.guestAllocationSummary = resolvedSummary;
+        const roomStates = savedReview?.rooms || savedAlloc?.rooms || null;
+        if (roomStates) {
+          this.validatedGuestRooms = buildPhysicalRoomsFromStaySummary(
+            resolvedSummary,
+            roomStates,
+            savedAlloc?.activeExpandedRoomKey ?? null
+          );
+        }
+      }
+      if (savedReview?.primaryGuestPayload) {
+        this.validatedPrimaryGuest = savedReview.primaryGuestPayload;
+      }
+      if (savedReview?.summaryMetrics) {
+        this.validatedReviewSummaryMetrics = savedReview.summaryMetrics;
+      }
+      return;
+    }
+
+    if (reviewRouteMatch || pathPart.endsWith('/hotels/reservation-review')) {
+      this.hotelBookingStage = 'review-entry';
+      const routeId = reviewRouteMatch ? parseInt(reviewRouteMatch[1], 10) : NaN;
+      if (!isNaN(routeId) && routeId > 0) {
+        this.selectedHotelId = routeId;
+      }
+      const saved = loadGuestAllocationState();
+      if (saved && (isNaN(routeId) || saved.staySummary.hotelId === routeId)) {
+        this.guestAllocationSummary = saved.staySummary;
+        this.validatedGuestRooms = buildPhysicalRoomsFromStaySummary(saved.staySummary, saved.rooms, saved.activeExpandedRoomKey);
+      }
+      return;
+    }
+
+    const qHotelId = searchParams.get('hotelId');
+    const parsedQueryHotelId = qHotelId ? parseInt(qHotelId, 10) : NaN;
+    const parsedPathHotelId = detailsPathMatch ? parseInt(detailsPathMatch[1], 10) : NaN;
+    const resolvedHotelId = !isNaN(parsedQueryHotelId) && parsedQueryHotelId > 0
+      ? parsedQueryHotelId
+      : (!isNaN(parsedPathHotelId) && parsedPathHotelId > 0 ? parsedPathHotelId : null);
+
+    if (resolvedHotelId) {
+      this.selectedHotelId = resolvedHotelId;
+      this.hotelBookingStage = 'details';
+    } else {
+      this.selectedHotelId = null;
+      this.hotelBookingStage = 'search';
+    }
+  }
+
+  sortHotels() {
+    this.applyHotelFiltersAndSorting();
   }
 
   getAmenityPills(amenities: string): string[] {
@@ -2567,33 +3520,126 @@ export class CustomerDashboardComponent implements OnInit {
   }
 
   // --- MY BOOKINGS ---
+  private isVisibleBookingRecord(b: any): boolean {
+    if (!b) return false;
+    if (b.serviceType === 'HOTEL') {
+      return (
+        b.status === 'CONFIRMED' ||
+        b.status === 'CANCELLED' ||
+        b.status === 'COMPLETED' ||
+        b.status === 'CHECKED_IN' ||
+        b.status === 'CHECKED_OUT' ||
+        b.status === 'NO_SHOW'
+      );
+    }
+    return b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED';
+  }
+
+  private rebuildOverviewDisplayBookings() {
+    const confirmed = this.myBookings.filter((b: any) => b.status === 'CONFIRMED');
+    if (confirmed.length > 0) {
+      this.displayBookings = confirmed.slice(0, 3).map((b: any) => ({
+        serviceType: b.serviceType,
+        title: b.serviceType === 'HOTEL'
+          ? (this.hotelDetailsCache[b.serviceId]?.hotel?.name || b.serviceTitle)
+          : b.serviceTitle,
+        dateString: new Date(b.bookingDate).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
+        metaString: b.detailsJson,
+        status: b.status,
+        thumbnail: b.serviceType === 'BUS'
+          ? this.resolveBusImageUrl(b.exteriorImageUrl)
+          : resolveHotelCoverImageUrl(this.hotelDetailsCache[b.serviceId] || null)
+      }));
+    } else {
+      this.displayBookings = [];
+    }
+  }
+
+  private enrichHotelBookings(bookings: any[]) {
+    this.hotelBookingsEnrichmentSub?.unsubscribe();
+    const hotelBookings = (bookings || []).filter((b: any) => b?.serviceType === 'HOTEL');
+    if (hotelBookings.length === 0) {
+      return;
+    }
+
+    const distinctHotelIds = Array.from(
+      new Set(
+        hotelBookings
+          .map((b: any) => Number(b.serviceId))
+          .filter((id: number) => Number.isFinite(id) && id > 0 && !this.hotelDetailsCache[id])
+      )
+    );
+
+    const distinctBookingRefs = Array.from(
+      new Set(
+        hotelBookings
+          .map((b: any) => (b.bookingRef || '').trim())
+          .filter((ref: string) => ref.length > 0 && !this.hotelReservationCache[ref])
+      )
+    );
+
+    if (distinctHotelIds.length === 0 && distinctBookingRefs.length === 0) {
+      return;
+    }
+
+    const hotelRequests$ = distinctHotelIds.map(id =>
+      this.hotelService.getHotelDetails(id).pipe(
+        catchError(() => of(null))
+      )
+    );
+    const reservationRequests$ = distinctBookingRefs.map(ref =>
+      this.bookingService.getHotelReservationDetails(ref).pipe(
+        catchError(() => of(null))
+      )
+    );
+
+    this.hotelBookingsEnrichmentSub = forkJoin({
+      hotels: hotelRequests$.length > 0 ? forkJoin(hotelRequests$) : of([]),
+      reservations: reservationRequests$.length > 0 ? forkJoin(reservationRequests$) : of([])
+    }).subscribe(({ hotels, reservations }) => {
+      const nextHotelsCache = { ...this.hotelDetailsCache };
+      distinctHotelIds.forEach((id, idx) => {
+        const dto = hotels[idx];
+        if (dto) {
+          nextHotelsCache[id] = dto;
+        }
+      });
+      this.hotelDetailsCache = nextHotelsCache;
+
+      const nextResCache = { ...this.hotelReservationCache };
+      distinctBookingRefs.forEach((ref, idx) => {
+        const dto = reservations[idx];
+        if (dto) {
+          nextResCache[ref] = dto;
+        }
+      });
+      this.hotelReservationCache = nextResCache;
+
+      this.rebuildOverviewDisplayBookings();
+
+      if (this.showHotelDetailsModal && this.selectedHotelRawBooking) {
+        this.syncSelectedHotelModalBindings(this.selectedHotelRawBooking);
+      }
+    });
+  }
+
   loadMyBookings() {
     if (!this.currentUser) return;
     this.isLoadingBookings = true;
     this.bookingsError = null;
+    this.hotelDetailsCache = {};
+    this.hotelReservationCache = {};
+    this.hotelReviewsCache = {};
+    this.hotelPaymentCache = {};
+
     this.bookingService.getCustomerBookings(this.currentUser.id).subscribe({
       next: (res) => {
         this.isLoadingBookings = false;
-        // Authoritative filter: Only confirmed, completed, or cancelled bookings.
+        // Authoritative filter: Only confirmed, completed, or cancelled bookings (and active stay lifecycle states for HOTEL).
         // Temporary seat holds and incomplete payment attempts are never presented as bookings.
-        this.myBookings = (res || []).filter((b: any) =>
-          b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED'
-        );
-        const confirmed = this.myBookings.filter((b: any) => b.status === 'CONFIRMED');
-        if (confirmed.length > 0) {
-          this.displayBookings = confirmed.slice(0, 3).map((b: any) => ({
-            serviceType: b.serviceType,
-            title: b.serviceTitle,
-            dateString: new Date(b.bookingDate).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
-            metaString: b.detailsJson,
-            status: b.status,
-            thumbnail: b.serviceType === 'BUS'
-              ? this.resolveBusImageUrl(b.exteriorImageUrl)
-              : 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=300&q=80'
-          }));
-        } else {
-          this.displayBookings = [];
-        }
+        this.myBookings = (res || []).filter((b: any) => this.isVisibleBookingRecord(b));
+        this.rebuildOverviewDisplayBookings();
+        this.enrichHotelBookings(this.myBookings);
       },
       error: () => {
         this.isLoadingBookings = false;
@@ -2605,15 +3651,15 @@ export class CustomerDashboardComponent implements OnInit {
   }
 
   get allBookingsCount(): number {
-    return this.myBookings.filter(b => b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED').length;
+    return this.myBookings.filter(b => this.isVisibleBookingRecord(b)).length;
   }
 
   get busBookingsCount(): number {
-    return this.myBookings.filter(b => b.serviceType === 'BUS' && (b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED')).length;
+    return this.myBookings.filter(b => b.serviceType === 'BUS' && this.isVisibleBookingRecord(b)).length;
   }
 
   get hotelBookingsCount(): number {
-    return this.myBookings.filter(b => b.serviceType === 'HOTEL' && (b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED')).length;
+    return this.myBookings.filter(b => b.serviceType === 'HOTEL' && this.isVisibleBookingRecord(b)).length;
   }
 
   setBookingCategoryTab(tab: 'ALL' | 'BUS' | 'HOTEL') {
@@ -2682,6 +3728,12 @@ export class CustomerDashboardComponent implements OnInit {
 
   parseBooking(b: any) {
     if (!b) return null;
+    if (b.serviceType === 'HOTEL') {
+      const hotelDetails = b.serviceId ? this.hotelDetailsCache[b.serviceId] || null : null;
+      const reservationDetails = b.bookingRef ? this.hotelReservationCache[b.bookingRef] || null : null;
+      return buildHotelBookingCardViewModel(b, hotelDetails, reservationDetails);
+    }
+
     const isBus = b.serviceType === 'BUS';
     let displayTitle = b.serviceTitle || (isBus ? 'Bus Booking' : 'Hotel Booking');
     let displaySubtitle = '';
@@ -2835,6 +3887,11 @@ export class CustomerDashboardComponent implements OnInit {
   }
 
   private extractBookingDate(b: any): string | null {
+    if (b?.serviceType === 'HOTEL') {
+      const cachedCheckIn = b.bookingRef ? this.hotelReservationCache[b.bookingRef]?.checkInDate : null;
+      if (cachedCheckIn) return cachedCheckIn.split('T')[0];
+      if (b.checkInDate) return String(b.checkInDate).split('T')[0];
+    }
     if (b.detailsJson) {
       const jMatch = b.detailsJson.match(/Journey Date:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/i);
       if (jMatch) return jMatch[1];
@@ -2848,7 +3905,7 @@ export class CustomerDashboardComponent implements OnInit {
   }
 
   get filteredBookings(): any[] {
-    let list = this.myBookings.filter(b => b.status === 'CONFIRMED' || b.status === 'CANCELLED' || b.status === 'COMPLETED');
+    let list = this.myBookings.filter(b => this.isVisibleBookingRecord(b));
 
     if (this.bookingCategoryTab === 'BUS') {
       list = list.filter(b => b.serviceType === 'BUS');
@@ -2862,7 +3919,21 @@ export class CustomerDashboardComponent implements OnInit {
         const ref = (b.bookingRef || '').toLowerCase();
         const title = (b.serviceTitle || '').toLowerCase();
         const details = (b.detailsJson || '').toLowerCase();
-        return ref.includes(q) || title.includes(q) || details.includes(q);
+        if (ref.includes(q) || title.includes(q) || details.includes(q)) {
+          return true;
+        }
+        if (b.serviceType === 'HOTEL') {
+          const cachedHotel = b.serviceId ? this.hotelDetailsCache[b.serviceId]?.hotel : null;
+          const cachedRes = b.bookingRef ? this.hotelReservationCache[b.bookingRef] : null;
+          const hName = (cachedHotel?.name || '').toLowerCase();
+          const hCity = (cachedHotel?.city || '').toLowerCase();
+          const hAddr = (cachedHotel?.address || '').toLowerCase();
+          const roomNames = (cachedRes?.allocations || [])
+            .map(a => (a?.roomTypeName || '').toLowerCase())
+            .join(' ');
+          return hName.includes(q) || hCity.includes(q) || hAddr.includes(q) || roomNames.includes(q);
+        }
+        return false;
       });
     }
 
@@ -2936,6 +4007,11 @@ export class CustomerDashboardComponent implements OnInit {
   }
 
   openBookingDetails(b: any) {
+    if (b?.serviceType === 'HOTEL') {
+      this.openHotelBookingDetails(b);
+      return;
+    }
+    this.showHotelDetailsModal = false;
     this.selectedBookingDetails = b;
     this.showBookingDetailsModal = true;
   }
@@ -2945,9 +4021,194 @@ export class CustomerDashboardComponent implements OnInit {
     this.selectedBookingDetails = null;
   }
 
+  openHotelBookingDetails(cardOrRaw: any) {
+    this.hotelModalEnrichmentSub?.unsubscribe();
+    const raw = cardOrRaw?.raw || cardOrRaw;
+    if (!raw) return;
+
+    this.showBookingDetailsModal = false;
+    this.selectedBookingDetails = null;
+    this.selectedHotelRawBooking = raw;
+    this.hotelModalDetailsError = null;
+    this.showHotelDetailsModal = true;
+    this.syncSelectedHotelModalBindings(raw);
+
+    const bookingRef = (raw.bookingRef || cardOrRaw?.bookingRef || '').trim();
+    const hotelId = Number(raw.serviceId || cardOrRaw?.serviceId || 0);
+
+    const needHotel = hotelId > 0 && !this.hotelDetailsCache[hotelId];
+    const needReservation = bookingRef.length > 0 && !this.hotelReservationCache[bookingRef];
+    const needPayment = bookingRef.length > 0 && !(bookingRef in this.hotelPaymentCache);
+    const needReviews = hotelId > 0 && !(hotelId in this.hotelReviewsCache);
+
+    if (!needHotel && !needReservation && !needPayment && !needReviews) {
+      this.isLoadingHotelModalDetails = false;
+      return;
+    }
+
+    this.isLoadingHotelModalDetails = true;
+    let reservationFetchFailed = false;
+
+    this.hotelModalEnrichmentSub = forkJoin({
+      hotel: needHotel
+        ? this.hotelService.getHotelDetails(hotelId).pipe(catchError(() => of(null)))
+        : of(this.hotelDetailsCache[hotelId] || null),
+      reservation: needReservation
+        ? this.bookingService.getHotelReservationDetails(bookingRef).pipe(
+            catchError(() => {
+              reservationFetchFailed = true;
+              return of(null);
+            })
+          )
+        : of(this.hotelReservationCache[bookingRef] || null),
+      payment: needPayment
+        ? this.bookingService.getPaymentByBookingRef(bookingRef).pipe(catchError(() => of(null)))
+        : of(this.hotelPaymentCache[bookingRef] ?? null),
+      reviews: needReviews
+        ? this.bookingService.getReviews('HOTEL', hotelId).pipe(catchError(() => of([])))
+        : of(this.hotelReviewsCache[hotelId] || [])
+    }).subscribe(({ hotel, reservation, payment, reviews }) => {
+      if (hotel && hotelId > 0) {
+        this.hotelDetailsCache = { ...this.hotelDetailsCache, [hotelId]: hotel };
+      }
+      if (reservation && bookingRef) {
+        this.hotelReservationCache = { ...this.hotelReservationCache, [bookingRef]: reservation };
+      }
+      if (bookingRef && needPayment) {
+        this.hotelPaymentCache = { ...this.hotelPaymentCache, [bookingRef]: payment || null };
+      }
+      if (hotelId > 0 && needReviews) {
+        this.hotelReviewsCache = { ...this.hotelReviewsCache, [hotelId]: Array.isArray(reviews) ? reviews : [] };
+      }
+
+      const activeRef = (this.selectedHotelRawBooking?.bookingRef || cardOrRaw?.bookingRef || '').trim();
+      if (this.showHotelDetailsModal && activeRef === bookingRef) {
+        this.isLoadingHotelModalDetails = false;
+        this.hotelModalDetailsError = reservationFetchFailed
+          ? 'Detailed room and guest snapshot could not be loaded completely. Showing available reservation summary.'
+          : null;
+        this.syncSelectedHotelModalBindings(this.selectedHotelRawBooking);
+      }
+    });
+  }
+
+  private syncSelectedHotelModalBindings(raw: any) {
+    if (!raw) return;
+    const hotelId = Number(raw.serviceId || 0);
+    const bookingRef = (raw.bookingRef || '').trim();
+    const hotelDetails = hotelId > 0 ? this.hotelDetailsCache[hotelId] || null : null;
+    const reservationDetails = bookingRef ? this.hotelReservationCache[bookingRef] || null : null;
+    const paymentTx = bookingRef ? this.hotelPaymentCache[bookingRef] ?? null : null;
+    const reviews = hotelId > 0 ? this.hotelReviewsCache[hotelId] ?? null : null;
+
+    this.selectedHotelDetailsDto = hotelDetails;
+    this.selectedHotelReservationDto = reservationDetails;
+    this.selectedHotelPaymentDto = paymentTx;
+    this.selectedHotelReviews = reviews;
+    this.selectedHotelBookingCard = buildHotelBookingCardViewModel(raw, hotelDetails, reservationDetails);
+  }
+
+  closeHotelBookingDetails() {
+    this.hotelModalEnrichmentSub?.unsubscribe();
+    this.showHotelDetailsModal = false;
+    this.isLoadingHotelModalDetails = false;
+    this.hotelModalDetailsError = null;
+    this.selectedHotelRawBooking = null;
+    this.selectedHotelBookingCard = null;
+  }
+
   promptCancelBooking(booking: any) {
+    if ((booking?.serviceType || '').toUpperCase() === 'HOTEL') {
+      this.openHotelCancellationWorkflow(booking);
+      return;
+    }
     this.bookingToCancel = booking;
     this.showCancelConfirmModal = true;
+  }
+
+  openHotelCancellationWorkflow(booking: any) {
+    if (!booking) return;
+    const hotelId = Number(booking.serviceId || 0);
+    const bookingRef = (booking.bookingRef || '').trim();
+    const hotelDetails = hotelId > 0 ? this.hotelDetailsCache[hotelId] || null : null;
+    const reservationDetails = bookingRef ? this.hotelReservationCache[bookingRef] || null : null;
+    this.selectedHotelCancellationCard = buildHotelBookingCardViewModel(
+      booking,
+      hotelDetails,
+      reservationDetails
+    );
+    this.showHotelCancellationModal = true;
+  }
+
+  closeHotelCancellationModal() {
+    this.showHotelCancellationModal = false;
+    this.selectedHotelCancellationCard = null;
+  }
+
+  onHotelBookingCancellationUpdated(result: HotelCancellationResultViewModel) {
+    if (!result) return;
+    const targetRef = (result.bookingRef || '').trim();
+    const targetId = Number(result.bookingId || 0);
+
+    this.myBookings = (this.myBookings || []).map(entry => {
+      const matchesRef = targetRef && (entry?.bookingRef || '').trim() === targetRef;
+      const matchesId = targetId > 0 && Number(entry?.id) === targetId;
+      if (!matchesRef && !matchesId) {
+        return entry;
+      }
+      return {
+        ...entry,
+        status: result.bookingStatus,
+        refundStatus: result.refund.normalizedStatus,
+        refundAmount: result.refundAmount,
+        refundId: result.refundId ?? entry.refundId,
+        cancellationFee: result.cancellationFee ?? entry.cancellationFee,
+        cancellationPolicyTier: result.policyTier?.rawTier ?? entry.cancellationPolicyTier,
+        cancellationReason: result.cancellationReason ?? entry.cancellationReason,
+        inventoryReleaseStatus: result.inventory.normalizedStatus
+      };
+    });
+
+    if (this.showHotelDetailsModal && this.selectedHotelRawBooking) {
+      const openRef = (this.selectedHotelRawBooking.bookingRef || '').trim();
+      if (targetRef && openRef === targetRef) {
+        const updatedOpen = this.myBookings.find(b => (b?.bookingRef || '').trim() === targetRef);
+        if (updatedOpen) {
+          this.selectedHotelRawBooking = updatedOpen;
+          this.syncSelectedHotelModalBindings(updatedOpen);
+        }
+      }
+    }
+
+    if (targetRef) {
+      this.hotelCancellationRefreshSub?.unsubscribe();
+      this.hotelCancellationRefreshSub = forkJoin({
+        reservation: this.bookingService
+          .getHotelReservationDetails(targetRef)
+          .pipe(catchError(() => of(null))),
+        payment: this.bookingService
+          .getPaymentByBookingRef(targetRef)
+          .pipe(catchError(() => of(null)))
+      }).subscribe(({ reservation, payment }) => {
+        if (reservation) {
+          this.hotelReservationCache[targetRef] = reservation;
+        }
+        if (payment !== undefined) {
+          this.hotelPaymentCache[targetRef] = payment;
+        }
+        if (
+          this.showHotelDetailsModal &&
+          (this.selectedHotelRawBooking?.bookingRef || '').trim() === targetRef
+        ) {
+          this.syncSelectedHotelModalBindings(this.selectedHotelRawBooking);
+        }
+      });
+    }
+  }
+
+  onHotelCancellationCompletedViewBookings(_result: HotelCancellationResultViewModel | null) {
+    this.closeHotelCancellationModal();
+    this.loadMyBookings();
   }
 
   closeCancelConfirmModal() {

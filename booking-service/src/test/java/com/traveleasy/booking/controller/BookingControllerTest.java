@@ -1,4 +1,7 @@
 package com.traveleasy.booking.controller;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import java.time.LocalDate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.traveleasy.booking.model.Booking;
@@ -6,6 +9,7 @@ import com.traveleasy.booking.repository.BookingRepository;
 import com.traveleasy.booking.service.BookingExpiryReconciliationService;
 import com.traveleasy.booking.service.BookingSecurityService;
 import com.traveleasy.booking.service.ScheduleCancellationCoordinatorService;
+import com.traveleasy.booking.service.BookingStateTransitionService;
 import com.traveleasy.booking.model.ScheduleCancellationBatch;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -58,11 +62,39 @@ public class BookingControllerTest {
     private ScheduleCancellationCoordinatorService coordinatorService;
 
     @MockBean
+    private BookingStateTransitionService stateTransitionService;
+
+    @MockBean
+    private com.traveleasy.booking.service.BookingInternalTokenService internalTokenService;
+
+    @MockBean
+    private com.traveleasy.booking.service.HotelCancellationPolicyService cancellationPolicyService;
+
+    @MockBean
+    private com.traveleasy.booking.service.HotelGuestLifecycleService guestLifecycleService;
+
+    @MockBean
+    private com.traveleasy.booking.service.HotelBookingOrchestrationService hotelOrchestrationService;
+
+    @MockBean
+    private com.traveleasy.booking.repository.HotelReservationSnapshotRepository snapshotRepository;
+
+    @MockBean
     private RestTemplate restTemplate;
 
     @BeforeEach
     void setUp() {
         bookingController.setRestTemplate(restTemplate);
+        when(stateTransitionService.confirmBooking(any(Booking.class))).thenAnswer(inv -> {
+            Booking b = inv.getArgument(0);
+            b.setStatus("CONFIRMED");
+            return b;
+        });
+        when(stateTransitionService.cancelBooking(any(Booking.class), any(), any())).thenAnswer(inv -> {
+            Booking b = inv.getArgument(0);
+            b.setStatus("CANCELLED");
+            return b;
+        });
     }
 
     @Test
@@ -831,5 +863,297 @@ public class BookingControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.scheduleId").value(10))
                 .andExpect(jsonPath("$.batchStatus").value("COMPLETED"));
+    }
+
+    // ==========================================
+    // WP-01: GET /api/bookings/admin/all Security Tests
+    // ==========================================
+
+    @Test
+    @DisplayName("WP-01: GET /api/bookings/admin/all - Missing Token returns 401 Unauthorized")
+    void getAllBookings_MissingToken_Returns401() throws Exception {
+        mockMvc.perform(get("/api/bookings/admin/all"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Authorization Bearer token is required"));
+    }
+
+    @Test
+    @DisplayName("WP-01: GET /api/bookings/admin/all - Invalid Token returns 401 Unauthorized")
+    void getAllBookings_InvalidToken_Returns401() throws Exception {
+        when(securityService.validateToken("invalid.token")).thenReturn(false);
+
+        mockMvc.perform(get("/api/bookings/admin/all")
+                        .header("Authorization", "Bearer invalid.token"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Invalid or expired authorization token"));
+    }
+
+    @Test
+    @DisplayName("WP-01: GET /api/bookings/admin/all - As Customer returns 403 Forbidden")
+    void getAllBookings_AsCustomer_Returns403() throws Exception {
+        when(securityService.validateToken("customer.token")).thenReturn(true);
+        when(securityService.extractRole("customer.token")).thenReturn("ROLE_CUSTOMER");
+
+        mockMvc.perform(get("/api/bookings/admin/all")
+                        .header("Authorization", "Bearer customer.token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Access denied: Administrator role required"));
+    }
+
+    @Test
+    @DisplayName("WP-01: GET /api/bookings/admin/all - As Bus Operator returns 403 Forbidden")
+    void getAllBookings_AsBusOperator_Returns403() throws Exception {
+        when(securityService.validateToken("operator.token")).thenReturn(true);
+        when(securityService.extractRole("operator.token")).thenReturn("ROLE_BUS_OPERATOR");
+
+        mockMvc.perform(get("/api/bookings/admin/all")
+                        .header("Authorization", "Bearer operator.token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Access denied: Administrator role required"));
+    }
+
+    @Test
+    @DisplayName("WP-01: GET /api/bookings/admin/all - As Hotel Manager returns 403 Forbidden")
+    void getAllBookings_AsHotelManager_Returns403() throws Exception {
+        when(securityService.validateToken("manager.token")).thenReturn(true);
+        when(securityService.extractRole("manager.token")).thenReturn("ROLE_HOTEL_MANAGER");
+
+        mockMvc.perform(get("/api/bookings/admin/all")
+                        .header("Authorization", "Bearer manager.token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Access denied: Administrator role required"));
+    }
+
+    @Test
+    @DisplayName("WP-01: GET /api/bookings/admin/all - As Administrator returns 200 OK")
+    void getAllBookings_AsAdmin_Returns200() throws Exception {
+        when(securityService.validateToken("admin.token")).thenReturn(true);
+        when(securityService.extractRole("admin.token")).thenReturn("ROLE_ADMIN");
+
+        Booking b = Booking.builder()
+                .id(1L)
+                .bookingRef("BKG-001")
+                .customerId(101L)
+                .customerName("Rahul V")
+                .totalAmount(1200.0)
+                .status("CONFIRMED")
+                .build();
+        when(bookingRepository.findAll()).thenReturn(List.of(b));
+
+        mockMvc.perform(get("/api/bookings/admin/all")
+                        .header("Authorization", "Bearer admin.token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].bookingRef").value("BKG-001"))
+                .andExpect(jsonPath("$[0].customerName").value("Rahul V"));
+    }
+
+    // ==========================================
+    // WP-03: GET /api/bookings/admin/stats
+    // ==========================================
+
+    @Test
+    @DisplayName("WP-03: GET /api/bookings/admin/stats - Without Token returns 401")
+    void getBookingStats_WithoutToken_Returns401() throws Exception {
+        mockMvc.perform(get("/api/bookings/admin/stats"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Authorization Bearer token is required"));
+    }
+
+    @Test
+    @DisplayName("WP-03: GET /api/bookings/admin/stats - As Customer returns 403 Forbidden")
+    void getBookingStats_AsCustomer_Returns403() throws Exception {
+        when(securityService.validateToken("cust.token")).thenReturn(true);
+        when(securityService.extractRole("cust.token")).thenReturn("ROLE_CUSTOMER");
+
+        mockMvc.perform(get("/api/bookings/admin/stats")
+                        .header("Authorization", "Bearer cust.token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Access denied: Administrator role required"));
+    }
+
+    @Test
+    @DisplayName("WP-03: GET /api/bookings/admin/stats - As Bus Operator returns 403 Forbidden")
+    void getBookingStats_AsBusOperator_Returns403() throws Exception {
+        when(securityService.validateToken("operator.token")).thenReturn(true);
+        when(securityService.extractRole("operator.token")).thenReturn("ROLE_BUS_OPERATOR");
+
+        mockMvc.perform(get("/api/bookings/admin/stats")
+                        .header("Authorization", "Bearer operator.token"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("WP-03: GET /api/bookings/admin/stats - As Admin returns correct totals and percentages")
+    void getBookingStats_AsAdmin_ReturnsCorrectMetrics() throws Exception {
+        when(securityService.validateToken("admin.token")).thenReturn(true);
+        when(securityService.extractRole("admin.token")).thenReturn("ROLE_ADMIN");
+
+        List<Object[]> mockResults = List.of(
+                new Object[]{"BUS", 6407L},
+                new Object[]{"HOTEL", 2909L}
+        );
+        when(bookingRepository.countConfirmedBookingsByServiceType()).thenReturn(mockResults);
+
+        mockMvc.perform(get("/api/bookings/admin/stats")
+                        .header("Authorization", "Bearer admin.token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalBookings").value(9316))
+                .andExpect(jsonPath("$.serviceBreakdown.bus.count").value(6407))
+                .andExpect(jsonPath("$.serviceBreakdown.bus.percentage").value(68.8))
+                .andExpect(jsonPath("$.serviceBreakdown.hotel.count").value(2909))
+                .andExpect(jsonPath("$.serviceBreakdown.hotel.percentage").value(31.2));
+    }
+
+    @Test
+    @DisplayName("WP-03: GET /api/bookings/admin/stats - Zero bookings returns 0.0 percentages without divide-by-zero")
+    void getBookingStats_ZeroBookings_ReturnsZero() throws Exception {
+        when(securityService.validateToken("admin.token")).thenReturn(true);
+        when(securityService.extractRole("admin.token")).thenReturn("ROLE_ADMIN");
+
+        when(bookingRepository.countConfirmedBookingsByServiceType()).thenReturn(Collections.emptyList());
+
+        mockMvc.perform(get("/api/bookings/admin/stats")
+                        .header("Authorization", "Bearer admin.token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalBookings").value(0))
+                .andExpect(jsonPath("$.serviceBreakdown.bus.count").value(0))
+                .andExpect(jsonPath("$.serviceBreakdown.bus.percentage").value(0.0))
+                .andExpect(jsonPath("$.serviceBreakdown.hotel.count").value(0))
+                .andExpect(jsonPath("$.serviceBreakdown.hotel.percentage").value(0.0));
+    }
+
+    // ==========================================
+    // WP-03: GET /api/bookings/admin/trends
+    // ==========================================
+
+    @Test
+    @DisplayName("WP-03: GET /api/bookings/admin/trends - Without Token returns 401")
+    void getBookingTrends_WithoutToken_Returns401() throws Exception {
+        mockMvc.perform(get("/api/bookings/admin/trends?days=7"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("WP-03: GET /api/bookings/admin/trends - As Customer returns 403")
+    void getBookingTrends_AsCustomer_Returns403() throws Exception {
+        when(securityService.validateToken("cust.token")).thenReturn(true);
+        when(securityService.extractRole("cust.token")).thenReturn("ROLE_CUSTOMER");
+
+        mockMvc.perform(get("/api/bookings/admin/trends?days=7"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("WP-03: GET /api/bookings/admin/trends - As Admin returns continuous chronological timeline")
+    void getBookingTrends_AsAdmin_ReturnsContinuousTimeline() throws Exception {
+        when(securityService.validateToken("admin.token")).thenReturn(true);
+        when(securityService.extractRole("admin.token")).thenReturn("ROLE_ADMIN");
+
+        LocalDate today = LocalDate.now();
+        List<Object[]> queryResults = List.of(
+                new Object[]{java.sql.Date.valueOf(today.minusDays(1)), 25L},
+                new Object[]{java.sql.Date.valueOf(today), 40L}
+        );
+        when(bookingRepository.countConfirmedBookingsByDateNative(any(LocalDateTime.class), any(LocalDateTime.class)))
+                .thenReturn(queryResults);
+
+        mockMvc.perform(get("/api/bookings/admin/trends?days=3")
+                        .header("Authorization", "Bearer admin.token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[0].date").value(today.minusDays(2).toString()))
+                .andExpect(jsonPath("$[0].bookingCount").value(0))
+                .andExpect(jsonPath("$[1].date").value(today.minusDays(1).toString()))
+                .andExpect(jsonPath("$[1].bookingCount").value(25))
+                .andExpect(jsonPath("$[2].date").value(today.toString()))
+                .andExpect(jsonPath("$[2].bookingCount").value(40));
+    }
+
+    // ==========================================
+    // WP-03: GET /api/bookings/admin/recent
+    // ==========================================
+
+    @Test
+    @DisplayName("WP-03: GET /api/bookings/admin/recent - Without Token returns 401")
+    void getRecentBookings_WithoutToken_Returns401() throws Exception {
+        mockMvc.perform(get("/api/bookings/admin/recent?limit=5"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("WP-03: GET /api/bookings/admin/recent - As Customer returns 403")
+    void getRecentBookings_AsCustomer_Returns403() throws Exception {
+        when(securityService.validateToken("cust.token")).thenReturn(true);
+        when(securityService.extractRole("cust.token")).thenReturn("ROLE_CUSTOMER");
+
+        mockMvc.perform(get("/api/bookings/admin/recent?limit=5")
+                        .header("Authorization", "Bearer cust.token"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("WP-03: GET /api/bookings/admin/recent - As Admin returns recent confirmed bookings")
+    void getRecentBookings_AsAdmin_ReturnsRecentBookings() throws Exception {
+        when(securityService.validateToken("admin.token")).thenReturn(true);
+        when(securityService.extractRole("admin.token")).thenReturn("ROLE_ADMIN");
+
+        Booking b1 = Booking.builder()
+                .bookingRef("BKG-BUS-1001")
+                .serviceType("BUS")
+                .customerName("Rahul V")
+                .totalAmount(1240.0)
+                .status("CONFIRMED")
+                .bookingDate(LocalDateTime.of(2026, 10, 23, 14, 20))
+                .build();
+
+        Booking b2 = Booking.builder()
+                .bookingRef("BKG-HTL-2002")
+                .serviceType("HOTEL")
+                .customerName("Sneha M")
+                .totalAmount(4500.0)
+                .status("CONFIRMED")
+                .bookingDate(LocalDateTime.of(2026, 10, 23, 15, 10))
+                .build();
+
+        PageImpl<Booking> pageResult = new PageImpl<>(List.of(b1, b2), PageRequest.of(0, 5), 2);
+        when(bookingRepository.findRecentConfirmedBookings(any())).thenReturn(pageResult);
+
+        mockMvc.perform(get("/api/bookings/admin/recent?limit=5")
+                        .header("Authorization", "Bearer admin.token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].bookingRef").value("BKG-BUS-1001"))
+                .andExpect(jsonPath("$[0].serviceType").value("BUS"))
+                .andExpect(jsonPath("$[0].customerName").value("Rahul V"))
+                .andExpect(jsonPath("$[0].totalAmount").value(1240.0))
+                .andExpect(jsonPath("$[0].status").value("CONFIRMED"))
+                .andExpect(jsonPath("$[1].bookingRef").value("BKG-HTL-2002"))
+                .andExpect(jsonPath("$[1].serviceType").value("HOTEL"))
+                .andExpect(jsonPath("$[1].customerName").value("Sneha M"));
+    }
+
+    @Test
+    @DisplayName("WP-03: GET /api/bookings/admin/recent - Falls back to customer email when customerName is null")
+    void getRecentBookings_CustomerNameFallback() throws Exception {
+        when(securityService.validateToken("admin.token")).thenReturn(true);
+        when(securityService.extractRole("admin.token")).thenReturn("ROLE_ADMIN");
+
+        Booking b = Booking.builder()
+                .bookingRef("BKG-FALLBACK-1")
+                .serviceType("BUS")
+                .customerName(null)
+                .customerEmail("guest@traveleasy.com")
+                .totalAmount(950.0)
+                .status("CONFIRMED")
+                .bookingDate(LocalDateTime.now())
+                .build();
+
+        PageImpl<Booking> pageResult = new PageImpl<>(List.of(b), PageRequest.of(0, 5), 1);
+        when(bookingRepository.findRecentConfirmedBookings(any())).thenReturn(pageResult);
+
+        mockMvc.perform(get("/api/bookings/admin/recent?limit=5")
+                        .header("Authorization", "Bearer admin.token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].customerName").value("guest@traveleasy.com"));
     }
 }

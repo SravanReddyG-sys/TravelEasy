@@ -31,6 +31,7 @@ public class ScheduleService {
     private final RouteStopsService routeStopsService;
     private final SeatLayoutService seatLayoutService;
     private final FareMatrixService fareMatrixService;
+    private final BusStateTransitionService busStateTransitionService;
 
     @Value("${schedule.turnaround.buffer.minutes:60}")
     private long turnaroundBufferMinutes = 60;
@@ -62,6 +63,11 @@ public class ScheduleService {
      */
     @Transactional(rollbackFor = Exception.class)
     public BusSchedule createSchedule(Long callerUserId, boolean isAdmin, BusSchedule schedule) {
+        return createSchedule(callerUserId, null, isAdmin, schedule);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public BusSchedule createSchedule(Long callerUserId, String callerEmail, boolean isAdmin, BusSchedule schedule) {
         if (schedule == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Schedule payload is required");
         }
@@ -116,6 +122,9 @@ public class ScheduleService {
             fareMatrixService.saveFareOverrides(savedSchedule.getId(), schedule.getFareOverrides());
             savedSchedule = scheduleRepository.findById(savedSchedule.getId()).orElse(savedSchedule);
         }
+
+        // 9. Record BUS_SCHEDULE_CREATED event in transactional outbox
+        busStateTransitionService.recordScheduleCreated(savedSchedule, callerUserId, callerEmail, isAdmin);
 
         log.info("Successfully created schedule #{} for bus '{}' (ID: {}) from {} to {} on {}",
                 savedSchedule.getId(), bus.getBusNumber(), bus.getId(),

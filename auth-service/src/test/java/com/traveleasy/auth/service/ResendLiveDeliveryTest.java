@@ -50,7 +50,7 @@ public class ResendLiveDeliveryTest {
 
         ResendEmailService emailService = new ResendEmailService(
                 apiKey,
-                "Travel Easy <onboarding@resend.dev>",
+                "TravelEasy <notifications@mailer.gsrgroups.tech>",
                 new ObjectMapper()
         );
 

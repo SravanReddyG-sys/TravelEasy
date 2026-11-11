@@ -1,4 +1,7 @@
-import { Component, OnInit, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener } from '@angular/core';
+import { NotificationService } from '../../services/notification.service';
+import { FormattedNotification } from '../../models/notification.model';
+import { Subscription } from 'rxjs';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -85,12 +88,55 @@ interface TrendDay {
 
         <!-- Right: Notifications & Operator Profile -->
         <div class="d-flex align-items-center gap-3">
-          <!-- Notification Bell -->
-          <div class="position-relative cursor-pointer p-2" title="Notifications">
-            <i class="fa-solid fa-bell text-secondary fs-5"></i>
-            <span class="position-absolute top-0 end-0 translate-middle badge rounded-pill bg-danger border border-white" style="font-size: 10px;">
-              1
-            </span>
+          <!-- Notification Bell & Dropdown -->
+          <div class="position-relative">
+            <button class="btn btn-light rounded-circle position-relative p-2 border-0" 
+                    (click)="toggleNotifications($event)" 
+                    title="Notifications"
+                    style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
+              <i class="fa-solid fa-bell text-secondary fs-5"></i>
+              <span *ngIf="unreadNotificationsCount > 0" 
+                    class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-white" 
+                    style="font-size: 10px;">
+                {{ unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount }}
+              </span>
+            </button>
+
+            <!-- Notifications Dropdown -->
+            <div *ngIf="showNotifications" 
+                 class="notifications-dropdown position-absolute end-0 mt-2 bg-white shadow-lg rounded-4 border p-3" 
+                 (click)="$event.stopPropagation()">
+              <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                <span class="fw-bold text-dark">Notifications</span>
+                <button *ngIf="unreadNotificationsCount > 0" 
+                        class="btn btn-link btn-sm text-primary p-0 text-decoration-none fw-semibold" 
+                        (click)="markNotificationsRead()">Mark all as read</button>
+              </div>
+              <div *ngIf="notificationList.length > 0; else emptyNotifications" class="notifications-list" style="max-height: 380px; overflow-y: auto;">
+                <div *ngFor="let n of notificationList" 
+                     class="notification-item p-2 rounded-3 mb-1 cursor-pointer" 
+                     [class.bg-light]="!n.isRead"
+                     (click)="handleNotificationClick(n)">
+                  <div class="d-flex gap-2">
+                    <i [class]="n.iconClass || 'fa-solid fa-bell'" class="mt-1" [ngClass]="n.iconColorClass || 'text-primary'"></i>
+                    <div class="flex-grow-1 overflow-hidden">
+                      <div class="d-flex justify-content-between align-items-start">
+                        <div class="fw-semibold text-dark small text-truncate" [class.fw-bold]="!n.isRead">{{ n.title }}</div>
+                        <span *ngIf="!n.isRead" class="badge rounded-pill bg-primary ms-1" style="font-size: 9px;">NEW</span>
+                      </div>
+                      <div class="text-muted text-truncate-2" style="font-size: 11px;">{{ n.message }}</div>
+                      <div class="text-muted opacity-75 mt-1" style="font-size: 10px;">{{ n.timeAgo }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <ng-template #emptyNotifications>
+                <div class="text-center py-4 text-muted small">
+                  <i class="fa-regular fa-bell-slash fs-4 mb-2 d-block opacity-50"></i>
+                  No notifications yet
+                </div>
+              </ng-template>
+            </div>
           </div>
 
           <!-- Operator Profile Pill & Dropdown -->
@@ -12399,9 +12445,30 @@ interface TrendDay {
       align-items: center;
       justify-content: center;
     }
+    .notifications-dropdown {
+      width: 340px;
+      z-index: 1050;
+    }
+    .notification-item {
+      transition: background-color 0.15s ease;
+    }
+    .notification-item:hover {
+      background-color: #F1F5F9 !important;
+    }
+    .text-truncate-2 {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
   `]
 })
-export class BusOperatorDashboardComponent implements OnInit {
+export class BusOperatorDashboardComponent implements OnInit, OnDestroy {
+  // Notification State
+  showNotifications = false;
+  unreadNotificationsCount = 0;
+  notificationList: FormattedNotification[] = [];
+  private notificationSubs: Subscription[] = [];
   currentUser: User | null = null;
   activeNav: 'dashboard' | 'buses' | 'routes' | 'schedules' | 'bookings' | 'profile' | 'support' = 'dashboard';
   isSidebarCollapsed = false;
@@ -12776,12 +12843,24 @@ export class BusOperatorDashboardComponent implements OnInit {
     private authService: AuthService,
     private busService: BusService,
     private bookingService: BookingService,
+    private notificationService: NotificationService,
     private router: Router,
     private route: ActivatedRoute
   ) {}
 
   ngOnInit() {
     this.currentUser = this.authService.currentUserValue;
+
+    this.notificationSubs.push(
+      this.notificationService.notifications$.subscribe(notifs => {
+        this.notificationList = notifs;
+      })
+    );
+    this.notificationSubs.push(
+      this.notificationService.unreadCount$.subscribe(count => {
+        this.unreadNotificationsCount = count;
+      })
+    );
     this.loadBuses();
     this.loadRoutes();
     this.loadSchedules();
@@ -12808,6 +12887,43 @@ export class BusOperatorDashboardComponent implements OnInit {
         }
       }
     });
+  }
+
+
+  ngOnDestroy(): void {
+    this.notificationSubs.forEach(s => s.unsubscribe());
+  }
+
+  toggleNotifications(event?: Event): void {
+    if (event) event.stopPropagation();
+    this.showNotifications = !this.showNotifications;
+    if (this.showNotifications) {
+      this.notificationService.fetchNotifications().subscribe();
+    }
+  }
+
+  markNotificationsRead(): void {
+    this.notificationService.markAllAsRead().subscribe();
+  }
+
+  handleNotificationClick(n: FormattedNotification): void {
+    this.notificationService.markAsRead(n.id).subscribe();
+    this.showNotifications = false;
+    if (n.actionUrl) {
+      const url = n.actionUrl.trim();
+      if (url.includes('schedule')) {
+        this.activeNav = 'schedules';
+        this.loadSchedules();
+      } else if (url.includes('bus')) {
+        this.activeNav = 'buses';
+        this.loadBuses();
+      } else if (url.includes('booking')) {
+        this.activeNav = 'bookings';
+        this.loadBookings();
+      } else if (this.notificationService.isSafeActionUrl(url)) {
+        this.router.navigateByUrl(url);
+      }
+    }
   }
 
   getFirstName(): string {
@@ -13793,6 +13909,7 @@ getActiveRoutesCount(): number {
 
   @HostListener('document:click')
   onDocumentClick() {
+    this.showNotifications = false;
     this.activeActionMenuRouteId = null;
     this.isStatusDropdownOpen = false;
     this.activeScheduleActionMenuId = null;

@@ -136,7 +136,7 @@ public class PasswordRecoveryAndEmailTest {
 
         // HTML checks
         assertTrue(html.contains("Travel Easy"), "HTML must contain brand name");
-        assertTrue(html.contains("YOUR JOURNEY, OUR PRIORITY"), "HTML must contain brand tagline");
+        assertTrue(html.contains("Made Travel Easy") || html.contains("YOUR JOURNEY, OUR PRIORITY"), "HTML must contain brand tagline");
         assertTrue(html.contains("cid:travel-easy-logo"), "HTML must contain Travel Easy logo image");
         assertTrue(html.contains("cid:lock-icon"), "HTML must contain lock icon image");
         assertTrue(html.contains("cid:shield-icon"), "HTML must contain security shield icon image");
@@ -148,7 +148,7 @@ public class PasswordRecoveryAndEmailTest {
         assertTrue(html.contains(resetUrl), "HTML must contain generated reset URL");
         assertTrue(html.contains("Didn't request a password reset?"), "HTML must contain security callout");
         assertTrue(html.contains("You can safely ignore this email."), "HTML must reassure recipient");
-        assertTrue(html.contains("The Travel Easy Team"), "HTML must have signature");
+        assertTrue(html.contains("The Travel Easy Team") || html.contains("Team, Travel Easy"), "HTML must have signature");
         assertTrue(html.contains("This is an automated security email from Travel Easy."), "HTML must have security footer");
 
         // Plain text checks
@@ -268,7 +268,7 @@ public class PasswordRecoveryAndEmailTest {
 
         ResendEmailService service = new ResendEmailService(
                 "re_mockApiKey_1234567890",
-                "Travel Easy <onboarding@resend.dev>",
+                "TravelEasy <notifications@mailer.gsrgroups.tech>",
                 objectMapper,
                 mockClient
         );
@@ -291,7 +291,7 @@ public class PasswordRecoveryAndEmailTest {
 
         ResendEmailService service = new ResendEmailService(
                 "re_invalidKey",
-                "Travel Easy <onboarding@resend.dev>",
+                "TravelEasy <notifications@mailer.gsrgroups.tech>",
                 objectMapper,
                 mockClient
         );
@@ -311,7 +311,7 @@ public class PasswordRecoveryAndEmailTest {
 
         ResendEmailService service = new ResendEmailService(
                 "re_validKey",
-                "Travel Easy <onboarding@resend.dev>",
+                "TravelEasy <notifications@mailer.gsrgroups.tech>",
                 objectMapper,
                 mockClient
         );
@@ -327,7 +327,7 @@ public class PasswordRecoveryAndEmailTest {
     void testResendEmailService_MissingApiKey() {
         ResendEmailService service = new ResendEmailService(
                 "",
-                "Travel Easy <onboarding@resend.dev>",
+                "TravelEasy <notifications@mailer.gsrgroups.tech>",
                 objectMapper
         );
 

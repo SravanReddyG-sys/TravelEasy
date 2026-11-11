@@ -36,6 +36,12 @@ export const routes: Routes = [
   { path: 'customer/destinations/:slug', component: CustomerDashboardComponent },
   { path: 'customer/buses', component: CustomerDashboardComponent },
   { path: 'customer/hotels', component: CustomerDashboardComponent },
+  { path: 'customer/hotels/guest-allocation', component: CustomerDashboardComponent },
+  { path: 'customer/hotels/reservation-review', component: CustomerDashboardComponent },
+  { path: 'customer/hotels/:id/guest-allocation', component: CustomerDashboardComponent },
+  { path: 'customer/hotels/:id/reservation-review', component: CustomerDashboardComponent },
+  { path: 'customer/hotels/:id/payment', component: CustomerDashboardComponent },
+  { path: 'customer/hotels/:id', component: CustomerDashboardComponent },
   { path: 'customer/bookings', component: CustomerDashboardComponent },
   { path: 'customer/favourites', component: CustomerDashboardComponent },
   { path: 'customer/profile', component: CustomerDashboardComponent },
@@ -53,7 +59,17 @@ export const routes: Routes = [
     canActivate: [roleGuard],
     data: { roles: ['ROLE_BUS_OPERATOR', 'ROLE_ADMIN'] }
   },
-  { path: 'hotel-manager', component: HotelManagerDashboardComponent },
-  { path: 'admin', component: AdminDashboardComponent },
+  {
+    path: 'hotel-manager',
+    component: HotelManagerDashboardComponent,
+    canActivate: [roleGuard],
+    data: { roles: ['ROLE_HOTEL_MANAGER', 'ROLE_ADMIN'] }
+  },
+  {
+    path: 'admin',
+    component: AdminDashboardComponent,
+    canActivate: [roleGuard],
+    data: { roles: ['ROLE_ADMIN'] }
+  },
   { path: '**', redirectTo: 'home' }
 ];

@@ -32,10 +32,10 @@ public class ResendEmailService implements EmailService {
     @Autowired
     public ResendEmailService(
             @Value("${resend.api.key:}") String resendApiKey,
-            @Value("${resend.from:Travel Easy <onboarding@resend.dev>}") String resendFrom,
+            @Value("${resend.from:TravelEasy <notifications@mailer.gsrgroups.tech>}") String resendFrom,
             ObjectMapper objectMapper) {
         this.resendApiKey = resendApiKey != null ? resendApiKey.trim() : "";
-        this.resendFrom = resendFrom != null ? resendFrom.trim() : "Travel Easy <onboarding@resend.dev>";
+        this.resendFrom = resendFrom != null ? resendFrom.trim() : "TravelEasy <notifications@mailer.gsrgroups.tech>";
         this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
@@ -49,7 +49,7 @@ public class ResendEmailService implements EmailService {
             ObjectMapper objectMapper,
             HttpClient httpClient) {
         this.resendApiKey = resendApiKey != null ? resendApiKey.trim() : "";
-        this.resendFrom = resendFrom != null ? resendFrom.trim() : "Travel Easy <onboarding@resend.dev>";
+        this.resendFrom = resendFrom != null ? resendFrom.trim() : "TravelEasy <notifications@mailer.gsrgroups.tech>";
         this.objectMapper = objectMapper;
         this.httpClient = httpClient;
     }

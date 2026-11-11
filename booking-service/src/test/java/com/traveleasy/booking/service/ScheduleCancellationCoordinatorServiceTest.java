@@ -36,6 +36,9 @@ public class ScheduleCancellationCoordinatorServiceTest {
     private BookingSecurityService securityService;
 
     @Mock
+    private BookingStateTransitionService stateTransitionService;
+
+    @Mock
     private RestTemplate restTemplate;
 
     @InjectMocks
@@ -51,6 +54,11 @@ public class ScheduleCancellationCoordinatorServiceTest {
         coordinatorService.setRestTemplate(restTemplate);
         coordinatorService.setBusServiceUrl("http://localhost:8082");
         coordinatorService.setPaymentServiceUrl("http://localhost:8085");
+        lenient().when(stateTransitionService.cancelBooking(any(Booking.class), any(), any())).thenAnswer(inv -> {
+            Booking b = inv.getArgument(0);
+            b.setStatus("CANCELLED");
+            return bookingRepository.save(b);
+        });
     }
 
     private void setupSecurityMocks(Long userId, String role) {
