@@ -69,4 +69,40 @@ public class PaymentInternalTokenServiceTest {
 
         assertThrows(IllegalStateException.class, nullService::validateSecret);
     }
+
+    @Test
+    @DisplayName("PaymentSecurityService verifyStrictInternalToken accepts signed booking-service JWT and rejects unauthorized callers")
+    void testPaymentSecurityService_VerifyStrictInternalToken() {
+        PaymentSecurityService securityService = new PaymentSecurityService();
+        ReflectionTestUtils.setField(securityService, "secret", TEST_SECRET);
+        securityService.validateSecurityConfiguration();
+
+        Key key = Keys.hmacShaKeyFor(TEST_SECRET.getBytes(StandardCharsets.UTF_8));
+        java.util.Date now = new java.util.Date();
+        java.util.Date exp = new java.util.Date(now.getTime() + 300_000L);
+
+        String bookingJwt = Jwts.builder()
+                .setSubject("booking-service")
+                .setIssuer(PaymentInternalTokenService.INTERNAL_ISSUER)
+                .claim("role", PaymentInternalTokenService.INTERNAL_SERVICE_ROLE)
+                .setIssuedAt(now)
+                .setExpiration(exp)
+                .signWith(key)
+                .compact();
+
+        String busJwt = Jwts.builder()
+                .setSubject("bus-service")
+                .setIssuer(PaymentInternalTokenService.INTERNAL_ISSUER)
+                .claim("role", PaymentInternalTokenService.INTERNAL_SERVICE_ROLE)
+                .setIssuedAt(now)
+                .setExpiration(exp)
+                .signWith(key)
+                .compact();
+
+        assertTrue(securityService.verifyStrictInternalToken(null, bookingJwt, "booking-service", "booking-service"));
+        assertTrue(securityService.verifyStrictInternalToken("Bearer " + bookingJwt, null, null, "booking-service"));
+        assertFalse(securityService.verifyStrictInternalToken(null, null, "booking-service", "booking-service"));
+        assertFalse(securityService.verifyStrictInternalToken(null, busJwt, "bus-service", "booking-service"));
+        assertFalse(securityService.verifyStrictInternalToken(null, bookingJwt, "bus-service", "booking-service"));
+    }
 }

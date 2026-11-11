@@ -28,7 +28,8 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class HotelInventoryReleaseRecoveryService {
 
-    private static final Pattern ROOMS_COUNT_PATTERN = Pattern.compile("Rooms?:\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ROOMS_COUNT_PATTERN = Pattern.compile("Rooms?:\\s*(-?\\d+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern JSON_ROOMS_COUNT_PATTERN = Pattern.compile("\"(?:roomCount|rooms|numberOfRooms|quantity)\"\\s*:\\s*(-?\\d+)", Pattern.CASE_INSENSITIVE);
 
     private final HotelInventoryReleaseTaskRepository releaseTaskRepository;
     private final HotelCancellationStateService stateService;
@@ -110,15 +111,28 @@ public class HotelInventoryReleaseRecoveryService {
 
             ResponseEntity<Map> resp;
             if (task.isDateWiseBooking()) {
+                if (task.getBookingRef() == null || task.getBookingRef().isBlank()) {
+                    handleFailure(task, "Date-wise hotel booking missing bookingRef for inventory release", false);
+                    return false;
+                }
                 String stayUrl = hotelServiceUrl + "/api/hotels/rooms/release-stay?bookingRef=" + task.getBookingRef();
                 HttpEntity<Void> entity = new HttpEntity<>(headers);
                 resp = restTemplate.exchange(stayUrl, HttpMethod.POST, entity, Map.class);
             } else {
                 // Legacy non-date-wise fallback ONLY when booking was genuinely legacy
                 if (task.getServiceId() == null) {
-                    throw new IllegalStateException("Legacy hotel booking missing serviceId for inventory release");
+                    handleFailure(task, "Legacy hotel booking missing serviceId for inventory release", false);
+                    return false;
                 }
-                int count = extractLegacyRoomCount(task.getDetailsJson());
+                int count;
+                try {
+                    count = extractLegacyRoomCount(task.getDetailsJson());
+                } catch (IllegalArgumentException metaEx) {
+                    log.error("Refusing unsafe legacy room release for booking {} due to invalid/missing room count metadata: {}",
+                            task.getBookingRef(), metaEx.getMessage());
+                    handleFailure(task, metaEx.getMessage(), false);
+                    return false;
+                }
                 String url = hotelServiceUrl + "/api/hotels/rooms/" + task.getServiceId() + "/release?count=" + count;
                 HttpEntity<Void> entity = new HttpEntity<>(headers);
                 resp = restTemplate.exchange(url, HttpMethod.PUT, entity, Map.class);
@@ -171,18 +185,34 @@ public class HotelInventoryReleaseRecoveryService {
         );
     }
 
-    private int extractLegacyRoomCount(String detailsJson) {
+    /**
+     * Strictly extracts a positive room count for genuine legacy non-date-wise bookings.
+     * Never silently defaults missing, malformed, or non-positive room counts to 1.
+     */
+    int extractLegacyRoomCount(String detailsJson) {
         if (detailsJson == null || detailsJson.isBlank()) {
-            return 1;
+            throw new IllegalArgumentException("Legacy hotel booking missing detailsJson room count metadata");
         }
-        Matcher matcher = ROOMS_COUNT_PATTERN.matcher(detailsJson);
-        if (matcher.find()) {
-            try {
-                int parsed = Integer.parseInt(matcher.group(1));
-                return Math.max(1, parsed);
-            } catch (NumberFormatException ignored) {
+        Matcher textMatcher = ROOMS_COUNT_PATTERN.matcher(detailsJson);
+        if (textMatcher.find()) {
+            return parseStrictlyPositiveCount(textMatcher.group(1), detailsJson);
+        }
+        Matcher jsonMatcher = JSON_ROOMS_COUNT_PATTERN.matcher(detailsJson);
+        if (jsonMatcher.find()) {
+            return parseStrictlyPositiveCount(jsonMatcher.group(1), detailsJson);
+        }
+        throw new IllegalArgumentException("Malformed or missing room count in legacy hotel detailsJson");
+    }
+
+    private int parseStrictlyPositiveCount(String rawCount, String detailsJson) {
+        try {
+            int parsed = Integer.parseInt(rawCount);
+            if (parsed <= 0) {
+                throw new IllegalArgumentException("Legacy hotel booking has non-positive room count (" + parsed + ")");
             }
+            return parsed;
+        } catch (NumberFormatException nfe) {
+            throw new IllegalArgumentException("Unparseable room count in legacy hotel detailsJson: " + rawCount, nfe);
         }
-        return 1;
     }
 }

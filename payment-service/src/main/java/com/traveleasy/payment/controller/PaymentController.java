@@ -102,6 +102,30 @@ public class PaymentController {
     }
 
     /**
+     * Authoritative internal refund status lookup & Razorpay reconciliation for a booking.
+     * Never initiates a new refund; strictly inspects local state and Razorpay refunds for existing refunds.
+     */
+    @GetMapping("/refund/booking/{bookingRef}/reconcile")
+    public ResponseEntity<?> reconcileRefundByBooking(
+            @PathVariable String bookingRef,
+            @RequestParam(required = false) String idempotencyKey,
+            @RequestParam(required = false) Double expectedAmount,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+            @RequestHeader(value = "X-Internal-Service", required = false) String internalService,
+            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKeyHeader) {
+        if (!securityService.verifyStrictInternalToken(authHeader, internalToken, internalService, "booking-service")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Unauthorized: Valid booking-service internal token required"));
+        }
+        String effectiveKey = (idempotencyKey != null && !idempotencyKey.isBlank())
+                ? idempotencyKey
+                : idempotencyKeyHeader;
+        RefundResponse response = paymentService.reconcileRefundByBooking(bookingRef, effectiveKey, expectedAmount);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * Retrieve payment details by booking reference.
      */
     @GetMapping("/booking/{bookingRef}")

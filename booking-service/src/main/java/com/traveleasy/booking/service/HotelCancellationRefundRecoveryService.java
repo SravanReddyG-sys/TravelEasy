@@ -15,7 +15,9 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * Coordinates immediate and background durable refunds for cancelled HOTEL bookings (WP-HC-01).
@@ -100,6 +102,10 @@ public class HotelCancellationRefundRecoveryService {
         return executeClaimedRefund(task);
     }
 
+    private static final Set<String> TERMINAL_SUCCESS_STATUSES = Set.of("PROCESSED", "REFUNDED", "COMPLETED");
+    private static final Set<String> NON_TERMINAL_STATUSES = Set.of("INITIATED", "PENDING", "CREATED");
+    private static final Set<String> NON_RETRYABLE_REJECTION_STATUSES = Set.of("REJECTED", "CANCELLED", "CANCELED", "DENIED");
+
     @SuppressWarnings("unchecked")
     public Map<String, Object> executeClaimedRefund(HotelCancellationRefundTask task) {
         // Strict safety guard: never invoke payment-service for non-positive persisted refund amounts
@@ -117,15 +123,22 @@ public class HotelCancellationRefundRecoveryService {
             return null;
         }
 
+        HttpHeaders headers = buildInternalHeaders(task.getIdempotencyKey());
+        boolean hasKnownRefundId = task.getRazorpayRefundId() != null && !task.getRazorpayRefundId().isBlank();
+        boolean hasPriorDispatch = hasKnownRefundId
+                || (task.getAttemptCount() != null && task.getAttemptCount() > 1)
+                || (task.getLastError() != null && !task.getLastError().isBlank());
+
+        // Finding 5: Authoritatively reconcile with payment-service/Razorpay BEFORE any re-initiation attempt
+        if (hasPriorDispatch) {
+            ReconcileStepOutcome reconcileOutcome = reconcileExistingGatewayRefund(task, headers, hasKnownRefundId);
+            if (!reconcileOutcome.shouldProceedToInitiate()) {
+                return reconcileOutcome.body();
+            }
+        }
+
         try {
             String url = paymentServiceUrl + "/api/payments/refund/booking/" + task.getBookingRef();
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            String internalToken = internalTokenService.generateInternalToken();
-            headers.set("Authorization", "Bearer " + internalToken);
-            headers.set("X-Internal-Token", internalToken);
-            headers.set("X-Internal-Service", BookingInternalTokenService.SERVICE_NAME);
-            headers.set("X-Idempotency-Key", task.getIdempotencyKey());
 
             Map<String, Object> body = new HashMap<>();
             body.put("amount", task.getRefundAmount());
@@ -137,57 +150,156 @@ public class HotelCancellationRefundRecoveryService {
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
             ResponseEntity<Map> resp = restTemplate.exchange(url, HttpMethod.POST, entity, Map.class);
 
-            if (resp != null && resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
-                Map<String, Object> respBody = resp.getBody();
-                String rfdStatus = extractString(respBody, "refundStatus", "status");
-                String rfdId = extractString(respBody, "refundId", "id");
-
-                if ("INITIATED".equalsIgnoreCase(rfdStatus) || "PENDING".equalsIgnoreCase(rfdStatus)) {
-                    Instant nextPoll = Instant.now().plusSeconds(30);
-                    stateService.recordRefundInitiated(
-                            task.getBookingId(),
-                            task.getBookingRef(),
-                            task.getId(),
-                            rfdId,
-                            nextPoll,
-                            "Refund initiated at gateway (status=" + rfdStatus + ")"
-                    );
-                } else {
-                    stateService.recordRefundSucceeded(
-                            task.getBookingId(),
-                            task.getBookingRef(),
-                            task.getId(),
-                            rfdId
-                    );
-                }
-                log.info("Executed hotel cancellation refund for booking {} (amount={}, idempotencyKey={}, refundId={}, status={})",
-                        task.getBookingRef(), task.getRefundAmount(), task.getIdempotencyKey(), rfdId, rfdStatus);
-                return respBody;
-            }
-
-            handleFailure(task, "Payment service returned non-2xx or empty response", true);
-            return null;
+            return handleGatewayRefundResponse(task, resp, hasKnownRefundId);
 
         } catch (HttpClientErrorException clientEx) {
             int rawStatus = clientEx.getStatusCode().value();
-            // Retry 408/429 and 404 (in case webhook/verify commit race), reject invalid 400/409 after diagnostics or fail final
             boolean retryable = rawStatus == 408 || rawStatus == 429;
             log.warn("Payment service 4xx ({}) during hotel refund for booking {}: {}",
                     rawStatus, task.getBookingRef(), clientEx.getMessage());
-            handleFailure(task, "HTTP " + rawStatus + ": " + clientEx.getMessage(), retryable);
+            handleFailure(task, "HTTP " + rawStatus + ": " + clientEx.getMessage(), retryable, true);
             return null;
 
         } catch (Exception ex) {
             log.warn("Transient failure calling payment-service for hotel refund booking {} (idempotencyKey={}): {}",
                     task.getBookingRef(), task.getIdempotencyKey(), ex.getMessage());
-            handleFailure(task, ex.getMessage(), true);
+            handleFailure(task, ex.getMessage(), true, true);
             return null;
         }
     }
 
-    private void handleFailure(HotelCancellationRefundTask task, String errorMessage, boolean retryable) {
-        // Never overwrite an already-initiated refund back to FAILED_RETRYABLE if gateway already accepted it
-        if (task.getRazorpayRefundId() != null && !task.getRazorpayRefundId().isBlank()) {
+    @SuppressWarnings("unchecked")
+    private ReconcileStepOutcome reconcileExistingGatewayRefund(HotelCancellationRefundTask task,
+                                                                 HttpHeaders headers,
+                                                                 boolean hasKnownRefundId) {
+        try {
+            String reconcileUrl = UriComponentsBuilder
+                    .fromHttpUrl(paymentServiceUrl + "/api/payments/refund/booking/" + task.getBookingRef() + "/reconcile")
+                    .queryParam("idempotencyKey", task.getIdempotencyKey())
+                    .queryParam("expectedAmount", task.getRefundAmount())
+                    .toUriString();
+
+            ResponseEntity<Map> reconcileResp = restTemplate.exchange(
+                    reconcileUrl, HttpMethod.GET, new HttpEntity<Void>(headers), Map.class);
+
+            if (reconcileResp == null || !reconcileResp.getStatusCode().is2xxSuccessful() || reconcileResp.getBody() == null) {
+                handleFailure(task, "Reconciliation endpoint returned empty or non-2xx response", true, true);
+                return new ReconcileStepOutcome(false, null);
+            }
+
+            Map<String, Object> body = reconcileResp.getBody();
+            String rawStatus = extractString(body, "refundStatus", "status");
+            String normalizedStatus = rawStatus != null ? rawStatus.trim().toUpperCase() : "";
+
+            // Allow fresh initiation ONLY if payment-service confirms no refund exists yet and no refundId was issued
+            if ("NOT_FOUND".equals(normalizedStatus)) {
+                if (hasKnownRefundId) {
+                    handleFailure(task, "Initiated refund " + task.getRazorpayRefundId() + " not yet visible during reconciliation", true, true);
+                    return new ReconcileStepOutcome(false, body);
+                }
+                return new ReconcileStepOutcome(true, null);
+            }
+
+            // If a previous non-initiated attempt explicitly failed before receiving a refundId,
+            // allow clean re-initiation only if gateway confirmed FAILED without a live pending refund
+            if ("FAILED".equals(normalizedStatus) && !hasKnownRefundId) {
+                log.info("Prior refund for booking {} confirmed FAILED on reconciliation; proceeding with retry initiation", task.getBookingRef());
+                return new ReconcileStepOutcome(true, null);
+            }
+
+            Map<String, Object> handled = handleGatewayRefundResponse(task, reconcileResp, hasKnownRefundId);
+            return new ReconcileStepOutcome(false, handled);
+
+        } catch (HttpClientErrorException clientEx) {
+            int rawStatus = clientEx.getStatusCode().value();
+            boolean retryable = rawStatus == 408 || rawStatus == 429 || rawStatus == 404;
+            log.warn("Reconcile 4xx ({}) for hotel refund booking {}: {}", rawStatus, task.getBookingRef(), clientEx.getMessage());
+            handleFailure(task, "Reconcile HTTP " + rawStatus + ": " + clientEx.getMessage(), retryable, true);
+            return new ReconcileStepOutcome(false, null);
+        } catch (Exception ex) {
+            log.warn("Transient failure reconciling hotel refund for booking {}: {}", task.getBookingRef(), ex.getMessage());
+            handleFailure(task, ex.getMessage(), true, true);
+            return new ReconcileStepOutcome(false, null);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> handleGatewayRefundResponse(HotelCancellationRefundTask task,
+                                                            ResponseEntity<Map> resp,
+                                                            boolean hasKnownRefundId) {
+        if (resp == null || !resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
+            handleFailure(task, "Payment service returned non-2xx or empty response", true, true);
+            return null;
+        }
+
+        Map<String, Object> respBody = resp.getBody();
+        String rfdStatus = extractString(respBody, "refundStatus", "status");
+        String rfdId = extractString(respBody, "refundId", "id");
+        String normalizedStatus = rfdStatus != null ? rfdStatus.trim().toUpperCase() : "";
+
+        // Explicit terminal success ONLY
+        if (TERMINAL_SUCCESS_STATUSES.contains(normalizedStatus)) {
+            stateService.recordRefundSucceeded(
+                    task.getBookingId(),
+                    task.getBookingRef(),
+                    task.getId(),
+                    rfdId
+            );
+            log.info("Confirmed PROCESSED hotel refund for booking {} (amount={}, idempotencyKey={}, refundId={}, rawStatus={})",
+                    task.getBookingRef(), task.getRefundAmount(), task.getIdempotencyKey(), rfdId, rfdStatus);
+            return respBody;
+        }
+
+        // Explicit non-terminal gateway acceptance
+        if (NON_TERMINAL_STATUSES.contains(normalizedStatus)) {
+            Instant nextPoll = Instant.now().plusSeconds(30);
+            stateService.recordRefundInitiated(
+                    task.getBookingId(),
+                    task.getBookingRef(),
+                    task.getId(),
+                    rfdId,
+                    nextPoll,
+                    "Refund initiated at gateway (status=" + normalizedStatus + ")"
+            );
+            log.info("Recorded non-terminal {} hotel refund for booking {} (refundId={})",
+                    normalizedStatus, task.getBookingRef(), rfdId);
+            return respBody;
+        }
+
+        // Explicit FAILED, REJECTED, UNKNOWN, or missing status MUST NEVER be treated as PROCESSED
+        boolean retryable = !NON_RETRYABLE_REJECTION_STATUSES.contains(normalizedStatus);
+        String outcomeDesc = normalizedStatus.isBlank()
+                ? "Payment service returned 2xx with missing refundStatus"
+                : "Payment service returned unsuccessful/unresolved refundStatus: " + normalizedStatus;
+        log.warn("Hotel refund unsuccessful/unresolved for booking {} (refundId={}, status={}, knownRefundId={}): {}",
+                task.getBookingRef(), rfdId, normalizedStatus, hasKnownRefundId, outcomeDesc);
+
+        // Pass preserveInitiatedOnTransientError=false so explicit FAILED/REJECTED/UNKNOWN outcomes reflect on Booking & Task consistently
+        handleFailure(task, outcomeDesc, retryable, false);
+        return respBody;
+    }
+
+    private HttpHeaders buildInternalHeaders(String idempotencyKey) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        String internalToken = internalTokenService.generateInternalToken();
+        headers.set("Authorization", "Bearer " + internalToken);
+        headers.set("X-Internal-Token", internalToken);
+        headers.set("X-Internal-Service", BookingInternalTokenService.SERVICE_NAME);
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            headers.set("X-Idempotency-Key", idempotencyKey);
+        }
+        return headers;
+    }
+
+    private void handleFailure(HotelCancellationRefundTask task,
+                               String errorMessage,
+                               boolean retryable,
+                               boolean preserveInitiatedOnTransientError) {
+        // Keep active INITIATED state ONLY during transient poll/network errors when gateway already holds our refundId
+        if (preserveInitiatedOnTransientError
+                && task.getRazorpayRefundId() != null
+                && !task.getRazorpayRefundId().isBlank()) {
             Instant nextPoll = Instant.now().plusSeconds(30);
             stateService.recordRefundInitiated(
                     task.getBookingId(),
@@ -219,6 +331,9 @@ public class HotelCancellationRefundRecoveryService {
                 errorMessage,
                 nextRetryAt
         );
+    }
+
+    private record ReconcileStepOutcome(boolean shouldProceedToInitiate, Map<String, Object> body) {
     }
 
     private String extractString(Map<String, Object> body, String primaryKey, String fallbackKey) {

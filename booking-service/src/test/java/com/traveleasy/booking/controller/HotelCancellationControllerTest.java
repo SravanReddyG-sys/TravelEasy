@@ -302,11 +302,19 @@ public class HotelCancellationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
 
-        // Strict internal JWT idempotently replays cancel by ref
-        String internalJwt = mintInternalToken("payment-service");
+        // Strict internal JWT accepted ONLY for booking-service; bus-service / hotel-service / payment-service rejected with 401
+        for (String unauthorizedService : new String[]{"bus-service", "hotel-service", "payment-service"}) {
+            mockMvc.perform(put("/api/bookings/hotel/ref/BKG-HTL-CTRL-101/cancel")
+                            .header("X-Internal-Token", mintInternalToken(unauthorizedService))
+                            .header("X-Internal-Service", unauthorizedService))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.status").value(401));
+        }
+
+        String bookingInternalJwt = mintInternalToken("booking-service");
         mockMvc.perform(put("/api/bookings/hotel/ref/BKG-HTL-CTRL-101/cancel")
-                        .header("X-Internal-Token", internalJwt)
-                        .header("X-Internal-Service", "payment-service"))
+                        .header("X-Internal-Token", bookingInternalJwt)
+                        .header("X-Internal-Service", "booking-service"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.idempotent").value(true))
                 .andExpect(jsonPath("$.status").value("CANCELLED"));

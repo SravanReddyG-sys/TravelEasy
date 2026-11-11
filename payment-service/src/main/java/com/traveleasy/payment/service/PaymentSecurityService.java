@@ -54,4 +54,61 @@ public class PaymentSecurityService {
         Object role = claims.get("role");
         return role != null ? role.toString() : null;
     }
+
+    /**
+     * Validates a signed internal service JWT token against traveleasy-internal issuer,
+     * INTERNAL_SERVICE role, and an explicit set of permitted calling services.
+     */
+    public boolean verifyStrictInternalToken(String authHeader,
+                                             String internalTokenHeader,
+                                             String internalServiceHeader,
+                                             String... permittedServices) {
+        String candidate = null;
+        if (internalTokenHeader != null && !internalTokenHeader.isBlank()) {
+            candidate = internalTokenHeader.trim();
+        } else if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            candidate = authHeader.substring(7).trim();
+        }
+        if (candidate == null || candidate.isBlank()) {
+            return false;
+        }
+        if (candidate.startsWith("Bearer ")) {
+            candidate = candidate.substring(7).trim();
+        }
+        try {
+            Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(getSigningKey())
+                    .build()
+                    .parseClaimsJws(candidate)
+                    .getBody();
+            if (!PaymentInternalTokenService.INTERNAL_ISSUER.equals(claims.getIssuer())) {
+                return false;
+            }
+            Object role = claims.get("role");
+            if (role == null || !PaymentInternalTokenService.INTERNAL_SERVICE_ROLE.equals(role.toString())) {
+                return false;
+            }
+            String subject = claims.getSubject();
+            if (subject == null || subject.isBlank()) {
+                return false;
+            }
+            if (internalServiceHeader != null && !internalServiceHeader.isBlank()
+                    && !subject.equalsIgnoreCase(internalServiceHeader.trim())) {
+                return false;
+            }
+            if (permittedServices == null || permittedServices.length == 0) {
+                return false;
+            }
+            String normalizedSubject = subject.trim().toLowerCase();
+            for (String permitted : permittedServices) {
+                if (permitted != null && permitted.trim().equalsIgnoreCase(normalizedSubject)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            log.warn("Rejected invalid internal token in payment-service: {}", e.getMessage());
+            return false;
+        }
+    }
 }

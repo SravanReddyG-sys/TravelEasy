@@ -247,6 +247,16 @@ public class HotelCancellationOrchestrationTest {
             }
             return 1;
         });
+        lenient().when(refundTaskRepository.markFailedFinal(anyLong(), anyString(), any())).thenAnswer(inv -> {
+            HotelCancellationRefundTask t = storedRefundTask.get();
+            if (t != null) {
+                t.setStatus("FAILED_FINAL");
+                t.setLastError(inv.getArgument(1));
+                t.setLockedBy(null);
+                t.setLockedUntil(null);
+            }
+            return 1;
+        });
     }
 
     private LocalDate findCheckInDateForWindow(long minHoursInclusive, long maxHoursExclusive) {
@@ -328,7 +338,9 @@ public class HotelCancellationOrchestrationTest {
 
         when(restTemplate.exchange(contains("/api/hotels/rooms/release-stay"), eq(HttpMethod.POST), any(), eq(Map.class)))
                 .thenReturn(ResponseEntity.ok(Map.of("released", true)));
-        when(restTemplate.exchange(contains("/api/payments/refund/booking/BKG-HTL-PARTIAL-2"), eq(HttpMethod.POST), any(), eq(Map.class)))
+        when(restTemplate.exchange(contains("/api/payments/refund/booking/BKG-HTL-PARTIAL-2/reconcile"), eq(HttpMethod.GET), any(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("refundStatus", "NOT_FOUND")));
+        when(restTemplate.exchange(eq("http://localhost:8085/api/payments/refund/booking/BKG-HTL-PARTIAL-2"), eq(HttpMethod.POST), any(), eq(Map.class)))
                 .thenThrow(new ResourceAccessException("504 payment timeout"))
                 .thenThrow(new ResourceAccessException("504 second timeout"))
                 .thenReturn(ResponseEntity.ok(Map.of("refundStatus", "PROCESSED", "refundId", "rfnd_partial_50")));
@@ -447,7 +459,7 @@ public class HotelCancellationOrchestrationTest {
     }
 
     @Test
-    @DisplayName("Refund RETURNING INITIATED stays INITIATED on transient poll error and transitions cleanly to PROCESSED once settled")
+    @DisplayName("Refund RETURNING INITIATED polls authoritative /reconcile endpoint without duplicate POST and transitions cleanly to PROCESSED")
     @SuppressWarnings({"rawtypes"})
     void testRefundInitiatedPollLifecycleAndNoDowngradeOnTransientError() {
         LocalDate checkIn = LocalDate.now(HotelCancellationPolicyService.POLICY_ZONE_ID).plusDays(5);
@@ -461,8 +473,9 @@ public class HotelCancellationOrchestrationTest {
 
         when(restTemplate.exchange(contains("/api/hotels/rooms/release-stay"), eq(HttpMethod.POST), any(), eq(Map.class)))
                 .thenReturn(ResponseEntity.ok(Map.of("released", true)));
-        when(restTemplate.exchange(contains("/api/payments/refund/booking/BKG-HTL-INIT-5"), eq(HttpMethod.POST), any(), eq(Map.class)))
-                .thenReturn(ResponseEntity.ok(Map.of("refundStatus", "INITIATED", "refundId", "rfnd_pending_gw")))
+        when(restTemplate.exchange(eq("http://localhost:8085/api/payments/refund/booking/BKG-HTL-INIT-5"), eq(HttpMethod.POST), any(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("refundStatus", "INITIATED", "refundId", "rfnd_pending_gw")));
+        when(restTemplate.exchange(contains("/api/payments/refund/booking/BKG-HTL-INIT-5/reconcile"), eq(HttpMethod.GET), any(), eq(Map.class)))
                 .thenThrow(new ResourceAccessException("Transient poll failure"))
                 .thenReturn(ResponseEntity.ok(Map.of("refundStatus", "PROCESSED", "refundId", "rfnd_pending_gw")));
 
@@ -471,16 +484,205 @@ public class HotelCancellationOrchestrationTest {
         assertEquals("INITIATED", first.getRefundStatus());
         assertEquals("rfnd_pending_gw", first.getRefundId());
 
-        // Transient poll error must NOT downgrade INITIATED -> FAILED_RETRYABLE
+        // Transient poll error must NOT downgrade INITIATED -> FAILED_RETRYABLE and must NOT issue second POST
         when(refundTaskRepository.findTasksForRetry(any(), any(Pageable.class)))
                 .thenReturn(List.of(storedRefundTask.get()));
         refundWorker.recoverPendingRefunds();
         assertEquals("INITIATED", storedBooking.get().getRefundStatus());
         assertEquals("INITIATED", storedRefundTask.get().getStatus());
 
-        // Subsequent poll confirms PROCESSED
+        // Subsequent poll via GET /reconcile confirms PROCESSED
         refundWorker.recoverPendingRefunds();
         assertEquals("PROCESSED", storedBooking.get().getRefundStatus());
         assertEquals("PROCESSED", storedRefundTask.get().getStatus());
+
+        verify(restTemplate, times(1)).exchange(
+                eq("http://localhost:8085/api/payments/refund/booking/BKG-HTL-INIT-5"),
+                eq(HttpMethod.POST), any(), eq(Map.class));
+        verify(restTemplate, times(2)).exchange(
+                contains("/api/payments/refund/booking/BKG-HTL-INIT-5/reconcile"),
+                eq(HttpMethod.GET), any(), eq(Map.class));
+    }
+
+    @Test
+    @DisplayName("Finding 1: FAILED, REJECTED, UNKNOWN, and missing 2xx statuses NEVER mark refund PROCESSED and keep Booking & Task consistent")
+    @SuppressWarnings({"rawtypes"})
+    void testNonSuccessAndUnrecognizedStatuses_NeverMarkedProcessed() {
+        LocalDate checkIn = LocalDate.now(HotelCancellationPolicyService.POLICY_ZONE_ID).plusDays(5);
+        when(restTemplate.exchange(contains("/api/hotels/rooms/release-stay"), eq(HttpMethod.POST), any(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("released", true)));
+
+        Map<String, String> cases = Map.of(
+                "BKG-HTL-FAIL-10", "FAILED",
+                "BKG-HTL-REJ-11", "REJECTED",
+                "BKG-HTL-UNK-12", "UNKNOWN",
+                "BKG-HTL-EMPTY-13", ""
+        );
+        long nextId = 10L;
+        for (Map.Entry<String, String> entry : cases.entrySet()) {
+            String ref = entry.getKey();
+            String statusVal = entry.getValue();
+            storedSnapshot.set(null);
+            storedReleaseTask.set(null);
+            storedRefundTask.set(null);
+            Booking b = Booking.builder()
+                    .id(nextId++).bookingRef(ref).customerId(10L).serviceType("HOTEL").serviceId(101L)
+                    .totalAmount(4000.0).status("CONFIRMED")
+                    .checkInDate(checkIn).checkOutDate(checkIn.plusDays(1))
+                    .detailsJson("{\"checkInDate\":\"" + checkIn + "\"}")
+                    .build();
+            storedBooking.set(b);
+
+            when(restTemplate.exchange(eq("http://localhost:8085/api/payments/refund/booking/" + ref), eq(HttpMethod.POST), any(), eq(Map.class)))
+                    .thenReturn(ResponseEntity.ok(Map.of("refundStatus", statusVal, "refundId", "rfnd_" + ref)));
+
+            HotelCancellationResponse resp = orchestrationService.cancelHotelBookingById(
+                    b.getId(), null, "Bearer cust-jwt", null, null);
+
+            String expectedState = "REJECTED".equals(statusVal) ? "FAILED_FINAL" : "FAILED_RETRYABLE";
+            assertEquals(expectedState, resp.getRefundStatus(), "Unexpected refundStatus for case " + statusVal);
+            assertEquals(expectedState, storedBooking.get().getRefundStatus());
+            assertEquals(expectedState, storedRefundTask.get().getStatus());
+            assertNotEquals("PROCESSED", storedBooking.get().getRefundStatus());
+        }
+
+        // Also test missing status key completely in 200 response body
+        storedSnapshot.set(null);
+        storedReleaseTask.set(null);
+        storedRefundTask.set(null);
+        Booking bMissing = Booking.builder()
+                .id(19L).bookingRef("BKG-HTL-MISSING-19").customerId(10L).serviceType("HOTEL").serviceId(101L)
+                .totalAmount(4000.0).status("CONFIRMED")
+                .checkInDate(checkIn).checkOutDate(checkIn.plusDays(1))
+                .detailsJson("{\"checkInDate\":\"" + checkIn + "\"}")
+                .build();
+        storedBooking.set(bMissing);
+        when(restTemplate.exchange(eq("http://localhost:8085/api/payments/refund/booking/BKG-HTL-MISSING-19"), eq(HttpMethod.POST), any(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("message", "ok without status")));
+
+        HotelCancellationResponse missingResp = orchestrationService.cancelHotelBookingById(
+                19L, null, "Bearer cust-jwt", null, null);
+        assertEquals("FAILED_RETRYABLE", missingResp.getRefundStatus());
+        assertEquals("FAILED_RETRYABLE", storedBooking.get().getRefundStatus());
+        assertEquals("FAILED_RETRYABLE", storedRefundTask.get().getStatus());
+    }
+
+    @Test
+    @DisplayName("Finding 5: Timeout after initiation reconciles via GET /reconcile and never triggers duplicate POST refund")
+    @SuppressWarnings({"rawtypes"})
+    void testTimeoutOnInitiation_ReconcilesWithoutDuplicatePost() {
+        LocalDate checkIn = LocalDate.now(HotelCancellationPolicyService.POLICY_ZONE_ID).plusDays(5);
+        Booking b = Booking.builder()
+                .id(25L).bookingRef("BKG-HTL-TIMEOUT-REC").customerId(10L).serviceType("HOTEL").serviceId(105L)
+                .totalAmount(5500.0).status("CONFIRMED")
+                .checkInDate(checkIn).checkOutDate(checkIn.plusDays(1))
+                .detailsJson("{\"checkInDate\":\"" + checkIn + "\"}")
+                .build();
+        storedBooking.set(b);
+
+        when(restTemplate.exchange(contains("/api/hotels/rooms/release-stay"), eq(HttpMethod.POST), any(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("released", true)));
+        when(restTemplate.exchange(eq("http://localhost:8085/api/payments/refund/booking/BKG-HTL-TIMEOUT-REC"), eq(HttpMethod.POST), any(), eq(Map.class)))
+                .thenThrow(new ResourceAccessException("Read timed out after Razorpay accepted request"));
+        when(restTemplate.exchange(contains("/api/payments/refund/booking/BKG-HTL-TIMEOUT-REC/reconcile"), eq(HttpMethod.GET), any(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("refundStatus", "PENDING", "refundId", "rfnd_timeout_recovered")))
+                .thenReturn(ResponseEntity.ok(Map.of("refundStatus", "PROCESSED", "refundId", "rfnd_timeout_recovered")));
+
+        HotelCancellationResponse initial = orchestrationService.cancelHotelBookingById(
+                25L, null, "Bearer cust-jwt", null, null);
+        assertEquals("FAILED_RETRYABLE", initial.getRefundStatus());
+
+        when(refundTaskRepository.findTasksForRetry(any(), any(Pageable.class)))
+                .thenReturn(List.of(storedRefundTask.get()));
+
+        // Worker sweep 1: /reconcile adopts PENDING -> keeps INITIATED without second POST
+        refundWorker.recoverPendingRefunds();
+        assertEquals("INITIATED", storedBooking.get().getRefundStatus());
+        assertEquals("INITIATED", storedRefundTask.get().getStatus());
+        assertEquals("rfnd_timeout_recovered", storedBooking.get().getRefundId());
+
+        // Worker sweep 2: /reconcile sees PROCESSED -> settles cleanly
+        refundWorker.recoverPendingRefunds();
+        assertEquals("PROCESSED", storedBooking.get().getRefundStatus());
+        assertEquals("PROCESSED", storedRefundTask.get().getStatus());
+
+        verify(restTemplate, times(1)).exchange(
+                eq("http://localhost:8085/api/payments/refund/booking/BKG-HTL-TIMEOUT-REC"),
+                eq(HttpMethod.POST), any(), eq(Map.class));
+    }
+
+    @Test
+    @DisplayName("Finding 1 & 5: Explicit gateway FAILED during poll of INITIATED refund moves Booking & Task consistently out of INITIATED")
+    @SuppressWarnings({"rawtypes"})
+    void testInitiatedRefundFailsLaterAtGateway_UpdatesBookingAndTaskConsistently() {
+        LocalDate checkIn = LocalDate.now(HotelCancellationPolicyService.POLICY_ZONE_ID).plusDays(5);
+        Booking b = Booking.builder()
+                .id(26L).bookingRef("BKG-HTL-POLL-FAIL").customerId(10L).serviceType("HOTEL").serviceId(106L)
+                .totalAmount(3000.0).status("CONFIRMED")
+                .checkInDate(checkIn).checkOutDate(checkIn.plusDays(1))
+                .detailsJson("{\"checkInDate\":\"" + checkIn + "\"}")
+                .build();
+        storedBooking.set(b);
+
+        when(restTemplate.exchange(contains("/api/hotels/rooms/release-stay"), eq(HttpMethod.POST), any(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("released", true)));
+        when(restTemplate.exchange(eq("http://localhost:8085/api/payments/refund/booking/BKG-HTL-POLL-FAIL"), eq(HttpMethod.POST), any(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("refundStatus", "INITIATED", "refundId", "rfnd_poll_fail_1")));
+        when(restTemplate.exchange(contains("/api/payments/refund/booking/BKG-HTL-POLL-FAIL/reconcile"), eq(HttpMethod.GET), any(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("refundStatus", "FAILED", "refundId", "rfnd_poll_fail_1")));
+
+        orchestrationService.cancelHotelBookingById(26L, null, "Bearer cust-jwt", null, null);
+        assertEquals("INITIATED", storedBooking.get().getRefundStatus());
+
+        when(refundTaskRepository.findTasksForRetry(any(), any(Pageable.class)))
+                .thenReturn(List.of(storedRefundTask.get()));
+        refundWorker.recoverPendingRefunds();
+
+        assertEquals("FAILED_RETRYABLE", storedBooking.get().getRefundStatus());
+        assertEquals("FAILED_RETRYABLE", storedRefundTask.get().getStatus());
+        verify(restTemplate, times(1)).exchange(
+                eq("http://localhost:8085/api/payments/refund/booking/BKG-HTL-POLL-FAIL"),
+                eq(HttpMethod.POST), any(), eq(Map.class));
+    }
+
+    @Test
+    @DisplayName("Additional Inventory Check: Legacy non-date-wise release extracts explicit room counts and fails closed on missing/malformed metadata")
+    @SuppressWarnings({"rawtypes"})
+    void testLegacyInventoryRelease_ValidCountsAndFailClosedOnMalformed() {
+        // 1. Valid legacy booking with Rooms: 3
+        Booking validLegacy = Booking.builder()
+                .id(30L).bookingRef("BKG-LEG-VALID-3").customerId(10L).serviceType("HOTEL").serviceId(77L)
+                .totalAmount(3000.0).status("CONFIRMED").detailsJson("Standard Room | Rooms: 3")
+                .build();
+        storedBooking.set(validLegacy);
+        when(restTemplate.exchange(eq("http://localhost:8083/api/hotels/rooms/77/release?count=3"), eq(HttpMethod.PUT), any(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("released", true)));
+
+        HotelInventoryReleaseTask validTask = HotelInventoryReleaseTask.builder()
+                .id(701L).bookingId(30L).bookingRef("BKG-LEG-VALID-3").serviceId(77L).hotelId(77L)
+                .dateWiseBooking(false).detailsJson("Standard Room | Rooms: 3").status("PENDING").attemptCount(1).maxAttempts(10).build();
+        storedReleaseTask.set(validTask);
+        assertTrue(releaseRecoveryService.executeClaimedRelease(validTask));
+        assertEquals("RELEASED", storedReleaseTask.get().getStatus());
+        verify(restTemplate).exchange(eq("http://localhost:8083/api/hotels/rooms/77/release?count=3"), eq(HttpMethod.PUT), any(), eq(Map.class));
+
+        // 2. Malformed / missing / zero metadata MUST fail FINAL and never default silently to 1
+        for (String badDetails : java.util.Arrays.asList(null, "", "   ", "{corruptedJson}", "{\"roomCount\":0}", "Rooms: 0", "Rooms: -2")) {
+            storedSnapshot.set(null);
+            Booking badLegacy = Booking.builder()
+                    .id(31L).bookingRef("BKG-LEG-BAD").customerId(10L).serviceType("HOTEL").serviceId(77L)
+                    .totalAmount(3000.0).status("CANCELLED").detailsJson(badDetails)
+                    .build();
+            storedBooking.set(badLegacy);
+            HotelInventoryReleaseTask badTask = HotelInventoryReleaseTask.builder()
+                    .id(702L).bookingId(31L).bookingRef("BKG-LEG-BAD").serviceId(77L).hotelId(77L)
+                    .dateWiseBooking(false).detailsJson(badDetails).status("PROCESSING").attemptCount(1).maxAttempts(10).build();
+            storedReleaseTask.set(badTask);
+
+            assertFalse(releaseRecoveryService.executeClaimedRelease(badTask));
+            assertEquals("FAILED_FINAL", storedReleaseTask.get().getStatus());
+            assertEquals("FAILED_FINAL", storedBooking.get().getInventoryReleaseStatus());
+        }
+        verify(restTemplate, never()).exchange(contains("/release?count=1"), any(), any(), eq(Map.class));
     }
 }

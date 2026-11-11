@@ -352,4 +352,36 @@ public class PaymentControllerTest {
                 .andExpect(jsonPath("$[1].processedRefunds").value(5000.00))
                 .andExpect(jsonPath("$[1].netCollections").value(-3000.00));
     }
+
+    @Test
+    @DisplayName("GET /api/payments/refund/booking/{bookingRef}/reconcile - Rejects unauthorized and serves valid booking-service internal token")
+    void testReconcileRefundByBooking_SecurityAndDelegation() throws Exception {
+        when(securityService.verifyStrictInternalToken(any(), any(), any(), eq("booking-service")))
+                .thenReturn(false)
+                .thenReturn(true);
+
+        mockMvc.perform(get("/api/payments/refund/booking/BK-REC-1/reconcile")
+                        .header("X-Internal-Service", "bus-service"))
+                .andExpect(status().isUnauthorized());
+
+        RefundResponse reconciled = RefundResponse.builder()
+                .refundId("rfnd_rec_1")
+                .refundStatus("PROCESSED")
+                .refundAmount(1800.0)
+                .bookingRef("BK-REC-1")
+                .transactionRef("TXN-REC-1")
+                .build();
+        when(paymentService.reconcileRefundByBooking("BK-REC-1", "htl-rfnd-BK-REC-1", 1800.0))
+                .thenReturn(reconciled);
+
+        mockMvc.perform(get("/api/payments/refund/booking/BK-REC-1/reconcile")
+                        .param("idempotencyKey", "htl-rfnd-BK-REC-1")
+                        .param("expectedAmount", "1800.0")
+                        .header("X-Internal-Token", "valid-booking-jwt")
+                        .header("X-Internal-Service", "booking-service"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.refundStatus").value("PROCESSED"))
+                .andExpect(jsonPath("$.refundId").value("rfnd_rec_1"))
+                .andExpect(jsonPath("$.refundAmount").value(1800.0));
+    }
 }

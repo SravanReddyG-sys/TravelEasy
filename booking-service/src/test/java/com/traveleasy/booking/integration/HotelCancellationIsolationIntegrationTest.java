@@ -229,7 +229,9 @@ public class HotelCancellationIsolationIntegrationTest {
 
         when(mockRestTemplate.exchange(contains("/api/hotels/rooms/release-stay"), eq(HttpMethod.POST), any(), eq(Map.class)))
                 .thenReturn(ResponseEntity.ok(Map.of("released", true)));
-        when(mockRestTemplate.exchange(contains("/api/payments/refund/booking/"), eq(HttpMethod.POST), any(), eq(Map.class)))
+        when(mockRestTemplate.exchange(contains("/api/payments/refund/booking/" + ref + "/reconcile"), eq(HttpMethod.GET), any(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("refundStatus", "NOT_FOUND")));
+        when(mockRestTemplate.exchange(contains("/api/payments/refund/booking/" + ref), eq(HttpMethod.POST), any(), eq(Map.class)))
                 .thenReturn(ResponseEntity.ok(Map.of("refundStatus", "PROCESSED", "refundId", "rfnd_restart_rec_1")));
 
         releaseWorker.setRecoveryEnabled(true);
@@ -450,5 +452,84 @@ public class HotelCancellationIsolationIntegrationTest {
         assertNotNull(finalBooking.getInventoryReleasedAt());
         assertEquals("PROCESSED", finalBooking.getRefundStatus());
         assertEquals("rfnd_concurrent_ok", finalBooking.getRefundId());
+    }
+
+    @Test
+    @DisplayName("Integration: INITIATED hotel refund reconciles via GET /reconcile in MySQL without duplicate POST")
+    @SuppressWarnings({"rawtypes"})
+    void testInitiatedRefundReconcilesViaGetInMySQLWithoutDuplicatePost() {
+        String ref = uniqueRef("BKG-HTL-IT-REC-POLL");
+        LocalDate checkIn = LocalDate.now(HotelCancellationPolicyService.POLICY_ZONE_ID).plusDays(4);
+        LocalDate checkOut = checkIn.plusDays(1);
+
+        Booking booking = bookingRepository.save(Booking.builder()
+                .bookingRef(ref)
+                .customerId(88L)
+                .customerName("Reconcile Integration Guest")
+                .customerEmail("reconcile.it@example.com")
+                .serviceType("HOTEL")
+                .serviceId(120L)
+                .providerId(55L)
+                .serviceTitle("Reconcile Grand")
+                .totalAmount(4200.0)
+                .status("CANCELLED")
+                .cancelledAt(LocalDateTime.now())
+                .cancellationPolicyTier(HotelCancellationPolicyService.TIER_FREE_48H)
+                .cancellationFee(0.0)
+                .refundAmount(4200.0)
+                .refundStatus("PENDING")
+                .refundAttemptKey("htl-rfnd-" + ref)
+                .inventoryReleaseStatus("RELEASED")
+                .checkInDate(checkIn)
+                .checkOutDate(checkOut)
+                .detailsJson("{\"checkInDate\":\"" + checkIn + "\"}")
+                .build());
+
+        HotelCancellationRefundTask task = refundTaskRepository.save(HotelCancellationRefundTask.builder()
+                .bookingId(booking.getId())
+                .bookingRef(ref)
+                .idempotencyKey("htl-rfnd-" + ref)
+                .refundAmount(4200.0)
+                .totalBookingAmount(4200.0)
+                .cancellationFee(0.0)
+                .policyTier(HotelCancellationPolicyService.TIER_FREE_48H)
+                .reason("Integration reconcile test")
+                .status("PENDING")
+                .attemptCount(0)
+                .maxAttempts(10)
+                .build());
+
+        when(mockRestTemplate.exchange(eq("http://localhost:8085/api/payments/refund/booking/" + ref), eq(HttpMethod.POST), any(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("refundStatus", "INITIATED", "refundId", "rfnd_it_poll_1")));
+        when(mockRestTemplate.exchange(contains("/api/payments/refund/booking/" + ref + "/reconcile"), eq(HttpMethod.GET), any(), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("refundStatus", "PENDING", "refundId", "rfnd_it_poll_1")))
+                .thenReturn(ResponseEntity.ok(Map.of("refundStatus", "PROCESSED", "refundId", "rfnd_it_poll_1")));
+
+        // 1. Initial initiation -> INITIATED
+        refundRecoveryService.attemptImmediateRefund(task);
+        Booking afterInitBooking = bookingRepository.findByBookingRef(ref).orElseThrow();
+        HotelCancellationRefundTask afterInitTask = refundTaskRepository.findByBookingRef(ref).orElseThrow();
+        assertEquals("INITIATED", afterInitBooking.getRefundStatus());
+        assertEquals("INITIATED", afterInitTask.getStatus());
+        assertEquals("rfnd_it_poll_1", afterInitBooking.getRefundId());
+
+        // 2. Make task due for poll and run claimAndExecute twice -> PENDING then PROCESSED
+        refundRecoveryService.claimAndExecute(task.getId(), "w-poll-1", 60);
+        Booking stillInitiated = bookingRepository.findByBookingRef(ref).orElseThrow();
+        assertEquals("INITIATED", stillInitiated.getRefundStatus());
+
+        refundRecoveryService.claimAndExecute(task.getId(), "w-poll-2", 60);
+        Booking settledBooking = bookingRepository.findByBookingRef(ref).orElseThrow();
+        HotelCancellationRefundTask settledTask = refundTaskRepository.findByBookingRef(ref).orElseThrow();
+        assertEquals("PROCESSED", settledBooking.getRefundStatus());
+        assertEquals("PROCESSED", settledTask.getStatus());
+        assertEquals("rfnd_it_poll_1", settledBooking.getRefundId());
+
+        verify(mockRestTemplate, times(1)).exchange(
+                eq("http://localhost:8085/api/payments/refund/booking/" + ref),
+                eq(HttpMethod.POST), any(), eq(Map.class));
+        verify(mockRestTemplate, times(2)).exchange(
+                contains("/api/payments/refund/booking/" + ref + "/reconcile"),
+                eq(HttpMethod.GET), any(), eq(Map.class));
     }
 }

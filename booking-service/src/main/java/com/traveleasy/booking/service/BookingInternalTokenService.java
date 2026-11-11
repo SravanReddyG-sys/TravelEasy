@@ -112,11 +112,9 @@ public class BookingInternalTokenService {
                 return false;
             }
             String normalizedService = serviceName.trim().toLowerCase();
-            boolean allowed = "payment-service".equals(normalizedService)
-                    || "hotel-service".equals(normalizedService)
-                    || "booking-service".equals(normalizedService)
-                    || "bus-service".equals(normalizedService);
-            if (!allowed) {
+            // Strictly allow ONLY booking-service itself on dedicated /api/bookings/hotel/** internal calls.
+            // Reject bus-service, hotel-service, payment-service (which uses legacy /api/bookings/**), and all other callers.
+            if (!SERVICE_NAME.equalsIgnoreCase(normalizedService)) {
                 return false;
             }
             if (internalServiceHeader != null && !internalServiceHeader.isBlank()) {

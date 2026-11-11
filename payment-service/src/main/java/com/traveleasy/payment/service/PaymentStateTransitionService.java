@@ -122,6 +122,53 @@ public class PaymentStateTransitionService {
         return saved;
     }
 
+    /**
+     * Records an unsuccessful or unresolved gateway refund outcome without transitioning
+     * the transaction to REFUNDED or emitting a refund-completed event.
+     */
+    @Transactional
+    public PaymentTransaction recordRefundFailed(PaymentTransaction txn, String refundId, Double refundAmount,
+                                                 String refundStatus, String errorDescription, String idempotencyKey) {
+        if ("REFUNDED".equalsIgnoreCase(txn.getStatus())
+                && "PROCESSED".equalsIgnoreCase(txn.getRefundStatus())) {
+            log.info("Transaction {} is already terminally REFUNDED/PROCESSED. Ignoring refund failure status {}.",
+                    txn.getTransactionRef(), refundStatus);
+            return txn;
+        }
+
+        String normalizedStatus = (refundStatus != null && !refundStatus.isBlank())
+                ? refundStatus.trim().toUpperCase()
+                : "FAILED";
+        // Preserve captured collection eligibility (SUCCESS) while marking refundStatus as non-processed failure
+        if ("REFUND_INITIATED".equalsIgnoreCase(txn.getStatus()) || txn.getStatus() == null || txn.getStatus().isBlank()) {
+            txn.setStatus("SUCCESS");
+        }
+        if (refundId != null && !refundId.isBlank()) {
+            txn.setRefundId(refundId);
+        }
+        if (refundAmount != null && refundAmount > 0) {
+            txn.setRefundAmount(refundAmount);
+        }
+        txn.setRefundStatus(normalizedStatus);
+        txn.setErrorCode("REFUND_" + normalizedStatus);
+        if (errorDescription != null && !errorDescription.isBlank()) {
+            txn.setErrorDescription(errorDescription.length() <= 500
+                    ? errorDescription
+                    : errorDescription.substring(0, 500));
+        }
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            txn.setIdempotencyKey(idempotencyKey);
+        }
+
+        PaymentTransaction saved = paymentRepository.save(txn);
+        if (saved == null) {
+            saved = txn;
+        }
+        log.warn("Recorded refund failure state {} for txn {} (refundId={})",
+                normalizedStatus, saved.getTransactionRef(), refundId);
+        return saved;
+    }
+
     private void persistOutboxRecordSafely(String aggregateType, String aggregateId, String eventType,
                                           String eventId, NotificationEventRequest eventRequest) {
         // Idempotency: verify if event with this specific event ID has already been persisted
