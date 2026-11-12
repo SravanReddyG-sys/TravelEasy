@@ -9296,67 +9296,308 @@
       </div>
 
       <!-- ==================== TAB: RESERVATIONS ==================== -->
-      <div *ngIf="activeNav === 'reservations'">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-          <div>
-            <h3 class="fw-bold text-dark mb-1">Guest Reservations</h3>
-            <p class="text-muted small mb-0">Complete booking management, check-in, check-out, and no-show processing.</p>
+      <section *ngIf="activeNav === 'reservations'" class="reservations-page" aria-labelledby="reservations-page-heading">
+        <!-- Page Header (No date range or property selectors per approved mockup) -->
+        <div class="reservations-page-header">
+          <h3 id="reservations-page-heading" class="reservations-title">Reservations</h3>
+          <p class="reservations-subtitle">Manage guest bookings, arrivals, departures and reservation operations.</p>
+        </div>
+
+        <!-- KPI Summary Strip (4 Equal Cards, No Percentage/Trend Comparisons) -->
+        <div class="reservations-kpi-grid" role="region" aria-label="Reservation Summary Metrics">
+          <div class="res-kpi-card">
+            <div class="res-kpi-icon res-kpi-icon-teal" aria-hidden="true">
+              <i class="fa-solid fa-bed"></i>
+            </div>
+            <div class="res-kpi-content">
+              <span class="res-kpi-label">Total Reservations</span>
+              <span class="res-kpi-value">{{ reservationKpis.totalReservations }}</span>
+            </div>
+          </div>
+
+          <div class="res-kpi-card">
+            <div class="res-kpi-icon res-kpi-icon-green" aria-hidden="true">
+              <i class="fa-solid fa-check"></i>
+            </div>
+            <div class="res-kpi-content">
+              <span class="res-kpi-label">Confirmed</span>
+              <span class="res-kpi-value">{{ reservationKpis.confirmedCount }}</span>
+            </div>
+          </div>
+
+          <div class="res-kpi-card">
+            <div class="res-kpi-icon res-kpi-icon-blue" aria-hidden="true">
+              <i class="fa-solid fa-hotel"></i>
+            </div>
+            <div class="res-kpi-content">
+              <span class="res-kpi-label">Currently Staying</span>
+              <span class="res-kpi-value">{{ reservationKpis.currentlyStayingCount }}</span>
+            </div>
+          </div>
+
+          <div class="res-kpi-card">
+            <div class="res-kpi-icon res-kpi-icon-amber" aria-hidden="true">
+              <i class="fa-solid fa-flag-checkered"></i>
+            </div>
+            <div class="res-kpi-content">
+              <span class="res-kpi-label">Completed</span>
+              <span class="res-kpi-value">{{ reservationKpis.completedCount }}</span>
+            </div>
           </div>
         </div>
 
-        <div class="content-card">
-          <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-              <thead class="table-light">
-                <tr>
-                  <th>Booking Ref</th>
-                  <th>Guest Name</th>
-                  <th>Property &amp; Room Details</th>
-                  <th>Check-in</th>
-                  <th>Check-out</th>
-                  <th>Total Paid</th>
-                  <th>Status</th>
-                  <th>Guest Operations</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr *ngFor="let res of filteredReservations">
-                  <td><strong>{{ res.bookingRef }}</strong></td>
-                  <td>
-                    <div class="fw-semibold text-dark">{{ res.customerName }}</div>
-                    <small class="text-muted">{{ res.customerEmail }}</small>
-                  </td>
-                  <td>
-                    <div>{{ res.serviceTitle }}</div>
-                    <small class="text-muted">{{ extractRoomTypeFromBooking(res) }}</small>
-                  </td>
-                  <td>{{ formatDate(res.checkInDate || res.bookingDate) }}</td>
-                  <td>{{ formatDate(res.checkOutDate) }}</td>
-                  <td class="fw-bold text-info">{{ formatCurrency(res.totalAmount) }}</td>
-                  <td>
-                    <span class="badge-status" [ngClass]="getStatusBadgeClass(res.status)">
-                      {{ getStatusDisplay(res.status) }}
-                    </span>
-                  </td>
-                  <td>
-                    <div class="btn-group btn-group-sm" *ngIf="res.status === 'CONFIRMED'">
-                      <button class="btn btn-outline-primary btn-sm" (click)="checkInGuest(res)">Check In</button>
-                      <button class="btn btn-outline-danger btn-sm" (click)="markNoShow(res)">No Show</button>
-                    </div>
-                    <button *ngIf="res.status === 'CHECKED_IN'" class="btn btn-sm btn-outline-success" (click)="checkOutGuest(res)">Check Out</button>
-                    <span *ngIf="res.status === 'CHECKED_OUT'" class="badge bg-light text-muted border">Completed</span>
-                    <span *ngIf="res.status === 'NO_SHOW'" class="badge bg-light text-danger border">No-Show</span>
-                    <span *ngIf="res.status === 'CANCELLED'" class="badge bg-light text-secondary border">Cancelled</span>
-                  </td>
-                </tr>
-                <tr *ngIf="filteredReservations.length === 0">
-                  <td colspan="8" class="text-center py-4 text-muted small">No guest reservations found.</td>
-                </tr>
-              </tbody>
-            </table>
+        <!-- Search Bar + Status Select Filter -->
+        <div class="reservations-toolbar">
+          <div class="res-search-box">
+            <i class="fa-solid fa-magnifying-glass res-search-icon" aria-hidden="true"></i>
+            <label for="reservation-search-input" class="visually-hidden">Search reservations by booking reference or guest name</label>
+            <input
+              id="reservation-search-input"
+              type="search"
+              class="res-search-input"
+              [ngModel]="reservationSearchQuery"
+              (ngModelChange)="onReservationSearchChange($event)"
+              placeholder="Search by booking reference or guest name..."
+              autocomplete="off" />
+            <button
+              *ngIf="reservationSearchQuery"
+              type="button"
+              class="res-search-clear-btn"
+              aria-label="Clear search query"
+              (click)="onReservationSearchChange('')">
+              <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <div class="res-select-wrapper">
+            <i class="fa-solid fa-filter res-select-icon" aria-hidden="true"></i>
+            <label for="reservation-status-select" class="visually-hidden">Filter reservations by status</label>
+            <select
+              id="reservation-status-select"
+              class="res-status-select"
+              [ngModel]="reservationStatusFilter"
+              (ngModelChange)="onReservationStatusSelectChange($event)">
+              <option value="ALL">All Status</option>
+              <option value="CONFIRMED">Confirmed</option>
+              <option value="CHECKED_IN">Checked In</option>
+              <option value="CHECKED_OUT">Checked Out</option>
+              <option value="NO_SHOW">No Show</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+            <i class="fa-solid fa-chevron-down res-select-caret" aria-hidden="true"></i>
           </div>
         </div>
-      </div>
+
+        <!-- Synchronized Status Filter Pill Tabs -->
+        <div class="res-status-tabs" role="tablist" aria-label="Filter reservations by status">
+          <button
+            *ngFor="let opt of reservationFilterOptions"
+            type="button"
+            role="tab"
+            [attr.aria-selected]="reservationStatusFilter === opt.key"
+            class="res-status-tab"
+            [class.active]="reservationStatusFilter === opt.key"
+            (click)="setReservationStatusFilter(opt.key)">
+            {{ opt.label }} ({{ getReservationStatusTabCount(opt.key) }})
+          </button>
+        </div>
+
+        <!-- Error State -->
+        <div *ngIf="reservationsLoadError" class="res-state-banner res-state-error" role="alert">
+          <div class="res-state-banner-body">
+            <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+            <span>{{ reservationsLoadError }}</span>
+          </div>
+          <button type="button" class="res-btn res-btn-outline" (click)="loadDashboardData()">Retry</button>
+        </div>
+
+        <!-- Loading State -->
+        <div *ngIf="isLoading && reservationCardVms.length === 0" class="res-loading-list" aria-live="polite">
+          <div class="res-skeleton-card" *ngFor="let i of [1, 2]">
+            <div class="res-skeleton-line res-skeleton-short"></div>
+            <div class="res-skeleton-line res-skeleton-wide"></div>
+            <div class="res-skeleton-line res-skeleton-mid"></div>
+          </div>
+        </div>
+
+        <!-- Empty States -->
+        <div
+          *ngIf="!isLoading && !reservationsLoadError && filteredReservationCards.length === 0"
+          class="res-empty-state">
+          <div class="res-empty-icon" aria-hidden="true">
+            <i class="fa-regular fa-calendar-xmark"></i>
+          </div>
+          <h4 class="res-empty-title" *ngIf="reservationCardVms.length === 0">No reservations yet</h4>
+          <h4 class="res-empty-title" *ngIf="reservationCardVms.length > 0">No matching reservations</h4>
+          <p class="res-empty-copy" *ngIf="reservationCardVms.length === 0">
+            Bookings made for {{ selectedHotel?.name || 'this property' }} will appear here.
+          </p>
+          <p class="res-empty-copy" *ngIf="reservationCardVms.length > 0">
+            Try adjusting your booking reference search or status filter to view other reservations.
+          </p>
+          <button
+            *ngIf="reservationCardVms.length > 0 && (reservationSearchQuery || reservationStatusFilter !== 'ALL')"
+            type="button"
+            class="res-btn res-btn-outline"
+            (click)="clearReservationFilters()">
+            Clear Filters
+          </button>
+        </div>
+
+        <!-- Single-Column Full-Width Reservation Cards -->
+        <div *ngIf="filteredReservationCards.length > 0" class="reservations-card-list">
+          <article
+            *ngFor="let card of filteredReservationCards; trackBy: trackByReservationRef"
+            class="reservation-card"
+            [attr.data-booking-ref]="card.bookingRef">
+            <!-- Card Top Header -->
+            <div class="reservation-card-header">
+              <div class="reservation-card-title-group">
+                <span class="res-booking-icon" aria-hidden="true">
+                  <i class="fa-regular fa-calendar-check"></i>
+                </span>
+                <span class="res-booking-ref">Booking #{{ card.bookingRef }}</span>
+                <span class="res-pill-badge" [ngClass]="card.status.badgeClass">
+                  <i [class]="card.status.iconClass" aria-hidden="true"></i>
+                  {{ card.status.label }}
+                </span>
+              </div>
+              <span *ngIf="card.bookedOnText" class="res-booked-on">
+                Booked on {{ card.bookedOnText }}
+              </span>
+            </div>
+
+            <!-- Card Middle Details Grid -->
+            <div class="reservation-card-body">
+              <!-- Guest Information Block -->
+              <div class="res-guest-block">
+                <div class="res-guest-avatar" aria-hidden="true">
+                  <i class="fa-solid fa-user"></i>
+                </div>
+                <div class="res-guest-meta">
+                  <div class="res-guest-name">{{ card.guest.name }}</div>
+                  <div class="res-guest-line">
+                    <i class="fa-regular fa-envelope" aria-hidden="true"></i>
+                    <span class="res-guest-text" [class.res-muted-value]="!card.guest.email">{{ card.guest.email || 'Not provided' }}</span>
+                  </div>
+                  <div class="res-guest-line">
+                    <i class="fa-solid fa-phone" aria-hidden="true"></i>
+                    <span class="res-guest-text" [class.res-muted-value]="!card.guest.phone">{{ card.guest.phone || 'Not provided' }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Stay Metrics Strip -->
+              <div class="res-stay-metrics">
+                <div class="res-metric-cell">
+                  <span class="res-metric-label">
+                    <i class="fa-regular fa-calendar" aria-hidden="true"></i> Check-in
+                  </span>
+                  <span class="res-metric-val">{{ card.checkInText }}</span>
+                </div>
+
+                <div class="res-metric-cell">
+                  <span class="res-metric-label">
+                    <i class="fa-regular fa-calendar" aria-hidden="true"></i> Check-out
+                  </span>
+                  <span class="res-metric-val">{{ card.checkOutText }}</span>
+                </div>
+
+                <div class="res-metric-cell">
+                  <span class="res-metric-label">
+                    <i class="fa-regular fa-moon" aria-hidden="true"></i> Duration
+                  </span>
+                  <span class="res-metric-val">{{ card.nightsText }}</span>
+                </div>
+
+                <div class="res-metric-cell">
+                  <span class="res-metric-label">
+                    <i class="fa-solid fa-bed" aria-hidden="true"></i> Rooms Booked
+                  </span>
+                  <span class="res-metric-val">{{ card.totalRoomsText }}</span>
+                </div>
+              </div>
+
+              <!-- Payment Amount & Status Summary -->
+              <div class="res-payment-cell">
+                <span class="res-payment-label">Total Amount</span>
+                <span class="res-payment-amount">{{ formatCurrency(card.totalAmount) }}</span>
+                <span class="res-pill-badge res-pay-pill" [ngClass]="card.payment.badgeClass">
+                  <i [class]="card.payment.iconClass" aria-hidden="true"></i>
+                  {{ card.payment.label }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Card Footer: Booked Room Types + Operational Actions -->
+            <div class="reservation-card-footer">
+              <div class="res-room-types-strip">
+                <span class="res-room-strip-label">
+                  <i class="fa-solid fa-bed" aria-hidden="true"></i> Booked Room Types
+                </span>
+                <div class="res-room-chips" *ngIf="card.roomTypes.length > 0; else unavailableRoomChips">
+                  <span class="res-room-chip-item" *ngFor="let rt of card.roomTypes; let last = last">
+                    <span class="res-room-chip-name">{{ rt.roomTypeName }}</span>
+                    <span class="res-room-chip-qty">{{ rt.quantity === 1 ? '1 Room' : rt.quantity + ' Rooms' }}</span>
+                    <span *ngIf="!last" class="res-room-chip-sep" aria-hidden="true"></span>
+                  </span>
+                </div>
+                <ng-template #unavailableRoomChips>
+                  <span class="res-muted-value small">Room details unavailable</span>
+                </ng-template>
+              </div>
+
+              <div class="res-card-actions">
+                <button
+                  type="button"
+                  class="res-btn res-btn-outline"
+                  (click)="openReservationDetails(card)">
+                  <i class="fa-regular fa-eye" aria-hidden="true"></i>
+                  View Details
+                </button>
+
+                <button
+                  *ngIf="card.canCheckIn"
+                  type="button"
+                  class="res-btn res-btn-primary"
+                  [disabled]="activeLifecycleActionRef === card.bookingRef"
+                  (click)="checkInGuest(card)">
+                  <i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i>
+                  {{ activeLifecycleActionRef === card.bookingRef && activeLifecycleActionType === 'CHECK_IN' ? 'Checking In...' : 'Check In' }}
+                </button>
+
+                <button
+                  *ngIf="card.canMarkNoShow"
+                  type="button"
+                  class="res-btn res-btn-outline res-btn-noshow"
+                  [disabled]="activeLifecycleActionRef === card.bookingRef"
+                  (click)="markNoShow(card)">
+                  <i class="fa-solid fa-ban" aria-hidden="true"></i>
+                  {{ activeLifecycleActionRef === card.bookingRef && activeLifecycleActionType === 'NO_SHOW' ? 'Processing...' : 'Mark No-Show' }}
+                </button>
+
+                <button
+                  *ngIf="card.canCheckOut"
+                  type="button"
+                  class="res-btn res-btn-primary"
+                  [disabled]="activeLifecycleActionRef === card.bookingRef"
+                  (click)="checkOutGuest(card)">
+                  <i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
+                  {{ activeLifecycleActionRef === card.bookingRef && activeLifecycleActionType === 'CHECK_OUT' ? 'Checking Out...' : 'Check Out' }}
+                </button>
+
+                <span
+                  *ngIf="!card.canCheckIn && !card.canCheckOut"
+                  class="res-terminal-indicator"
+                  [ngClass]="card.status.badgeClass">
+                  <i [class]="card.status.iconClass" aria-hidden="true"></i>
+                  {{ card.isCompleted ? 'Completed' : card.status.label }}
+                </span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
 
       <!-- ==================== TAB: REVIEWS & RATINGS ==================== -->
       <div *ngIf="activeNav === 'reviews'">
@@ -9609,65 +9850,274 @@
     </div>
   </div>
 
-  <!-- RESERVATION DETAILS MODAL -->
-  <div *ngIf="showReservationDetailsModal && selectedReservation" class="modal fade show d-block bg-dark bg-opacity-50" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content rounded-4 border-0 shadow">
-        <div class="modal-header border-bottom">
-          <h5 class="modal-title fw-bold text-dark">
-            <i class="fa-solid fa-receipt text-info me-2"></i>Reservation {{ selectedReservation.bookingRef }}
-          </h5>
-          <button type="button" class="btn-close" (click)="showReservationDetailsModal = false"></button>
+  <!-- RESERVATION DETAILS MODAL (Native Top-Layer <dialog>) -->
+  <dialog
+    #reservationDetailsDialog
+    aria-labelledby="reservation-details-modal-title"
+    closedby="any"
+    class="reservation-details-dialog"
+    (close)="onReservationDialogClosed()"
+    (pointerdown)="onReservationDialogPointerDown($event)"
+    (pointerup)="onReservationDialogPointerUp($event)">
+    <ng-container *ngIf="selectedReservationModalVm as vm">
+      <!-- Modal Header -->
+      <div class="res-modal-header">
+        <h2 id="reservation-details-modal-title" class="res-modal-title">Booking Details</h2>
+        <button
+          type="button"
+          class="res-modal-close-btn"
+          aria-label="Close booking details modal"
+          (click)="closeReservationDetailsModal()">
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+      </div>
+
+      <!-- Modal Scrollable Body -->
+      <div class="res-modal-body">
+        <!-- Non-blocking loading / partial fetch banner -->
+        <div *ngIf="isLoadingReservationDetails" class="res-modal-sync-banner" aria-live="polite">
+          <span class="spinner-border spinner-border-sm text-info" aria-hidden="true"></span>
+          <span>Loading full room allocation &amp; payment details...</span>
         </div>
-        <div class="modal-body p-4">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <span class="text-muted small">Status</span>
-            <span class="badge-status" [ngClass]="getStatusBadgeClass(selectedReservation.status)">
-              {{ getStatusDisplay(selectedReservation.status) }}
-            </span>
-          </div>
-          <div class="mb-2">
-            <strong>Guest:</strong> {{ selectedReservation.customerName }} ({{ selectedReservation.customerEmail }})
-          </div>
-          <div class="mb-2">
-            <strong>Property:</strong> {{ selectedReservation.serviceTitle }}
-          </div>
-          <div class="mb-2">
-            <strong>Room Type:</strong> {{ extractRoomTypeFromBooking(selectedReservation) }}
-          </div>
-          <div class="row mb-3">
-            <div class="col">
-              <strong>Check-in:</strong> {{ formatDate(selectedReservation.checkInDate || selectedReservation.bookingDate) }}
+
+        <div *ngIf="reservationDetailsError && !isLoadingReservationDetails" class="res-modal-warning-banner" role="status">
+          <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+          <span>{{ reservationDetailsError }}</span>
+        </div>
+
+        <!-- Row 1: Booking Overview Card -->
+        <div class="res-modal-overview-card">
+          <div class="res-modal-overview-left">
+            <div class="res-modal-cal-badge" aria-hidden="true">
+              <i class="fa-regular fa-calendar-check"></i>
             </div>
-            <div class="col">
-              <strong>Check-out:</strong> {{ formatDate(selectedReservation.checkOutDate) }}
+            <div>
+              <div class="res-modal-ref-row">
+                <span class="res-modal-booking-ref">Booking #{{ vm.bookingRef }}</span>
+                <span class="res-pill-badge" [ngClass]="vm.status.badgeClass">
+                  <i [class]="vm.status.iconClass" aria-hidden="true"></i>
+                  {{ vm.status.label }}
+                </span>
+              </div>
+              <div *ngIf="vm.bookedOnText" class="res-modal-booked-on">
+                Booked on {{ vm.bookedOnText }}
+              </div>
             </div>
-          </div>
-          <div class="mb-3">
-            <strong>Total Amount:</strong> <span class="fw-bold text-info">{{ formatCurrency(selectedReservation.totalAmount) }}</span>
           </div>
 
-          <!-- Actions -->
-          <div class="d-flex gap-2 pt-2 border-top">
-            <button *ngIf="selectedReservation.status === 'CONFIRMED'" 
-                    class="btn btn-primary flex-grow-1 rounded-pill fw-bold" 
-                    (click)="checkInGuest(selectedReservation)">
-              Check In Guest
-            </button>
-            <button *ngIf="selectedReservation.status === 'CONFIRMED'" 
-                    class="btn btn-outline-danger flex-grow-1 rounded-pill fw-bold" 
-                    (click)="markNoShow(selectedReservation)">
-              Mark No-Show
-            </button>
-            <button *ngIf="selectedReservation.status === 'CHECKED_IN'" 
-                    class="btn btn-success flex-grow-1 rounded-pill fw-bold" 
-                    (click)="checkOutGuest(selectedReservation)">
-              Check Out Guest
-            </button>
+          <div class="res-modal-overview-divider" aria-hidden="true"></div>
+
+          <div class="res-modal-overview-right">
+            <span class="res-modal-payment-label">
+              <i class="fa-regular fa-credit-card" aria-hidden="true"></i>
+              Payment Status
+            </span>
+            <span class="res-pill-badge" [ngClass]="vm.paymentSummary.payment.badgeClass">
+              <i [class]="vm.paymentSummary.payment.iconClass" aria-hidden="true"></i>
+              {{ vm.paymentSummary.payment.label }}
+            </span>
           </div>
         </div>
+
+        <!-- Row 2: Guest Information + Stay Details -->
+        <div class="res-modal-top-grid">
+          <!-- Guest Information -->
+          <section class="res-modal-panel" aria-labelledby="guest-info-heading">
+            <header class="res-modal-panel-header">
+              <i class="fa-regular fa-user" aria-hidden="true"></i>
+              <h3 id="guest-info-heading" class="res-modal-panel-title">Guest Information</h3>
+            </header>
+            <div class="res-modal-panel-body res-guest-details-list">
+              <div class="res-guest-detail-row">
+                <i class="fa-regular fa-user" aria-hidden="true"></i>
+                <span class="res-guest-detail-primary">{{ vm.guest.name }}</span>
+              </div>
+              <div class="res-guest-detail-row">
+                <i class="fa-regular fa-envelope" aria-hidden="true"></i>
+                <span [class.res-muted-value]="!vm.guest.email">{{ vm.guest.email || 'Not provided' }}</span>
+              </div>
+              <div class="res-guest-detail-row">
+                <i class="fa-solid fa-phone" aria-hidden="true"></i>
+                <span [class.res-muted-value]="!vm.guest.phone">{{ vm.guest.phone || 'Not provided' }}</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- Stay Details -->
+          <section class="res-modal-panel" aria-labelledby="stay-details-heading">
+            <header class="res-modal-panel-header">
+              <i class="fa-solid fa-bed" aria-hidden="true"></i>
+              <h3 id="stay-details-heading" class="res-modal-panel-title">Stay Details</h3>
+            </header>
+            <div class="res-modal-panel-body res-stay-details-grid">
+              <div class="res-stay-item">
+                <span class="res-stay-label">
+                  <i class="fa-regular fa-calendar" aria-hidden="true"></i> Check-in
+                </span>
+                <span class="res-stay-value">{{ vm.checkInText }}</span>
+              </div>
+
+              <div class="res-stay-item">
+                <span class="res-stay-label">
+                  <i class="fa-regular fa-calendar" aria-hidden="true"></i> Check-out
+                </span>
+                <span class="res-stay-value">{{ vm.checkOutText }}</span>
+              </div>
+
+              <div class="res-stay-item">
+                <span class="res-stay-label">
+                  <i class="fa-regular fa-moon" aria-hidden="true"></i> Duration
+                </span>
+                <span class="res-stay-value">{{ vm.nightsText }}</span>
+              </div>
+
+              <div class="res-stay-item">
+                <span class="res-stay-label">
+                  <i class="fa-solid fa-users" aria-hidden="true"></i> Guests
+                </span>
+                <span class="res-stay-value">{{ vm.totalGuestsText }}</span>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Row 3: Booked Room Details + Payment Summary -->
+        <div class="res-modal-bottom-grid">
+          <!-- Booked Room Details Table -->
+          <section class="res-modal-panel" aria-labelledby="booked-room-details-heading">
+            <header class="res-modal-panel-header">
+              <i class="fa-solid fa-bed" aria-hidden="true"></i>
+              <h3 id="booked-room-details-heading" class="res-modal-panel-title">Booked Room Details</h3>
+            </header>
+            <div class="res-modal-table-container">
+              <div
+                tabindex="0"
+                role="region"
+                aria-labelledby="booked-room-details-heading"
+                class="booked-room-table-wrapper">
+                <table
+                  class="booked-room-table"
+                  style="--label-1: 'Room Type'; --label-2: 'Quantity'; --label-3: 'Occupancy (per room)'; --label-4: 'Price / Room / Night'; --label-5: 'Amount';">
+                  <thead>
+                    <tr>
+                      <th scope="col">Room Type</th>
+                      <th scope="col">Quantity</th>
+                      <th scope="col">Occupancy (per room)</th>
+                      <th scope="col" class="num-col">Price / Room / Night</th>
+                      <th scope="col" class="num-col">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody *ngIf="vm.roomRows.length > 0; else noModalRoomRows">
+                    <tr *ngFor="let row of vm.roomRows">
+                      <th scope="row" class="room-type-cell">
+                        <div class="room-type-name-main">
+                          <i class="fa-solid fa-bed res-table-bed-icon" aria-hidden="true"></i>
+                          <span>{{ row.roomTypeName }}</span>
+                        </div>
+                        <div *ngIf="row.subtitle" class="room-type-sub">{{ row.subtitle }}</div>
+                      </th>
+                      <td>{{ row.quantityText }}</td>
+                      <td>{{ row.occupancyText }}</td>
+                      <td class="num-col">{{ row.pricePerNightText }}</td>
+                      <td class="num-col res-table-amount">{{ row.amountText }}</td>
+                    </tr>
+                  </tbody>
+                  <ng-template #noModalRoomRows>
+                    <tbody>
+                      <tr>
+                        <td colspan="5" class="text-center text-muted py-3">
+                          Room breakdown unavailable for this booking.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </ng-template>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- Payment Summary -->
+          <section class="res-modal-panel" aria-labelledby="payment-summary-heading">
+            <header class="res-modal-panel-header">
+              <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+              <h3 id="payment-summary-heading" class="res-modal-panel-title">Payment Summary</h3>
+            </header>
+            <div class="res-modal-panel-body res-payment-summary-body">
+              <div class="res-pay-row">
+                <span class="res-pay-row-label">Room Charges</span>
+                <span class="res-pay-row-val">
+                  {{ vm.paymentSummary.roomChargesAmount !== null ? formatCurrency(vm.paymentSummary.roomChargesAmount) : 'Included in total' }}
+                </span>
+              </div>
+
+              <div *ngIf="vm.paymentSummary.taxesAmount !== null" class="res-pay-row">
+                <span class="res-pay-row-label">{{ vm.paymentSummary.taxesLabel || 'Taxes' }}</span>
+                <span class="res-pay-row-val">{{ formatCurrency(vm.paymentSummary.taxesAmount) }}</span>
+              </div>
+
+              <div *ngIf="vm.paymentSummary.otherChargesAmount !== null" class="res-pay-row">
+                <span class="res-pay-row-label">{{ vm.paymentSummary.otherChargesLabel || 'Other Charges' }}</span>
+                <span class="res-pay-row-val">{{ formatCurrency(vm.paymentSummary.otherChargesAmount) }}</span>
+              </div>
+
+              <div *ngIf="vm.paymentSummary.taxesNote" class="res-pay-note">
+                {{ vm.paymentSummary.taxesNote }}
+              </div>
+
+              <div class="res-pay-divider"></div>
+
+              <div class="res-pay-total-row">
+                <span class="res-pay-total-label">Total Amount</span>
+                <span class="res-pay-total-val">{{ formatCurrency(vm.paymentSummary.totalAmount) }}</span>
+              </div>
+
+              <div class="res-pay-status-strip" [ngClass]="'strip-' + vm.paymentSummary.payment.badgeClass">
+                <span class="res-pay-strip-label">
+                  <i [class]="vm.paymentSummary.payment.iconClass" aria-hidden="true"></i>
+                  Payment Status
+                </span>
+                <span class="res-pill-badge" [ngClass]="vm.paymentSummary.payment.badgeClass">
+                  {{ vm.paymentSummary.payment.label }}
+                </span>
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
-    </div>
-  </div>
+
+      <!-- Modal Footer: Contextual Lifecycle Actions Only -->
+      <div *ngIf="vm.canCheckIn || vm.canCheckOut || vm.canMarkNoShow" class="res-modal-footer">
+        <button
+          *ngIf="vm.canCheckIn"
+          type="button"
+          class="res-btn res-btn-primary res-btn-modal"
+          [disabled]="activeLifecycleActionRef === vm.bookingRef"
+          (click)="checkInGuest(vm.raw)">
+          <i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i>
+          {{ activeLifecycleActionRef === vm.bookingRef && activeLifecycleActionType === 'CHECK_IN' ? 'Checking In...' : 'Check In' }}
+        </button>
+
+        <button
+          *ngIf="vm.canMarkNoShow"
+          type="button"
+          class="res-btn res-btn-outline res-btn-noshow res-btn-modal"
+          [disabled]="activeLifecycleActionRef === vm.bookingRef"
+          (click)="markNoShow(vm.raw)">
+          <i class="fa-solid fa-ban" aria-hidden="true"></i>
+          {{ activeLifecycleActionRef === vm.bookingRef && activeLifecycleActionType === 'NO_SHOW' ? 'Processing...' : 'Mark No-Show' }}
+        </button>
+
+        <button
+          *ngIf="vm.canCheckOut"
+          type="button"
+          class="res-btn res-btn-primary res-btn-modal"
+          [disabled]="activeLifecycleActionRef === vm.bookingRef"
+          (click)="checkOutGuest(vm.raw)">
+          <i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>
+          {{ activeLifecycleActionRef === vm.bookingRef && activeLifecycleActionType === 'CHECK_OUT' ? 'Checking Out...' : 'Check Out' }}
+        </button>
+      </div>
+    </ng-container>
+  </dialog>
 
 </div>

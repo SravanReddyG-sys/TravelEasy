@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, HostListener } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -6,7 +6,7 @@ import { Subscription, Subject, forkJoin, of } from 'rxjs';
 import { catchError, map, switchMap, takeUntil } from 'rxjs/operators';
 import { AuthService } from '../../services/auth.service';
 import { HotelService, HotelInventorySummary } from '../../services/hotel.service';
-import { Hotel, HotelRoom, HotelImage, HotelStep1Request, HotelStep1Response, HotelStep2Request, HotelStep2Response, HotelStep3Request, HotelStep3Response, HotelStep4Request, HotelStep4Response, HotelStep5SubmitRequest, HotelStep5Response, RoomTypeCreateRequest, RoomTypeDto } from '../../models/hotel.model';
+import { Hotel, HotelRoom, HotelImage, HotelStep1Request, HotelStep1Response, HotelStep2Request, HotelStep2Response, HotelStep3Request, HotelStep3Response, HotelStep4Request, HotelStep4Response, HotelStep5SubmitRequest, HotelStep5Response, HotelReservationDetailResponse, PaymentTransactionDto, RoomTypeCreateRequest, RoomTypeDto } from '../../models/hotel.model';
 import { BookingService, HotelRevenueReportResponse } from '../../services/booking.service';
 import { NotificationService } from '../../services/notification.service';
 import { User } from '../../models/user.model';
@@ -21,6 +21,19 @@ import {
   resolveBookingRoomCount,
   selectUpcomingReservations
 } from './hotel-dashboard-metrics.util';
+import {
+  RESERVATION_FILTER_OPTIONS,
+  ReservationStatusFilterKey,
+  ReservationKpiSummary,
+  ReservationStatusCounts,
+  HotelReservationCardViewModel,
+  HotelReservationModalViewModel,
+  computeReservationKpis,
+  computeReservationStatusCounts,
+  filterReservationsList,
+  buildHotelReservationCardViewModel,
+  buildHotelReservationModalViewModel
+} from './hotel-reservations-presenter.util';
 
 export interface DateRangePresetItem {
   id: string;
@@ -635,6 +648,27 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   showReservationDetailsModal: boolean = false;
   selectedReservation: any = null;
 
+  @ViewChild('reservationDetailsDialog') reservationDetailsDialogRef?: ElementRef<HTMLDialogElement>;
+
+  // Reservations Listing & Details Modal State
+  reservationSearchQuery: string = '';
+  reservationStatusFilter: ReservationStatusFilterKey = 'ALL';
+  readonly reservationFilterOptions = RESERVATION_FILTER_OPTIONS;
+  reservationKpis: ReservationKpiSummary = computeReservationKpis([]);
+  reservationStatusCounts: ReservationStatusCounts = computeReservationStatusCounts([]);
+  reservationCardVms: HotelReservationCardViewModel[] = [];
+  filteredReservationCards: HotelReservationCardViewModel[] = [];
+  reservationsLoadError: string | null = null;
+  selectedReservationModalVm: HotelReservationModalViewModel | null = null;
+  isLoadingReservationDetails: boolean = false;
+  reservationDetailsError: string | null = null;
+  activeLifecycleActionRef: string | null = null;
+  activeLifecycleActionType: 'CHECK_IN' | 'CHECK_OUT' | 'NO_SHOW' | null = null;
+  private reservationDetailsSeq: number = 0;
+  private reservationDialogPointerDownOutside: boolean = false;
+  private currentReservationDetail: HotelReservationDetailResponse | null = null;
+  private currentReservationPayment: PaymentTransactionDto | null = null;
+
   // Form Models - Add Hotel
   hotelName: string = '';
   hotelCity: string = 'Bengaluru';
@@ -1246,10 +1280,13 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
           const rawBookings = res.bookings.data || [];
           this.managerReservations = rawBookings;
           this.filteredReservations = filterAndDedupeHotelBookings(rawBookings, trigger.hotelId);
+          this.reservationsLoadError = null;
         } else {
           this.managerReservations = [];
           this.filteredReservations = [];
+          this.reservationsLoadError = 'Unable to load hotel reservations right now. Please try refreshing.';
         }
+        this.recomputeReservationsViewState();
 
         this.computeDashboardMetrics(
           res.currInventory.ok ? res.currInventory.data : null,
@@ -1306,6 +1343,8 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
       this.roomBlocks = [];
       this.managerReservations = [];
       this.filteredReservations = [];
+      this.reservationsLoadError = null;
+      this.recomputeReservationsViewState();
       this.refreshBasePriceListing();
       this.refreshRoomBlocksListing();
       this.dashboardLoad$.next({
@@ -3235,46 +3274,293 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   }
 
   // ==================== RESERVATIONS OPERATIONS ====================
-  openReservationDetails(res: any): void {
-    this.selectedReservation = res;
+  recomputeReservationsViewState(): void {
+    const source = Array.isArray(this.filteredReservations) ? this.filteredReservations : [];
+    this.reservationKpis = computeReservationKpis(source);
+    this.reservationStatusCounts = computeReservationStatusCounts(source);
+    this.reservationCardVms = source.map((booking) =>
+      buildHotelReservationCardViewModel(booking, this.roomTypes)
+    );
+    this.applyReservationFilters();
+  }
+
+  applyReservationFilters(): void {
+    const source = Array.isArray(this.filteredReservations) ? this.filteredReservations : [];
+    const matchingRaw = new Set(
+      filterReservationsList(source, this.reservationStatusFilter, this.reservationSearchQuery)
+    );
+    this.filteredReservationCards = this.reservationCardVms.filter((vm) => matchingRaw.has(vm.raw));
+  }
+
+  onReservationSearchChange(value: string): void {
+    this.reservationSearchQuery = value ?? '';
+    this.applyReservationFilters();
+  }
+
+  setReservationStatusFilter(status: ReservationStatusFilterKey): void {
+    this.reservationStatusFilter = status || 'ALL';
+    this.applyReservationFilters();
+  }
+
+  onReservationStatusSelectChange(status: string): void {
+    const valid = this.reservationFilterOptions.some((opt) => opt.key === status);
+    this.setReservationStatusFilter(valid ? (status as ReservationStatusFilterKey) : 'ALL');
+  }
+
+  clearReservationFilters(): void {
+    this.reservationSearchQuery = '';
+    this.reservationStatusFilter = 'ALL';
+    this.applyReservationFilters();
+  }
+
+  getReservationStatusTabCount(key: ReservationStatusFilterKey): number {
+    return this.reservationStatusCounts[key] ?? 0;
+  }
+
+  trackByReservationRef(_index: number, card: HotelReservationCardViewModel): string {
+    return card.bookingRef || String(_index);
+  }
+
+  openReservationDetails(resOrCard: any): void {
+    const rawBooking = resOrCard?.raw ? resOrCard.raw : resOrCard;
+    if (!rawBooking) return;
+
+    const bookingRef = String(rawBooking?.bookingRef || rawBooking?.bookingReference || '').trim();
+    this.selectedReservation = rawBooking;
+    this.currentReservationDetail = null;
+    this.currentReservationPayment = null;
     this.showReservationDetailsModal = true;
-  }
+    this.reservationDetailsError = null;
+    this.selectedReservationModalVm = buildHotelReservationModalViewModel(
+      rawBooking,
+      null,
+      null,
+      this.roomTypes,
+      (val) => this.formatCurrency(val)
+    );
 
-  checkInGuest(res: any): void {
-    if (!res?.bookingRef) return;
-    this.bookingService.checkInGuest(res.bookingRef).subscribe({
-      next: () => {
-        alert(`Guest ${res.customerName} checked in successfully!`);
-        this.loadDashboardData();
-        if (this.selectedReservation) this.selectedReservation.status = 'CHECKED_IN';
-      },
-      error: (err) => alert(err.error?.message || 'Check-in failed')
-    });
-  }
+    const dialog = this.reservationDetailsDialogRef?.nativeElement;
+    if (dialog && !dialog.open) {
+      dialog.showModal();
+    }
 
-  checkOutGuest(res: any): void {
-    if (!res?.bookingRef) return;
-    this.bookingService.checkOutGuest(res.bookingRef).subscribe({
-      next: () => {
-        alert(`Guest ${res.customerName} checked out successfully!`);
-        this.loadDashboardData();
-        if (this.selectedReservation) this.selectedReservation.status = 'CHECKED_OUT';
-      },
-      error: (err) => alert(err.error?.message || 'Check-out failed')
-    });
-  }
+    if (!bookingRef) {
+      this.isLoadingReservationDetails = false;
+      return;
+    }
 
-  markNoShow(res: any): void {
-    if (!res?.bookingRef) return;
-    if (confirm(`Mark reservation ${res.bookingRef} as NO-SHOW? Any reserved dates will be returned to inventory.`)) {
-      this.bookingService.markNoShow(res.bookingRef).subscribe({
-        next: () => {
-          alert('Reservation marked as NO-SHOW. Inventory released.');
-          this.loadDashboardData();
-          if (this.selectedReservation) this.selectedReservation.status = 'NO_SHOW';
+    const seq = ++this.reservationDetailsSeq;
+    this.isLoadingReservationDetails = true;
+    let detailFailed = false;
+
+    forkJoin({
+      detail: this.bookingService.getHotelReservationDetails(bookingRef).pipe(
+        catchError((err) => {
+          detailFailed = true;
+          console.warn('Failed to fetch authoritative hotel reservation details:', err);
+          return of(null as HotelReservationDetailResponse | null);
+        })
+      ),
+      booking: this.bookingService.getBookingByRef(bookingRef).pipe(
+        catchError(() => of(null))
+      ),
+      payment: this.bookingService.getPaymentByBookingRef(bookingRef).pipe(
+        catchError(() => of(null as PaymentTransactionDto | null))
+      )
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: ({ detail, booking, payment }) => {
+          if (seq !== this.reservationDetailsSeq || !this.showReservationDetailsModal) return;
+          this.isLoadingReservationDetails = false;
+          const mergedBooking = booking || rawBooking;
+          this.selectedReservation = mergedBooking;
+          this.currentReservationDetail = detail;
+          this.currentReservationPayment = payment;
+          this.selectedReservationModalVm = buildHotelReservationModalViewModel(
+            mergedBooking,
+            detail,
+            payment,
+            this.roomTypes,
+            (val) => this.formatCurrency(val)
+          );
+          if (detailFailed && !detail) {
+            this.reservationDetailsError = 'Live room allocation details could not be refreshed. Showing summary reservation data.';
+          }
         },
-        error: (err) => alert(err.error?.message || 'Marking no-show failed')
+        error: () => {
+          if (seq !== this.reservationDetailsSeq) return;
+          this.isLoadingReservationDetails = false;
+          this.reservationDetailsError = 'Unable to load full reservation details.';
+        }
       });
+  }
+
+  closeReservationDetailsModal(): void {
+    const dialog = this.reservationDetailsDialogRef?.nativeElement;
+    if (dialog && dialog.open) {
+      dialog.close();
+    } else {
+      this.onReservationDialogClosed();
+    }
+  }
+
+  onReservationDialogClosed(): void {
+    const dialog = this.reservationDetailsDialogRef?.nativeElement;
+    if (dialog?.open) {
+      return;
+    }
+    this.reservationDetailsSeq += 1;
+    this.showReservationDetailsModal = false;
+    this.isLoadingReservationDetails = false;
+    this.reservationDetailsError = null;
+    this.selectedReservation = null;
+    this.selectedReservationModalVm = null;
+    this.currentReservationDetail = null;
+    this.currentReservationPayment = null;
+    this.reservationDialogPointerDownOutside = false;
+  }
+
+  onReservationDialogPointerDown(event: PointerEvent): void {
+    const dialog = this.reservationDetailsDialogRef?.nativeElement;
+    if (!dialog || event.target !== dialog || 'closedBy' in HTMLDialogElement.prototype) {
+      this.reservationDialogPointerDownOutside = false;
+      return;
+    }
+    const rect = dialog.getBoundingClientRect();
+    this.reservationDialogPointerDownOutside =
+      event.clientX < rect.left ||
+      event.clientX > rect.right ||
+      event.clientY < rect.top ||
+      event.clientY > rect.bottom;
+  }
+
+  onReservationDialogPointerUp(event: PointerEvent): void {
+    const dialog = this.reservationDetailsDialogRef?.nativeElement;
+    if (
+      !dialog ||
+      !this.reservationDialogPointerDownOutside ||
+      event.target !== dialog ||
+      'closedBy' in HTMLDialogElement.prototype
+    ) {
+      this.reservationDialogPointerDownOutside = false;
+      return;
+    }
+    const rect = dialog.getBoundingClientRect();
+    const endedOutside =
+      event.clientX < rect.left ||
+      event.clientX > rect.right ||
+      event.clientY < rect.top ||
+      event.clientY > rect.bottom;
+    this.reservationDialogPointerDownOutside = false;
+    if (endedOutside) {
+      dialog.close();
+    }
+  }
+
+  private syncUpdatedReservationStatus(bookingRef: string, newStatus: string, updatedBooking?: any): void {
+    const applyUpdate = (item: any) => {
+      const ref = String(item?.bookingRef || item?.bookingReference || '').trim();
+      if (ref !== bookingRef) return item;
+      return { ...item, ...(updatedBooking || {}), status: newStatus };
+    };
+    this.managerReservations = (this.managerReservations || []).map(applyUpdate);
+    this.filteredReservations = (this.filteredReservations || []).map(applyUpdate);
+    this.recomputeReservationsViewState();
+
+    if (this.showReservationDetailsModal && this.selectedReservationModalVm?.bookingRef === bookingRef) {
+      const merged = { ...(this.selectedReservation || {}), ...(updatedBooking || {}), status: newStatus };
+      this.selectedReservation = merged;
+      if (this.currentReservationDetail) {
+        this.currentReservationDetail = {
+          ...this.currentReservationDetail,
+          bookingStatus: newStatus
+        };
+      }
+      this.selectedReservationModalVm = buildHotelReservationModalViewModel(
+        merged,
+        this.currentReservationDetail,
+        this.currentReservationPayment,
+        this.roomTypes,
+        (val) => this.formatCurrency(val)
+      );
+    }
+  }
+
+  checkInGuest(resOrCard: any): void {
+    const res = resOrCard?.raw ? resOrCard.raw : resOrCard;
+    if (!res?.bookingRef || this.activeLifecycleActionRef) return;
+    this.activeLifecycleActionRef = res.bookingRef;
+    this.activeLifecycleActionType = 'CHECK_IN';
+    this.bookingService
+      .checkInGuest(res.bookingRef)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (resp: any) => {
+          this.activeLifecycleActionRef = null;
+          this.activeLifecycleActionType = null;
+          const newStatus = resp?.newStatus || 'CHECKED_IN';
+          this.syncUpdatedReservationStatus(res.bookingRef, newStatus, resp?.booking);
+          alert(`Guest ${res.customerName || 'Guest'} checked in successfully!`);
+          this.loadDashboardData();
+        },
+        error: (err) => {
+          this.activeLifecycleActionRef = null;
+          this.activeLifecycleActionType = null;
+          alert(err.error?.message || 'Check-in failed');
+        }
+      });
+  }
+
+  checkOutGuest(resOrCard: any): void {
+    const res = resOrCard?.raw ? resOrCard.raw : resOrCard;
+    if (!res?.bookingRef || this.activeLifecycleActionRef) return;
+    this.activeLifecycleActionRef = res.bookingRef;
+    this.activeLifecycleActionType = 'CHECK_OUT';
+    this.bookingService
+      .checkOutGuest(res.bookingRef)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (resp: any) => {
+          this.activeLifecycleActionRef = null;
+          this.activeLifecycleActionType = null;
+          const newStatus = resp?.newStatus || 'CHECKED_OUT';
+          this.syncUpdatedReservationStatus(res.bookingRef, newStatus, resp?.booking);
+          alert(`Guest ${res.customerName || 'Guest'} checked out successfully!`);
+          this.loadDashboardData();
+        },
+        error: (err) => {
+          this.activeLifecycleActionRef = null;
+          this.activeLifecycleActionType = null;
+          alert(err.error?.message || 'Check-out failed');
+        }
+      });
+  }
+
+  markNoShow(resOrCard: any): void {
+    const res = resOrCard?.raw ? resOrCard.raw : resOrCard;
+    if (!res?.bookingRef || this.activeLifecycleActionRef) return;
+    if (confirm(`Mark reservation ${res.bookingRef} as NO-SHOW? Any reserved dates will be returned to inventory.`)) {
+      this.activeLifecycleActionRef = res.bookingRef;
+      this.activeLifecycleActionType = 'NO_SHOW';
+      this.bookingService
+        .markNoShow(res.bookingRef)
+        .pipe(takeUntil(this.destroy$))
+        .subscribe({
+          next: (resp: any) => {
+            this.activeLifecycleActionRef = null;
+            this.activeLifecycleActionType = null;
+            const newStatus = resp?.newStatus || 'NO_SHOW';
+            this.syncUpdatedReservationStatus(res.bookingRef, newStatus, resp?.booking);
+            alert('Reservation marked as NO-SHOW. Inventory released.');
+            this.loadDashboardData();
+          },
+          error: (err) => {
+            this.activeLifecycleActionRef = null;
+            this.activeLifecycleActionType = null;
+            alert(err.error?.message || 'Marking no-show failed');
+          }
+        });
     }
   }
 
