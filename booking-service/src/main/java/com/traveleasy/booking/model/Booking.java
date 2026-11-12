@@ -93,6 +93,12 @@ public class Booking {
     @Transient
     private java.util.List<com.traveleasy.booking.dto.ReservationAllocationItemDto> allocations;
 
+    @Transient
+    private Integer totalRoomsBooked;
+
+    @Transient
+    private String roomTypeSummary;
+
     public boolean isDateWiseBooking() {
         if (!"HOTEL".equalsIgnoreCase(this.serviceType)) {
             return false;

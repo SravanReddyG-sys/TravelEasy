@@ -26,6 +26,9 @@ public class RazorpayConfig {
     @Value("${booking.service.url:http://localhost:8084}")
     private String bookingServiceUrl;
 
+    @Value("${hotel.service.url:http://localhost:8083}")
+    private String hotelServiceUrl;
+
     public boolean isConfigured() {
         return keyId != null && !keyId.isBlank() && keySecret != null && !keySecret.isBlank();
     }

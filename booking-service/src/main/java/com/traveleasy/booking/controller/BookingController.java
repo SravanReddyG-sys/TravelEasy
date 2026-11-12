@@ -455,7 +455,8 @@ public class BookingController {
                     .body(Map.of("message", "Access denied: Cannot access bookings for another provider"));
         }
 
-        return ResponseEntity.ok(bookingRepository.findByProviderIdOrderByBookingDateDesc(providerId));
+        List<Booking> bookings = bookingRepository.findByProviderIdOrderByBookingDateDesc(providerId);
+        return ResponseEntity.ok(enrichHotelBookings(bookings));
     }
 
     /**
@@ -1579,5 +1580,223 @@ public class BookingController {
         return bookingRepository.findById(id)
                 .map(bkg -> markNoShowByRef(bkg.getBookingRef(), authHeader, internalToken, internalService))
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Property-scoped hotel reservations listing for manager overview/operations dashboards.
+     * Authorizes strict property ownership against hotel-service (for managers), admin role, or signed internal token.
+     */
+    @GetMapping("/hotel/{hotelId}")
+    public ResponseEntity<?> getHotelBookingsByProperty(
+            @PathVariable Long hotelId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+            @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+        ResponseEntity<?> authError = authorizeHotelPropertyAccess(hotelId, authHeader, internalToken, internalService);
+        if (authError != null) {
+            return authError;
+        }
+
+        List<Booking> raw = bookingRepository.findByServiceTypeAndServiceIdOrderByBookingDateDesc("HOTEL", hotelId);
+        List<Booking> scoped = new ArrayList<>();
+        java.util.Set<String> seenKeys = new java.util.LinkedHashSet<>();
+        if (raw != null) {
+            for (Booking b : raw) {
+                if (b == null || !"HOTEL".equalsIgnoreCase(b.getServiceType()) || !hotelId.equals(b.getServiceId())) {
+                    continue;
+                }
+                String dedupKey = b.getId() != null ? "ID:" + b.getId()
+                        : (b.getBookingRef() != null ? "REF:" + b.getBookingRef() : String.valueOf(System.identityHashCode(b)));
+                if (seenKeys.add(dedupKey)) {
+                    scoped.add(b);
+                }
+            }
+        }
+        return ResponseEntity.ok(enrichHotelBookings(scoped));
+    }
+
+    /**
+     * Authoritative booking references scoped to a hotel property.
+     * Used by payment-service to validate revenue requests against caller-owned hotel bookings.
+     */
+    @GetMapping("/hotel/{hotelId}/refs")
+    public ResponseEntity<?> getHotelBookingRefsByProperty(
+            @PathVariable Long hotelId,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestHeader(value = "X-Internal-Token", required = false) String internalToken,
+            @RequestHeader(value = "X-Internal-Service", required = false) String internalService) {
+        ResponseEntity<?> authError = authorizeHotelPropertyAccess(hotelId, authHeader, internalToken, internalService);
+        if (authError != null) {
+            return authError;
+        }
+
+        List<String> refs = bookingRepository.findDistinctHotelBookingRefsByHotelId(hotelId);
+        return ResponseEntity.ok(refs != null ? refs : Collections.emptyList());
+    }
+
+    private ResponseEntity<?> authorizeHotelPropertyAccess(
+            Long hotelId,
+            String authHeader,
+            String internalToken,
+            String internalService) {
+        if (hotelId == null || hotelId <= 0) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("message", "Invalid hotel property ID"));
+        }
+
+        if (securityService.verifyStrictInternalToken(authHeader, internalToken, internalService, "payment-service", "hotel-service")) {
+            return null;
+        }
+
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Authentication required to access hotel property bookings"));
+        }
+
+        String token = authHeader.substring(7).trim();
+        if (!securityService.validateToken(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Invalid or expired authorization token"));
+        }
+
+        String callerRole = securityService.extractRole(token);
+        boolean isAdmin = "ROLE_ADMIN".equalsIgnoreCase(callerRole) || "ADMIN".equalsIgnoreCase(callerRole);
+        if (isAdmin) {
+            return null;
+        }
+
+        boolean isHotelManager = "ROLE_HOTEL_MANAGER".equalsIgnoreCase(callerRole) || "HOTEL_MANAGER".equalsIgnoreCase(callerRole);
+        if (!isHotelManager) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Hotel Manager or Admin role required"));
+        }
+
+        Long callerUserId = securityService.extractUserId(token);
+        if (callerUserId == null || callerUserId <= 0) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Access denied: Missing or invalid user identity in token"));
+        }
+
+        try {
+            String url = hotelServiceUrl + "/api/hotels/internal/" + hotelId;
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            String svcToken = internalTokenService.generateInternalToken();
+            headers.set("Authorization", "Bearer " + svcToken);
+            headers.set("X-Internal-Token", svcToken);
+            headers.set("X-Internal-Service", "booking-service");
+            ResponseEntity<Map> resp = restTemplate.exchange(
+                    url, org.springframework.http.HttpMethod.GET, new org.springframework.http.HttpEntity<>(headers), Map.class);
+            if (resp == null || !resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                        .body(Map.of("message", "Unable to verify hotel property ownership"));
+            }
+            Object mgrObj = resp.getBody().get("managerId");
+            Long managerId = null;
+            if (mgrObj instanceof Number n) {
+                managerId = n.longValue();
+            } else if (mgrObj != null) {
+                managerId = Long.parseLong(mgrObj.toString().trim());
+            }
+            if (managerId == null || !callerUserId.equals(managerId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("message", "Access denied: Cannot access bookings for another manager's hotel property"));
+            }
+            return null;
+        } catch (org.springframework.web.client.HttpClientErrorException.NotFound nf) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Hotel property not found with ID: " + hotelId));
+        } catch (org.springframework.web.client.HttpClientErrorException hce) {
+            if (hce.getStatusCode() == HttpStatus.NOT_FOUND) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "Hotel property not found with ID: " + hotelId));
+            }
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("message", "Unable to verify hotel property ownership"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("message", "Unable to verify hotel property ownership"));
+        }
+    }
+
+    private List<Booking> enrichHotelBookings(List<Booking> bookings) {
+        if (bookings == null || bookings.isEmpty()) {
+            return bookings != null ? bookings : Collections.emptyList();
+        }
+
+        List<Long> hotelBookingIds = new ArrayList<>();
+        for (Booking b : bookings) {
+            if (b != null && "HOTEL".equalsIgnoreCase(b.getServiceType())) {
+                if (b.getCheckInDate() == null) {
+                    b.setCheckInDate(b.resolveCheckInDate());
+                }
+                if (b.getCheckOutDate() == null) {
+                    b.setCheckOutDate(b.resolveCheckOutDate());
+                }
+                if (b.getId() != null) {
+                    hotelBookingIds.add(b.getId());
+                }
+            }
+        }
+
+        if (!hotelBookingIds.isEmpty() && snapshotRepository != null) {
+            try {
+                List<com.traveleasy.booking.model.HotelReservationSnapshot> snapshots =
+                        snapshotRepository.findByBookingIdIn(hotelBookingIds);
+                if (snapshots != null && !snapshots.isEmpty()) {
+                    Map<Long, com.traveleasy.booking.model.HotelReservationSnapshot> snapByBookingId = new java.util.HashMap<>();
+                    for (com.traveleasy.booking.model.HotelReservationSnapshot snap : snapshots) {
+                        if (snap != null && snap.getBookingId() != null) {
+                            snapByBookingId.put(snap.getBookingId(), snap);
+                        }
+                    }
+
+                    for (Booking b : bookings) {
+                        if (b == null || b.getId() == null) continue;
+                        com.traveleasy.booking.model.HotelReservationSnapshot snap = snapByBookingId.get(b.getId());
+                        if (snap == null) continue;
+
+                        if (b.getCheckInDate() == null && snap.getCheckInDate() != null) {
+                            b.setCheckInDate(snap.getCheckInDate());
+                        }
+                        if (b.getCheckOutDate() == null && snap.getCheckOutDate() != null) {
+                            b.setCheckOutDate(snap.getCheckOutDate());
+                        }
+                        if ((b.getCustomerName() == null || b.getCustomerName().isBlank())
+                                && snap.getPrimaryGuestName() != null && !snap.getPrimaryGuestName().isBlank()) {
+                            b.setCustomerName(snap.getPrimaryGuestName());
+                        }
+
+                        List<com.traveleasy.booking.model.HotelAllocationSnapshot> allocs = snap.getAllocations();
+                        if (allocs != null && !allocs.isEmpty()) {
+                            List<com.traveleasy.booking.dto.ReservationAllocationItemDto> items = new ArrayList<>();
+                            List<String> labels = new ArrayList<>();
+                            int totalRooms = 0;
+                            for (com.traveleasy.booking.model.HotelAllocationSnapshot a : allocs) {
+                                int qty = a.getQuantity() != null && a.getQuantity() > 0 ? a.getQuantity() : 0;
+                                totalRooms += qty;
+                                items.add(com.traveleasy.booking.dto.ReservationAllocationItemDto.builder()
+                                        .roomId(a.getRoomId())
+                                        .quantity(qty)
+                                        .build());
+                                String rName = a.getRoomTypeName() != null && !a.getRoomTypeName().isBlank()
+                                        ? a.getRoomTypeName().trim() : "Room";
+                                labels.add(qty > 1 ? rName + " (x" + qty + ")" : rName);
+                            }
+                            b.setAllocations(items);
+                            if (totalRooms > 0) {
+                                b.setTotalRoomsBooked(totalRooms);
+                            }
+                            if (!labels.isEmpty()) {
+                                b.setRoomTypeSummary(String.join(", ", labels));
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                org.slf4j.LoggerFactory.getLogger(BookingController.class)
+                        .debug("Could not batch-enrich hotel booking snapshots: {}", e.getMessage());
+            }
+        }
+        return bookings;
     }
 }

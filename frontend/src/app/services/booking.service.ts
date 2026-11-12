@@ -31,6 +31,10 @@ export class BookingService {
     return this.http.get<any[]>(`${this.apiUrl}/bookings/provider/${providerId}`);
   }
 
+  getHotelBookings(hotelId: number): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/bookings/hotel/${hotelId}`);
+  }
+
   getAllBookings(): Observable<any[]> {
     return this.http.get<any[]>(`${this.apiUrl}/bookings/admin/all`);
   }

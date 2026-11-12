@@ -20,7 +20,25 @@ public class HotelInventorySummaryDto {
     private Integer availableRoomNights;
     private Integer applicableRoomNightCapacity;
     private Double occupancyRate;
+    private Integer activeRoomTypesCount;
+    private Integer activeRoomBlocksCount;
+    private Integer lowAvailabilityRoomsCount;
+    private Integer exhaustedRoomsCount;
+    private List<LowAvailabilityRoomItem> lowAvailabilityRooms;
     private List<DailySummaryItem> dailySummaries;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class LowAvailabilityRoomItem {
+        private Long roomId;
+        private String roomTypeName;
+        private Integer totalRooms;
+        private Integer minAvailableRooms;
+        private boolean exhausted;
+        private Integer lowAvailabilityDatesCount;
+    }
 
     @Data
     @NoArgsConstructor

@@ -46,8 +46,15 @@ public class PaymentServiceImpl implements PaymentService {
     @org.springframework.beans.factory.annotation.Value("${booking.service.url:http://localhost:8084}")
     private String bookingServiceUrl = "http://localhost:8084";
 
+    @org.springframework.beans.factory.annotation.Value("${hotel.service.url:http://localhost:8083}")
+    private String hotelServiceUrl = "http://localhost:8083";
+
     public void setBookingServiceUrl(String bookingServiceUrl) {
         this.bookingServiceUrl = bookingServiceUrl;
+    }
+
+    public void setHotelServiceUrl(String hotelServiceUrl) {
+        this.hotelServiceUrl = hotelServiceUrl;
     }
 
     public void setRestTemplate(RestTemplate restTemplate) {
@@ -1689,9 +1696,45 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public HotelRevenueReportResponse getHotelRevenueSummary(HotelRevenueReportRequest request, String callerRole, Long callerUserId) {
-        if (request == null) {
-            request = new HotelRevenueReportRequest();
+        boolean isAdmin = "ROLE_ADMIN".equalsIgnoreCase(callerRole) || "ADMIN".equalsIgnoreCase(callerRole);
+        boolean isHotelManager = "ROLE_HOTEL_MANAGER".equalsIgnoreCase(callerRole) || "HOTEL_MANAGER".equalsIgnoreCase(callerRole);
+        if (!isAdmin && !isHotelManager) {
+            throw new PaymentException("Access denied: Hotel Manager or Admin authorization required", HttpStatus.FORBIDDEN);
         }
+        if (request == null || request.getHotelId() == null || request.getHotelId() <= 0) {
+            throw new PaymentException("Valid hotelId is required for hotel revenue summary", HttpStatus.BAD_REQUEST);
+        }
+        if (!isAdmin && (callerUserId == null || callerUserId <= 0)) {
+            throw new PaymentException("Authenticated hotel manager userId is required", HttpStatus.FORBIDDEN);
+        }
+
+        Long hotelId = request.getHotelId();
+        authorizeAndVerifyHotelOwnership(hotelId, isAdmin, callerUserId);
+        Set<String> authoritativeRefs = resolveAuthoritativeHotelBookingRefs(hotelId);
+
+        List<String> effectiveBookingRefs;
+        List<String> requestedRefs = request.getBookingRefs();
+        if (requestedRefs != null && !requestedRefs.isEmpty()) {
+            Set<String> verifiedRefs = new LinkedHashSet<>();
+            for (String rawRef : requestedRefs) {
+                if (rawRef == null || rawRef.isBlank()) {
+                    continue;
+                }
+                String trimmedRef = rawRef.trim();
+                if (!authoritativeRefs.contains(trimmedRef)) {
+                    log.warn("Rejected unauthorized bookingRef '{}' for hotel {} (callerRole={}, callerUserId={})",
+                            trimmedRef, hotelId, callerRole, callerUserId);
+                    throw new PaymentException(
+                            "Access denied: Booking reference does not belong to hotel " + hotelId,
+                            HttpStatus.FORBIDDEN);
+                }
+                verifiedRefs.add(trimmedRef);
+            }
+            effectiveBookingRefs = new ArrayList<>(verifiedRefs);
+        } else {
+            effectiveBookingRefs = new ArrayList<>(authoritativeRefs);
+        }
+
         LocalDate startDate = request.getStartDate() != null ? request.getStartDate() : LocalDate.now().minusDays(6);
         LocalDate endDate = request.getEndDate() != null ? request.getEndDate() : LocalDate.now();
         if (startDate.isAfter(endDate)) {
@@ -1700,7 +1743,6 @@ public class PaymentServiceImpl implements PaymentService {
             endDate = temp;
         }
 
-        List<String> bookingRefs = request.getBookingRefs();
         Map<LocalDate, Double> dailyPayments = new LinkedHashMap<>();
         Map<LocalDate, Double> dailyRefunds = new LinkedHashMap<>();
 
@@ -1716,35 +1758,52 @@ public class PaymentServiceImpl implements PaymentService {
         double totalRefunded = 0.0;
         int refundsCount = 0;
 
-        if (bookingRefs != null && !bookingRefs.isEmpty()) {
-            List<PaymentTransaction> txns = paymentRepository.findByBookingRefIn(bookingRefs);
-            for (PaymentTransaction txn : txns) {
-                if (txn == null) continue;
+        if (!effectiveBookingRefs.isEmpty()) {
+            List<PaymentTransaction> txns = paymentRepository.findByBookingRefIn(effectiveBookingRefs);
+            Set<String> seenTxnKeys = new HashSet<>();
+            if (txns != null) {
+                for (PaymentTransaction txn : txns) {
+                    if (txn == null) continue;
 
-                // 1. Eligible captured payment (SUCCESS, REFUND_INITIATED, REFUNDED)
-                String status = txn.getStatus() != null ? txn.getStatus().toUpperCase() : "";
-                boolean isSuccessfulPayment = "SUCCESS".equals(status) || "REFUND_INITIATED".equals(status) || "REFUNDED".equals(status);
-                if (isSuccessfulPayment && txn.getTimestamp() != null) {
-                    LocalDate captureDate = txn.getTimestamp().toLocalDate();
-                    if (!captureDate.isBefore(startDate) && !captureDate.isAfter(endDate)) {
-                        double amount = txn.getAmount() != null ? txn.getAmount() : 0.0;
-                        totalCaptured += amount;
-                        paymentsCount++;
-                        dailyPayments.put(captureDate, dailyPayments.getOrDefault(captureDate, 0.0) + amount);
+                    String txnKey = txn.getId() != null
+                            ? "id:" + txn.getId()
+                            : (txn.getTransactionRef() != null
+                                ? "ref:" + txn.getTransactionRef()
+                                : "obj:" + System.identityHashCode(txn));
+                    if (!seenTxnKeys.add(txnKey)) {
+                        continue;
                     }
-                }
 
-                // 2. Processed refund attributed strictly to refundedAt
-                boolean isProcessedRefund = "PROCESSED".equalsIgnoreCase(txn.getRefundStatus()) || ("REFUNDED".equalsIgnoreCase(status) && txn.getRefundedAt() != null);
-                if (isProcessedRefund && txn.getRefundedAt() != null) {
-                    LocalDate refundDate = txn.getRefundedAt().toLocalDate();
-                    if (!refundDate.isBefore(startDate) && !refundDate.isAfter(endDate)) {
-                        double rAmt = txn.getRefundAmount() != null
-                                ? txn.getRefundAmount()
-                                : ("REFUNDED".equalsIgnoreCase(txn.getStatus()) && txn.getAmount() != null ? txn.getAmount() : 0.0);
-                        totalRefunded += rAmt;
-                        refundsCount++;
-                        dailyRefunds.put(refundDate, dailyRefunds.getOrDefault(refundDate, 0.0) + rAmt);
+                    // 1. Eligible captured payment (SUCCESS, REFUND_INITIATED, REFUNDED)
+                    String status = txn.getStatus() != null ? txn.getStatus().toUpperCase(Locale.ROOT) : "";
+                    boolean isSuccessfulPayment = "SUCCESS".equals(status) || "REFUND_INITIATED".equals(status) || "REFUNDED".equals(status);
+                    if (isSuccessfulPayment && txn.getTimestamp() != null) {
+                        LocalDate captureDate = txn.getTimestamp().toLocalDate();
+                        if (!captureDate.isBefore(startDate) && !captureDate.isAfter(endDate)) {
+                            double amount = txn.getAmount() != null ? txn.getAmount() : 0.0;
+                            totalCaptured += amount;
+                            paymentsCount++;
+                            dailyPayments.put(captureDate, dailyPayments.getOrDefault(captureDate, 0.0) + amount);
+                        }
+                    }
+
+                    // 2. Processed refund attributed strictly to refundedAt (never infer from FAILED/INITIATED/PENDING)
+                    String refundStatus = txn.getRefundStatus() != null ? txn.getRefundStatus().trim() : null;
+                    boolean isProcessedRefund = "PROCESSED".equalsIgnoreCase(refundStatus)
+                            || ("REFUNDED".equals(status) && txn.getRefundedAt() != null
+                                && !"FAILED".equalsIgnoreCase(refundStatus)
+                                && !"INITIATED".equalsIgnoreCase(refundStatus)
+                                && !"PENDING".equalsIgnoreCase(refundStatus));
+                    if (isProcessedRefund && txn.getRefundedAt() != null) {
+                        LocalDate refundDate = txn.getRefundedAt().toLocalDate();
+                        if (!refundDate.isBefore(startDate) && !refundDate.isAfter(endDate)) {
+                            double rAmt = txn.getRefundAmount() != null
+                                    ? txn.getRefundAmount()
+                                    : ("REFUNDED".equals(status) && txn.getAmount() != null ? txn.getAmount() : 0.0);
+                            totalRefunded += rAmt;
+                            refundsCount++;
+                            dailyRefunds.put(refundDate, dailyRefunds.getOrDefault(refundDate, 0.0) + rAmt);
+                        }
                     }
                 }
             }
@@ -1752,9 +1811,9 @@ public class PaymentServiceImpl implements PaymentService {
 
         List<HotelRevenueReportResponse.DailyRevenueItem> dailyBreakdown = new ArrayList<>();
         for (LocalDate date : dailyPayments.keySet()) {
-            double pAmt = dailyPayments.get(date);
-            double rAmt = dailyRefunds.get(date);
-            double net = pAmt - rAmt;
+            double pAmt = roundCurrencyAmount(dailyPayments.get(date));
+            double rAmt = roundCurrencyAmount(dailyRefunds.get(date));
+            double net = roundCurrencyAmount(pAmt - rAmt);
             dailyBreakdown.add(HotelRevenueReportResponse.DailyRevenueItem.builder()
                     .date(date)
                     .paymentAmount(pAmt)
@@ -1763,19 +1822,104 @@ public class PaymentServiceImpl implements PaymentService {
                     .build());
         }
 
-        double netRevenue = totalCaptured - totalRefunded;
+        double roundedCaptured = roundCurrencyAmount(totalCaptured);
+        double roundedRefunded = roundCurrencyAmount(totalRefunded);
+        double netRevenue = roundCurrencyAmount(roundedCaptured - roundedRefunded);
 
         return HotelRevenueReportResponse.builder()
-                .hotelId(request.getHotelId())
+                .hotelId(hotelId)
                 .startDate(startDate)
                 .endDate(endDate)
-                .successfulPaymentsAmount(totalCaptured)
+                .successfulPaymentsAmount(roundedCaptured)
                 .successfulPaymentsCount(paymentsCount)
-                .processedRefundsAmount(totalRefunded)
+                .processedRefundsAmount(roundedRefunded)
                 .processedRefundsCount(refundsCount)
                 .netRevenue(netRevenue)
                 .dailyBreakdown(dailyBreakdown)
                 .build();
+    }
+
+    private void authorizeAndVerifyHotelOwnership(Long hotelId, boolean isAdmin, Long callerUserId) {
+        if (restTemplate == null) {
+            throw new PaymentException("Unable to verify hotel ownership: HTTP client unavailable", HttpStatus.SERVICE_UNAVAILABLE);
+        }
+        String url = hotelServiceUrl + "/api/hotels/internal/" + hotelId;
+        HttpEntity<Void> entity = new HttpEntity<>(buildInternalServiceHeaders());
+        try {
+            ResponseEntity<Map> resp = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
+            if (resp == null || !resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
+                throw new PaymentException("Unable to verify hotel ownership for hotel " + hotelId, HttpStatus.SERVICE_UNAVAILABLE);
+            }
+            if (!isAdmin) {
+                Object rawManagerId = resp.getBody().get("managerId");
+                Long managerId = null;
+                if (rawManagerId instanceof Number) {
+                    managerId = ((Number) rawManagerId).longValue();
+                } else if (rawManagerId != null) {
+                    try {
+                        managerId = Long.parseLong(rawManagerId.toString().trim());
+                    } catch (NumberFormatException ignored) {}
+                }
+                if (managerId == null || !managerId.equals(callerUserId)) {
+                    throw new PaymentException("Access denied: You do not own hotel property " + hotelId, HttpStatus.FORBIDDEN);
+                }
+            }
+        } catch (PaymentException pe) {
+            throw pe;
+        } catch (org.springframework.web.client.HttpClientErrorException.NotFound nfe) {
+            throw new PaymentException("Hotel property not found: " + hotelId, HttpStatus.NOT_FOUND);
+        } catch (Exception ex) {
+            log.error("Hotel ownership verification failed for hotelId={}: {}", hotelId, ex.getMessage());
+            throw new PaymentException("Unable to verify hotel property ownership", HttpStatus.SERVICE_UNAVAILABLE);
+        }
+    }
+
+    private Set<String> resolveAuthoritativeHotelBookingRefs(Long hotelId) {
+        if (restTemplate == null) {
+            throw new PaymentException("Unable to verify booking references: HTTP client unavailable", HttpStatus.SERVICE_UNAVAILABLE);
+        }
+        String url = bookingServiceUrl + "/api/bookings/hotel/" + hotelId + "/refs";
+        HttpEntity<Void> entity = new HttpEntity<>(buildInternalServiceHeaders());
+        try {
+            ResponseEntity<List> resp = restTemplate.exchange(url, HttpMethod.GET, entity, List.class);
+            if (resp == null || !resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
+                throw new PaymentException("Unable to retrieve booking references for hotel " + hotelId, HttpStatus.SERVICE_UNAVAILABLE);
+            }
+            Set<String> refs = new LinkedHashSet<>();
+            for (Object item : resp.getBody()) {
+                if (item != null) {
+                    String s = item.toString().trim();
+                    if (!s.isEmpty()) {
+                        refs.add(s);
+                    }
+                }
+            }
+            return refs;
+        } catch (PaymentException pe) {
+            throw pe;
+        } catch (org.springframework.web.client.HttpClientErrorException.NotFound nfe) {
+            throw new PaymentException("Hotel property not found in booking service: " + hotelId, HttpStatus.NOT_FOUND);
+        } catch (Exception ex) {
+            log.error("Authoritative booking refs lookup failed for hotelId={}: {}", hotelId, ex.getMessage());
+            throw new PaymentException("Unable to retrieve authoritative hotel booking references", HttpStatus.SERVICE_UNAVAILABLE);
+        }
+    }
+
+    private HttpHeaders buildInternalServiceHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Internal-Service", "payment-service");
+        if (internalTokenService != null) {
+            String internalToken = internalTokenService.generateInternalToken();
+            if (internalToken != null && !internalToken.isBlank()) {
+                headers.set("Authorization", "Bearer " + internalToken);
+                headers.set("X-Internal-Token", internalToken);
+            }
+        }
+        return headers;
+    }
+
+    private double roundCurrencyAmount(double value) {
+        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 
 

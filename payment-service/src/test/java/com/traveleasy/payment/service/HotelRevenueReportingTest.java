@@ -3,6 +3,7 @@ package com.traveleasy.payment.service;
 import com.traveleasy.payment.config.RazorpayConfig;
 import com.traveleasy.payment.dto.HotelRevenueReportRequest;
 import com.traveleasy.payment.dto.HotelRevenueReportResponse;
+import com.traveleasy.payment.exception.PaymentException;
 import com.traveleasy.payment.model.PaymentTransaction;
 import com.traveleasy.payment.repository.PaymentRepository;
 import com.traveleasy.payment.repository.PaymentWebhookEventRepository;
@@ -12,15 +13,25 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,6 +55,9 @@ public class HotelRevenueReportingTest {
     @Mock
     private PaymentWebhookEventRepository webhookEventRepository;
 
+    @Mock
+    private PaymentInternalTokenService internalTokenService;
+
     private PaymentServiceImpl paymentService;
 
     @BeforeEach
@@ -55,8 +69,28 @@ public class HotelRevenueReportingTest {
                 restTemplate,
                 stateTransitionService,
                 recipientResolutionService,
-                webhookEventRepository
+                webhookEventRepository,
+                internalTokenService
         );
+        paymentService.setHotelServiceUrl("http://localhost:8083");
+        paymentService.setBookingServiceUrl("http://localhost:8084");
+
+        lenient().when(internalTokenService.generateInternalToken()).thenReturn("internal-jwt-token");
+        lenient().when(restTemplate.exchange(
+                eq("http://localhost:8083/api/hotels/internal/1"),
+                eq(HttpMethod.GET),
+                any(),
+                eq(Map.class)
+        )).thenReturn(ResponseEntity.ok(Map.of("id", 1L, "managerId", 3L)));
+        lenient().when(restTemplate.exchange(
+                eq("http://localhost:8084/api/bookings/hotel/1/refs"),
+                eq(HttpMethod.GET),
+                any(),
+                eq(List.class)
+        )).thenReturn(ResponseEntity.ok(List.of(
+                "BKG-001", "BKG-PEND-01", "BKG-PEND-02", "BKG-FAIL-01",
+                "BKG-REF-01", "BKG-PARTIAL-01", "BKG-DUP-01", "BKG-OCT-01", "BKG-NOV-01"
+        )));
     }
 
     @Test
@@ -313,5 +347,107 @@ public class HotelRevenueReportingTest {
         HotelRevenueReportResponse prevResponse = paymentService.getHotelRevenueSummary(prevRequest, "ROLE_HOTEL_MANAGER", 3L);
         assertEquals(4500.0, prevResponse.getSuccessfulPaymentsAmount());
         assertEquals(4500.0, prevResponse.getNetRevenue());
+    }
+
+    @Test
+    @DisplayName("9. Non-owner hotel manager is rejected with 403 FORBIDDEN without querying payments")
+    void testNonOwnerManager_Rejected403() {
+        when(restTemplate.exchange(
+                eq("http://localhost:8083/api/hotels/internal/99"),
+                eq(HttpMethod.GET),
+                any(),
+                eq(Map.class)
+        )).thenReturn(ResponseEntity.ok(Map.of("id", 99L, "managerId", 500L)));
+
+        HotelRevenueReportRequest request = HotelRevenueReportRequest.builder()
+                .hotelId(99L)
+                .bookingRefs(List.of("BKG-OTHER-1"))
+                .startDate(LocalDate.of(2026, 11, 1))
+                .endDate(LocalDate.of(2026, 11, 7))
+                .build();
+
+        PaymentException ex = assertThrows(PaymentException.class,
+                () -> paymentService.getHotelRevenueSummary(request, "ROLE_HOTEL_MANAGER", 3L));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
+        verify(paymentRepository, never()).findByBookingRefIn(anyList());
+    }
+
+    @Test
+    @DisplayName("10. Tampered cross-hotel or bus bookingRefs are rejected with 403 FORBIDDEN")
+    void testTamperedCrossPropertyBookingRefs_Rejected403() {
+        HotelRevenueReportRequest request = HotelRevenueReportRequest.builder()
+                .hotelId(1L)
+                .bookingRefs(List.of("BKG-001", "BUS-BOOKING-999"))
+                .startDate(LocalDate.of(2026, 11, 1))
+                .endDate(LocalDate.of(2026, 11, 7))
+                .build();
+
+        PaymentException ex = assertThrows(PaymentException.class,
+                () -> paymentService.getHotelRevenueSummary(request, "ROLE_HOTEL_MANAGER", 3L));
+        assertEquals(HttpStatus.FORBIDDEN, ex.getStatus());
+        verify(paymentRepository, never()).findByBookingRefIn(anyList());
+    }
+
+    @Test
+    @DisplayName("11. Missing bookingRefs resolves authoritative bookingRefs from booking-service")
+    void testEmptyBookingRefs_ResolvesAuthoritativeBookingRefs() {
+        PaymentTransaction txn = PaymentTransaction.builder()
+                .id(101L)
+                .bookingRef("BKG-001")
+                .amount(6200.0)
+                .status("SUCCESS")
+                .timestamp(LocalDateTime.of(2026, 11, 2, 10, 0))
+                .build();
+        when(paymentRepository.findByBookingRefIn(anyList())).thenReturn(List.of(txn, txn)); // Also verify deduplication!
+
+        HotelRevenueReportRequest request = HotelRevenueReportRequest.builder()
+                .hotelId(1L)
+                .bookingRefs(Collections.emptyList())
+                .startDate(LocalDate.of(2026, 11, 1))
+                .endDate(LocalDate.of(2026, 11, 7))
+                .build();
+
+        HotelRevenueReportResponse response = paymentService.getHotelRevenueSummary(request, "ROLE_ADMIN", 1L);
+        assertEquals(6200.0, response.getSuccessfulPaymentsAmount());
+        assertEquals(1, response.getSuccessfulPaymentsCount());
+        assertEquals(6200.0, response.getNetRevenue());
+    }
+
+    @Test
+    @DisplayName("12. Missing or invalid hotelId fails closed with 400 BAD_REQUEST")
+    void testInvalidHotelId_Rejected400() {
+        HotelRevenueReportRequest request = HotelRevenueReportRequest.builder()
+                .hotelId(null)
+                .bookingRefs(List.of("BKG-001"))
+                .startDate(LocalDate.of(2026, 11, 1))
+                .endDate(LocalDate.of(2026, 11, 7))
+                .build();
+
+        PaymentException ex = assertThrows(PaymentException.class,
+                () -> paymentService.getHotelRevenueSummary(request, "ROLE_HOTEL_MANAGER", 3L));
+        assertEquals(HttpStatus.BAD_REQUEST, ex.getStatus());
+    }
+
+    @Test
+    @DisplayName("13. Booking service lookup failure fails closed with 503 SERVICE_UNAVAILABLE")
+    void testBookingRefsLookupFailure_FailsClosed503() {
+        when(restTemplate.exchange(
+                contains("/api/bookings/hotel/1/refs"),
+                eq(HttpMethod.GET),
+                any(),
+                eq(List.class)
+        )).thenThrow(new RuntimeException("booking-service timeout"));
+
+        HotelRevenueReportRequest request = HotelRevenueReportRequest.builder()
+                .hotelId(1L)
+                .bookingRefs(List.of("BKG-001"))
+                .startDate(LocalDate.of(2026, 11, 1))
+                .endDate(LocalDate.of(2026, 11, 7))
+                .build();
+
+        PaymentException ex = assertThrows(PaymentException.class,
+                () -> paymentService.getHotelRevenueSummary(request, "ROLE_HOTEL_MANAGER", 3L));
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, ex.getStatus());
+        verify(paymentRepository, never()).findByBookingRefIn(anyList());
     }
 }

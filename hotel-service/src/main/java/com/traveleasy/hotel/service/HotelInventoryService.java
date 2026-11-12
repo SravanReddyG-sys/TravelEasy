@@ -15,10 +15,12 @@ import com.traveleasy.hotel.model.HotelReservation;
 import com.traveleasy.hotel.repository.HotelReservationRepository;
 import com.traveleasy.hotel.model.HotelProperty;
 import com.traveleasy.hotel.model.RoomDailyInventory;
+import com.traveleasy.hotel.model.RoomInventoryBlock;
 import com.traveleasy.hotel.model.RoomType;
 import com.traveleasy.hotel.repository.HotelBookingAllocationRepository;
 import com.traveleasy.hotel.repository.HotelPropertyRepository;
 import com.traveleasy.hotel.repository.RoomDailyInventoryRepository;
+import com.traveleasy.hotel.repository.RoomInventoryBlockRepository;
 import com.traveleasy.hotel.repository.RoomTypeRepository;
 import com.traveleasy.hotel.security.HotelSecurityService.CallerPrincipal;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +45,11 @@ public class HotelInventoryService {
     private final HotelReservationRepository reservationRepository;
     private final HotelPricingService pricingService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private RoomInventoryBlockRepository blockRepository;
+
+    private static final int LOW_AVAILABILITY_THRESHOLD = 2;
 
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager entityManager;
@@ -645,9 +652,27 @@ public class HotelInventoryService {
             throw new DomainValidationException("Start date must not be after end date");
         }
 
-        List<RoomType> roomTypes = roomTypeRepository.findByHotelId(hotelId).stream()
-                .filter(rt -> rt.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(rt.getStatus()))
-                .toList();
+        Map<Long, RoomType> activeRoomTypeMap = new LinkedHashMap<>();
+        for (RoomType rt : roomTypeRepository.findByHotelId(hotelId)) {
+            if (rt == null || rt.getId() == null) continue;
+            if (rt.getStatus() == null || !"ARCHIVED".equalsIgnoreCase(rt.getStatus())) {
+                activeRoomTypeMap.putIfAbsent(rt.getId(), rt);
+            }
+        }
+        List<RoomType> roomTypes = new ArrayList<>(activeRoomTypeMap.values());
+
+        Map<Long, Map<LocalDate, RoomDailyInventory>> dailyByRoomAndDate = new HashMap<>();
+        for (RoomDailyInventory inv : dailyInventoryRepository
+                .findByHotelIdAndInventoryDateBetweenOrderByInventoryDateAsc(hotelId, startDate, endDate)) {
+            if (inv.getRoomId() != null && inv.getInventoryDate() != null) {
+                dailyByRoomAndDate
+                        .computeIfAbsent(inv.getRoomId(), k -> new HashMap<>())
+                        .put(inv.getInventoryDate(), inv);
+            }
+        }
+
+        Map<Long, Integer> minAvailableByRoomId = new HashMap<>();
+        Map<Long, Integer> lowDatesCountByRoomId = new HashMap<>();
 
         int totalPhysicalNights = 0;
         int occupiedNights = 0;
@@ -666,17 +691,36 @@ public class HotelInventoryService {
             int dayAvailable = 0;
 
             for (RoomType rt : roomTypes) {
-                RoomDailyInventory daily = getOrCreateDailyInventory(rt, cur);
-                dayTotal += (daily.getTotalRooms() != null ? daily.getTotalRooms() : 0);
-                dayBooked += (daily.getBookedRooms() != null ? daily.getBookedRooms() : 0);
-                dayHeld += (daily.getHeldRooms() != null ? daily.getHeldRooms() : 0);
-                dayBlocked += (daily.getBlockedRooms() != null ? daily.getBlockedRooms() : 0);
-                dayAvailable += daily.getAvailableRooms();
+                RoomDailyInventory daily = dailyByRoomAndDate
+                        .getOrDefault(rt.getId(), Collections.emptyMap())
+                        .get(cur);
+
+                int rtTotal = rt.getTotalRooms() != null ? Math.max(0, rt.getTotalRooms()) : 0;
+                int roomBooked = daily != null && daily.getBookedRooms() != null ? Math.max(0, daily.getBookedRooms()) : 0;
+                int roomHeld = daily != null && daily.getHeldRooms() != null ? Math.max(0, daily.getHeldRooms()) : 0;
+                int roomBlocked = daily != null && daily.getBlockedRooms() != null ? Math.max(0, daily.getBlockedRooms()) : 0;
+                int roomAllocated = roomBooked + roomHeld + roomBlocked;
+                int roomTotal = daily != null && daily.getTotalRooms() != null ? daily.getTotalRooms() : rtTotal;
+                if (rt.getTotalRooms() != null && rtTotal >= roomAllocated) {
+                    roomTotal = rtTotal;
+                }
+                int roomAvailable = Math.max(0, roomTotal - roomAllocated);
+
+                dayTotal += roomTotal;
+                dayBooked += roomBooked;
+                dayHeld += roomHeld;
+                dayBlocked += roomBlocked;
+                dayAvailable += roomAvailable;
+
+                minAvailableByRoomId.merge(rt.getId(), roomAvailable, Math::min);
+                if (roomAvailable <= LOW_AVAILABILITY_THRESHOLD) {
+                    lowDatesCountByRoomId.merge(rt.getId(), 1, Integer::sum);
+                }
             }
 
             int dayApplicable = Math.max(0, dayTotal - dayBlocked);
             double dayOccupancy = dayApplicable > 0
-                    ? Math.round(((double) dayBooked / dayApplicable) * 1000.0) / 10.0
+                    ? Math.min(100.0, Math.max(0.0, Math.round(((double) dayBooked / dayApplicable) * 1000.0) / 10.0))
                     : 0.0;
 
             dailySummaries.add(HotelInventorySummaryDto.DailySummaryItem.builder()
@@ -700,8 +744,42 @@ public class HotelInventoryService {
 
         int applicableCapacity = Math.max(0, totalPhysicalNights - blockedNights);
         double overallOccupancy = applicableCapacity > 0
-                ? Math.round(((double) occupiedNights / applicableCapacity) * 1000.0) / 10.0
+                ? Math.min(100.0, Math.max(0.0, Math.round(((double) occupiedNights / applicableCapacity) * 1000.0) / 10.0))
                 : 0.0;
+
+        List<HotelInventorySummaryDto.LowAvailabilityRoomItem> lowAvailabilityRooms = new ArrayList<>();
+        int exhaustedCount = 0;
+        for (RoomType rt : roomTypes) {
+            Integer minAvail = minAvailableByRoomId.get(rt.getId());
+            if (minAvail != null && minAvail <= LOW_AVAILABILITY_THRESHOLD) {
+                boolean exhausted = minAvail == 0;
+                if (exhausted) {
+                    exhaustedCount++;
+                }
+                lowAvailabilityRooms.add(HotelInventorySummaryDto.LowAvailabilityRoomItem.builder()
+                        .roomId(rt.getId())
+                        .roomTypeName(rt.getRoomTypeName())
+                        .totalRooms(rt.getTotalRooms() != null ? rt.getTotalRooms() : 0)
+                        .minAvailableRooms(minAvail)
+                        .exhausted(exhausted)
+                        .lowAvailabilityDatesCount(lowDatesCountByRoomId.getOrDefault(rt.getId(), 0))
+                        .build());
+            }
+        }
+
+        int activeBlocksCount = 0;
+        if (blockRepository != null) {
+            Set<Long> seenBlockIds = new HashSet<>();
+            for (RoomInventoryBlock block : blockRepository.findByHotelIdAndStatus(hotelId, "ACTIVE")) {
+                if (block == null || block.getId() == null || !seenBlockIds.add(block.getId())) continue;
+                if (block.getRoomId() == null || !activeRoomTypeMap.containsKey(block.getRoomId())) continue;
+                if (block.getStartDate() != null && block.getEndDate() != null
+                        && !block.getStartDate().isAfter(endDate)
+                        && block.getEndDate().isAfter(startDate)) {
+                    activeBlocksCount++;
+                }
+            }
+        }
 
         return HotelInventorySummaryDto.builder()
                 .hotelId(hotelId)
@@ -714,6 +792,11 @@ public class HotelInventoryService {
                 .availableRoomNights(availableNights)
                 .applicableRoomNightCapacity(applicableCapacity)
                 .occupancyRate(overallOccupancy)
+                .activeRoomTypesCount(roomTypes.size())
+                .activeRoomBlocksCount(activeBlocksCount)
+                .lowAvailabilityRoomsCount(lowAvailabilityRooms.size())
+                .exhaustedRoomsCount(exhaustedCount)
+                .lowAvailabilityRooms(lowAvailabilityRooms)
                 .dailySummaries(dailySummaries)
                 .build();
     }

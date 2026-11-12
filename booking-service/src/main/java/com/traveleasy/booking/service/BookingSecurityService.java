@@ -124,4 +124,55 @@ public class BookingSecurityService {
             return false;
         }
     }
+
+    /**
+     * Strictly verifies a cryptographically signed internal service JWT token without allowing unauthenticated header-only bypasses.
+     */
+    public boolean verifyStrictInternalToken(
+            String authHeader,
+            String internalTokenHeader,
+            String internalServiceHeader,
+            String... permittedServices) {
+        String token = null;
+        if (internalTokenHeader != null && !internalTokenHeader.isBlank()) {
+            token = internalTokenHeader.trim();
+        } else if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            token = authHeader.substring(7).trim();
+        }
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+        if (token.startsWith("Bearer ")) {
+            token = token.substring(7).trim();
+        }
+        try {
+            Claims claims = extractClaims(token);
+            if (!INTERNAL_ISSUER.equals(claims.getIssuer())) {
+                return false;
+            }
+            Object roleObj = claims.get("role");
+            if (roleObj == null || !ROLE_INTERNAL_SERVICE.equals(roleObj.toString())) {
+                return false;
+            }
+            String subject = claims.getSubject();
+            if (subject == null || subject.isBlank() || !ALLOWED_INTERNAL_SERVICES.contains(subject.toLowerCase())) {
+                return false;
+            }
+            if (internalServiceHeader != null && !internalServiceHeader.isBlank()
+                    && !subject.equalsIgnoreCase(internalServiceHeader.trim())) {
+                return false;
+            }
+            if (permittedServices != null && permittedServices.length > 0) {
+                for (String permitted : permittedServices) {
+                    if (permitted != null && subject.equalsIgnoreCase(permitted.trim())) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }

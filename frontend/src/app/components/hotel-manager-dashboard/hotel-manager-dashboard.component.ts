@@ -2,15 +2,25 @@ import { Component, OnInit, OnDestroy, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { Subscription, forkJoin, of } from 'rxjs';
-import { catchError, map } from 'rxjs/operators';
+import { Subscription, Subject, forkJoin, of } from 'rxjs';
+import { catchError, map, switchMap, takeUntil } from 'rxjs/operators';
 import { AuthService } from '../../services/auth.service';
-import { HotelService } from '../../services/hotel.service';
+import { HotelService, HotelInventorySummary } from '../../services/hotel.service';
 import { Hotel, HotelRoom, HotelImage, HotelStep1Request, HotelStep1Response, HotelStep2Request, HotelStep2Response, HotelStep3Request, HotelStep3Response, HotelStep4Request, HotelStep4Response, HotelStep5SubmitRequest, HotelStep5Response, RoomTypeCreateRequest, RoomTypeDto } from '../../models/hotel.model';
 import { BookingService, HotelRevenueReportResponse } from '../../services/booking.service';
 import { NotificationService } from '../../services/notification.service';
 import { User } from '../../models/user.model';
 import { FormattedNotification } from '../../models/notification.model';
+import {
+  buildKpiComparisonMetric,
+  buildTrendsChartData,
+  calculatePeriodRoomNights,
+  computeOperationalAlerts,
+  filterAndDedupeHotelBookings,
+  filterBookingsCreatedInPeriod,
+  resolveBookingRoomCount,
+  selectUpcomingReservations
+} from './hotel-dashboard-metrics.util';
 
 export interface DateRangePresetItem {
   id: string;
@@ -603,7 +613,18 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
     lowAvailabilityRoomsCount: 0
   };
 
-  // Upcoming / Reporting Period Reservations
+  // Per-service Overview error flags (prevent partial failures from wiping healthy widgets or fabricating revenue)
+  overviewLoadErrors = {
+    bookings: false,
+    inventory: false,
+    prevInventory: false,
+    revenue: false,
+    prevRevenue: false,
+    roomTypes: false,
+    roomBlocks: false
+  };
+
+  // Upcoming Reservations (confirmed future check-ins independent of reporting period)
   upcomingReservations: any[] = [];
 
   // Modals State
@@ -890,6 +911,16 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
 
   // Subscriptions
   private subscriptions: Subscription = new Subscription();
+  private destroy$: Subject<void> = new Subject<void>();
+  private latestDashboardRequestSeq: number = 0;
+  private dashboardLoad$: Subject<{
+    seq: number;
+    hotelId: number | null;
+    startDate: string;
+    endDate: string;
+    prevStartDate: string;
+    prevEndDate: string;
+  }> = new Subject();
 
   constructor(
     private authService: AuthService,
@@ -906,6 +937,7 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
       return;
     }
 
+    this.initDashboardDataStream();
     this.initNotifications();
     this.initDefaultReportingPeriod();
     this.updateAvailableStates();
@@ -914,6 +946,8 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     document.body.style.overflow = '';
+    this.destroy$.next();
+    this.destroy$.complete();
     this.subscriptions.unsubscribe();
   }
 
@@ -1122,6 +1156,111 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   }
 
   // ==================== DATA LOADING (SHARED FILTER STATE) ====================
+  switchActiveNav(nav: string): void {
+    this.activeNav = nav;
+    this.isMobileSidebarOpen = false;
+    this.showUserDropdown = false;
+    if (nav === 'properties' && this.myHotels.length > 0 && this.propertyStatsMap.size === 0) {
+      this.loadAllPropertiesStats();
+    }
+  }
+
+  private initDashboardDataStream(): void {
+    const wrap = <T>(obs$: import('rxjs').Observable<T>) =>
+      obs$.pipe(
+        map((data) => ({ ok: true as const, data })),
+        catchError((err) => of({ ok: false as const, data: null as T | null, err }))
+      );
+
+    this.dashboardLoad$
+      .pipe(
+        switchMap((trigger) => {
+          if (trigger.hotelId == null) {
+            return of({ trigger, empty: true as const, results: null });
+          }
+          const hotelId = trigger.hotelId;
+          return forkJoin({
+            roomTypes: wrap(this.hotelService.getRoomTypes(hotelId)),
+            roomBlocks: wrap(this.hotelService.getRoomBlocks(hotelId)),
+            currInventory: wrap(this.hotelService.getHotelInventorySummary(hotelId, trigger.startDate, trigger.endDate)),
+            prevInventory: wrap(this.hotelService.getHotelInventorySummary(hotelId, trigger.prevStartDate, trigger.prevEndDate)),
+            bookings: wrap(this.bookingService.getHotelBookings(hotelId)),
+            currRevenue: wrap(this.bookingService.getHotelRevenueSummary({
+              hotelId,
+              startDate: trigger.startDate,
+              endDate: trigger.endDate
+            })),
+            prevRevenue: wrap(this.bookingService.getHotelRevenueSummary({
+              hotelId,
+              startDate: trigger.prevStartDate,
+              endDate: trigger.prevEndDate
+            }))
+          }).pipe(map((results) => ({ trigger, empty: false as const, results })));
+        }),
+        takeUntil(this.destroy$)
+      )
+      .subscribe((payload) => {
+        const { trigger } = payload;
+        if (trigger.seq !== this.latestDashboardRequestSeq) {
+          return;
+        }
+        if (payload.empty || !payload.results) {
+          this.resetDashboardMetricsForEmptySelection();
+          this.isLoading = false;
+          return;
+        }
+        if (!this.selectedHotel || this.selectedHotel.id !== trigger.hotelId) {
+          return;
+        }
+
+        const res = payload.results;
+        this.overviewLoadErrors = {
+          bookings: !res.bookings.ok,
+          inventory: !res.currInventory.ok,
+          prevInventory: !res.prevInventory.ok,
+          revenue: !res.currRevenue.ok,
+          prevRevenue: !res.prevRevenue.ok,
+          roomTypes: !res.roomTypes.ok,
+          roomBlocks: !res.roomBlocks.ok
+        };
+
+        if (res.roomTypes.ok) {
+          this.roomTypes = res.roomTypes.data || [];
+          this.refreshBasePriceListing();
+          if (this.inventorySubNav === 'inventory-calendar') {
+            this.initInventoryCalendar();
+          } else if (this.inventorySubNav === 'pricing-calendar') {
+            this.initPricingCalendar();
+          }
+        } else {
+          this.roomTypes = [];
+        }
+
+        if (res.roomBlocks.ok) {
+          this.roomBlocks = res.roomBlocks.data || [];
+        } else {
+          this.roomBlocks = [];
+        }
+
+        if (res.bookings.ok) {
+          const rawBookings = res.bookings.data || [];
+          this.managerReservations = rawBookings;
+          this.filteredReservations = filterAndDedupeHotelBookings(rawBookings, trigger.hotelId);
+        } else {
+          this.managerReservations = [];
+          this.filteredReservations = [];
+        }
+
+        this.computeDashboardMetrics(
+          res.currInventory.ok ? res.currInventory.data : null,
+          res.prevInventory.ok ? res.prevInventory.data : null,
+          res.currRevenue.ok ? res.currRevenue.data : null,
+          res.prevRevenue.ok ? res.prevRevenue.data : null
+        );
+        this.isLoading = false;
+      });
+  }
+
   loadInitialData(): void {
     if (!this.currentUser) return;
     this.isLoading = true;
@@ -1131,7 +1270,9 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
     this.hotelService.getHotelsByManager(this.currentUser.id).subscribe({
       next: (hotels) => {
         this.myHotels = hotels || [];
-        this.loadAllPropertiesStats();
+        if (this.activeNav === 'properties' && this.myHotels.length > 0) {
+          this.loadAllPropertiesStats();
+        }
         if (this.myHotels.length > 0) {
           if (!this.selectedHotel || !this.myHotels.some(h => h.id === this.selectedHotel.id)) {
             this.selectedHotel = this.myHotels[0];
@@ -1158,120 +1299,93 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   loadDashboardData(): void {
     if (!this.currentUser) return;
     this.isLoading = true;
+    const seq = ++this.latestDashboardRequestSeq;
 
     if (!this.selectedHotel) {
       this.roomTypes = [];
       this.roomBlocks = [];
+      this.managerReservations = [];
+      this.filteredReservations = [];
       this.refreshBasePriceListing();
-        this.refreshRoomBlocksListing();
-      this.fetchReservationsAndCompute(null, null);
+      this.refreshRoomBlocksListing();
+      this.dashboardLoad$.next({
+        seq,
+        hotelId: null,
+        startDate: this.startDate,
+        endDate: this.endDate,
+        prevStartDate: this.prevStartDate,
+        prevEndDate: this.prevEndDate
+      });
       return;
     }
 
-    const hotelId = this.selectedHotel.id;
-
-    // Load Room Types & Room Blocks in parallel with inventory summary
-    forkJoin({
-      roomTypes: this.hotelService.getRoomTypes(hotelId).pipe(catchError(() => of([]))),
-      roomBlocks: this.hotelService.getRoomBlocks(hotelId).pipe(catchError(() => of([]))),
-      inventorySummary: this.hotelService.getHotelInventorySummary(hotelId, this.startDate, this.endDate).pipe(catchError(() => of(null))),
-      prevInventorySummary: this.hotelService.getHotelInventorySummary(hotelId, this.prevStartDate, this.prevEndDate).pipe(catchError(() => of(null)))
-    }).subscribe({
-      next: (res) => {
-        this.roomTypes = res.roomTypes || [];
-        this.roomBlocks = res.roomBlocks || [];
-        this.refreshBasePriceListing();
-        if (this.inventorySubNav === 'inventory-calendar') {
-          this.initInventoryCalendar();
-        } else if (this.inventorySubNav === 'pricing-calendar') {
-          this.initPricingCalendar();
-        }
-        this.fetchReservationsAndCompute(res.inventorySummary, res.prevInventorySummary);
-      },
-      error: (err) => {
-        console.warn('Dashboard data fetch error:', err);
-        this.fetchReservationsAndCompute(null, null);
-      }
+    this.dashboardLoad$.next({
+      seq,
+      hotelId: this.selectedHotel.id,
+      startDate: this.startDate,
+      endDate: this.endDate,
+      prevStartDate: this.prevStartDate,
+      prevEndDate: this.prevEndDate
     });
   }
 
-  private fetchReservationsAndCompute(currInventorySummary: any, prevInventorySummary: any): void {
-    this.bookingService.getProviderBookings(this.currentUser!.id).subscribe({
-      next: (reservations) => {
-        this.managerReservations = reservations || [];
-        this.filterAndFetchRevenue(currInventorySummary, prevInventorySummary);
-      },
-      error: (err) => {
-        console.error('Failed to load reservations:', err);
-        this.managerReservations = [];
-        this.filterAndFetchRevenue(currInventorySummary, prevInventorySummary);
-      }
-    });
-  }
-
-  private filterAndFetchRevenue(currInventorySummary: any, prevInventorySummary: any): void {
-    if (this.selectedHotel) {
-      this.filteredReservations = this.managerReservations.filter(res =>
-        res.serviceId === this.selectedHotel.id ||
-        (res.serviceTitle && res.serviceTitle.toLowerCase().includes(this.selectedHotel.name?.toLowerCase()))
-      );
-    } else {
-      this.filteredReservations = [...this.managerReservations];
-    }
-
-    const bookingRefs = this.filteredReservations.map(r => r.bookingRef).filter(ref => !!ref);
-
-    forkJoin({
-      currRevenue: this.bookingService.getHotelRevenueSummary({
-        hotelId: this.selectedHotel ? this.selectedHotel.id : undefined,
-        bookingRefs,
-        startDate: this.startDate,
-        endDate: this.endDate
-      }).pipe(catchError((err) => {
-        console.warn('Current period revenue summary fetch failed:', err);
-        return of(null);
-      })),
-      prevRevenue: this.bookingService.getHotelRevenueSummary({
-        hotelId: this.selectedHotel ? this.selectedHotel.id : undefined,
-        bookingRefs,
-        startDate: this.prevStartDate,
-        endDate: this.prevEndDate
-      }).pipe(catchError((err) => {
-        console.warn('Previous period revenue summary fetch failed:', err);
-        return of(null);
-      }))
-    }).subscribe({
-      next: (revRes) => {
-        this.computeDashboardMetrics(currInventorySummary, prevInventorySummary, revRes.currRevenue, revRes.prevRevenue);
-        this.isLoading = false;
-      },
-      error: () => {
-        this.computeDashboardMetrics(currInventorySummary, prevInventorySummary, null, null);
-        this.isLoading = false;
-      }
-    });
+  private resetDashboardMetricsForEmptySelection(): void {
+    this.overviewLoadErrors = {
+      bookings: false,
+      inventory: false,
+      prevInventory: false,
+      revenue: false,
+      prevRevenue: false,
+      roomTypes: false,
+      roomBlocks: false
+    };
+    this.bookingsKpi = this.defaultKpiComparison();
+    this.nightsKpi = this.defaultKpiComparison();
+    this.occupancyKpi = this.defaultKpiComparison();
+    this.revenueKpi = this.defaultKpiComparison();
+    this.totalPhysicalRoomNights = 0;
+    this.occupiedRoomNights = 0;
+    this.heldRoomNights = 0;
+    this.blockedRoomNights = 0;
+    this.availableRoomNights = 0;
+    this.applicableRoomNightCapacity = 0;
+    this.occupancyRate = 0;
+    this.donutOffset = 251.2;
+    this.upcomingReservations = [];
+    this.operationalAlerts = {
+      arrivalsCount: 0,
+      departuresCount: 0,
+      activeRoomBlocksCount: 0,
+      lowAvailabilityRoomsCount: 0
+    };
+    const chartData = buildTrendsChartData([], this.startDate, this.endDate, null, false, false);
+    this.trendDays = chartData.trendDays;
+    this.maxChartValue = chartData.maxChartValue;
+    this.maxRevenueChartValue = chartData.maxRevenueChartValue;
   }
 
   // ==================== ACCURATE DATE-AWARE METRIC CALCULATIONS ====================
   private computeDashboardMetrics(
-    currInv: any,
-    prevInv: any,
+    currInv: HotelInventorySummary | null,
+    prevInv: HotelInventorySummary | null,
     currRevenueSummary: HotelRevenueReportResponse | null,
     prevRevenueSummary: HotelRevenueReportResponse | null
   ): void {
-    // 0. Filter reservations for selected hotel (already filtered in filterAndFetchRevenue)
-    // ================= 1. TOTAL BOOKINGS (CREATED IN PERIOD) =================
-    const currBookings = this.filterBookingsCreatedInPeriod(this.filteredReservations, this.startDate, this.endDate);
-    const prevBookings = this.filterBookingsCreatedInPeriod(this.filteredReservations, this.prevStartDate, this.prevEndDate);
+    const bookingsFailed = this.overviewLoadErrors.bookings;
 
-    const currBookingsCount = currBookings.length;
-    const prevBookingsCount = prevBookings.length;
-    this.bookingsKpi = this.buildKpiComparison(currBookingsCount, prevBookingsCount);
+    // ================= 1. TOTAL BOOKINGS & 2. ROOM NIGHTS =================
+    if (bookingsFailed) {
+      this.bookingsKpi = buildKpiComparisonMetric(0, 0, false, false, 'Booking data unavailable');
+      this.nightsKpi = buildKpiComparisonMetric(0, 0, false, false, 'Booking data unavailable');
+    } else {
+      const currBookings = filterBookingsCreatedInPeriod(this.filteredReservations, this.startDate, this.endDate);
+      const prevBookings = filterBookingsCreatedInPeriod(this.filteredReservations, this.prevStartDate, this.prevEndDate);
+      this.bookingsKpi = buildKpiComparisonMetric(currBookings.length, prevBookings.length);
 
-    // ================= 2. ROOM NIGHTS (STAY OVERLAP IN PERIOD) =================
-    const currRoomNights = this.calculatePeriodRoomNights(this.filteredReservations, this.startDate, this.endDate);
-    const prevRoomNights = this.calculatePeriodRoomNights(this.filteredReservations, this.prevStartDate, this.prevEndDate);
-    this.nightsKpi = this.buildKpiComparison(currRoomNights, prevRoomNights);
+      const currRoomNights = calculatePeriodRoomNights(this.filteredReservations, this.startDate, this.endDate);
+      const prevRoomNights = calculatePeriodRoomNights(this.filteredReservations, this.prevStartDate, this.prevEndDate);
+      this.nightsKpi = buildKpiComparisonMetric(currRoomNights, prevRoomNights);
+    }
 
     // ================= 3. OCCUPANCY RATE (WP-03 DATE-WISE ARCHITECTURE) =================
     if (currInv) {
@@ -1282,304 +1396,62 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
       this.availableRoomNights = currInv.availableRoomNights || 0;
       this.applicableRoomNightCapacity = currInv.applicableRoomNightCapacity || 0;
       this.occupancyRate = currInv.occupancyRate || 0;
+      this.donutOffset = 251.2 * (1 - (Math.min(100, Math.max(0, this.occupancyRate)) / 100));
+
+      if (prevInv && !this.overviewLoadErrors.prevInventory) {
+        this.occupancyKpi = buildKpiComparisonMetric(this.occupancyRate, prevInv.occupancyRate || 0, true, true);
+      } else {
+        this.occupancyKpi = buildKpiComparisonMetric(this.occupancyRate, 0, true, false, 'No prior period data');
+      }
     } else {
-      // Fallback: derive date-wise from roomTypes and eligible room nights
-      const totalRooms = this.roomTypes.reduce((sum, r) => sum + (Number(r.totalRooms) || 0), 0);
-      this.totalPhysicalRoomNights = totalRooms * this.durationDays;
-      this.occupiedRoomNights = currRoomNights;
+      this.totalPhysicalRoomNights = 0;
+      this.occupiedRoomNights = 0;
       this.heldRoomNights = 0;
       this.blockedRoomNights = 0;
-      this.applicableRoomNightCapacity = this.totalPhysicalRoomNights;
-      this.availableRoomNights = Math.max(0, this.applicableRoomNightCapacity - this.occupiedRoomNights - this.heldRoomNights);
-      this.occupancyRate = this.applicableRoomNightCapacity > 0
-        ? Math.round(((this.occupiedRoomNights / this.applicableRoomNightCapacity) * 100) * 10) / 10
-        : 0;
+      this.availableRoomNights = 0;
+      this.applicableRoomNightCapacity = 0;
+      this.occupancyRate = 0;
+      this.donutOffset = 251.2;
+      this.occupancyKpi = buildKpiComparisonMetric(0, 0, true, false, 'Inventory data unavailable');
     }
 
-    const prevOccupancyRate = prevInv ? (prevInv.occupancyRate || 0) : 0;
-    this.occupancyKpi = this.buildKpiComparison(this.occupancyRate, prevOccupancyRate, true);
-    this.donutOffset = 251.2 * (1 - (Math.min(100, Math.max(0, this.occupancyRate)) / 100));
-
-    // ================= 4. NET REVENUE (ACTUAL TRANSACTION-BASED REVENUE) =================
-    let currNetRevenue = 0;
-    let prevNetRevenue = 0;
-
-    if (currRevenueSummary) {
-      currNetRevenue = currRevenueSummary.netRevenue;
+    // ================= 4. NET REVENUE (STRICTLY AUTHORITATIVE PAYMENT SERVICE DATA) =================
+    if (this.overviewLoadErrors.revenue || !currRevenueSummary) {
+      this.revenueKpi = buildKpiComparisonMetric(0, 0, false, false, 'Revenue data unavailable');
+    } else if (this.overviewLoadErrors.prevRevenue || !prevRevenueSummary) {
+      this.revenueKpi = buildKpiComparisonMetric(currRevenueSummary.netRevenue, 0, false, false, 'No prior period revenue');
     } else {
-      const currRevenueData = this.calculatePeriodNetRevenue(this.filteredReservations, this.startDate, this.endDate);
-      currNetRevenue = currRevenueData.netRevenue;
+      this.revenueKpi = buildKpiComparisonMetric(currRevenueSummary.netRevenue, prevRevenueSummary.netRevenue);
     }
-
-    if (prevRevenueSummary) {
-      prevNetRevenue = prevRevenueSummary.netRevenue;
-    } else {
-      const prevRevenueData = this.calculatePeriodNetRevenue(this.filteredReservations, this.prevStartDate, this.prevEndDate);
-      prevNetRevenue = prevRevenueData.netRevenue;
-    }
-
-    this.revenueKpi = this.buildKpiComparison(currNetRevenue, prevNetRevenue);
 
     // ================= 5. BOOKING TRENDS CHART =================
-    this.buildTrendsChartData(currInv, currRevenueSummary);
+    const chartData = buildTrendsChartData(
+      this.filteredReservations,
+      this.startDate,
+      this.endDate,
+      currRevenueSummary,
+      this.overviewLoadErrors.bookings,
+      this.overviewLoadErrors.revenue
+    );
+    this.trendDays = chartData.trendDays;
+    this.maxChartValue = chartData.maxChartValue;
+    this.maxRevenueChartValue = chartData.maxRevenueChartValue;
 
-    // ================= 6. UPCOMING / REPORTING PERIOD RESERVATIONS =================
-    // Filter strictly by check-in date within the reporting period; exclude CANCELLED, FAILED, EXPIRED.
-    this.upcomingReservations = this.filteredReservations
-      .filter(r => {
-        if (r.status === 'CANCELLED' || r.status === 'FAILED' || r.status === 'EXPIRED') {
-          return false;
-        }
-        const checkIn = r.checkInDate || this.extractDateFromBooking(r, 'in');
-        return checkIn && checkIn >= this.startDate && checkIn <= this.endDate;
-      })
-      .sort((a, b) => {
-        const dateA = a.checkInDate || this.extractDateFromBooking(a, 'in') || '';
-        const dateB = b.checkInDate || this.extractDateFromBooking(b, 'in') || '';
-        return dateA.localeCompare(dateB);
-      })
-      .slice(0, 5);
+    // ================= 6. UPCOMING RESERVATIONS (INDEPENDENT OF REPORTING PERIOD) =================
+    const todayIso = this.formatDateIso(new Date());
+    this.upcomingReservations = bookingsFailed
+      ? []
+      : selectUpcomingReservations(this.filteredReservations, todayIso, 5);
 
-    // ================= 7. CORRECTED OPERATIONAL ALERTS =================
-    this.computeOperationalAlerts(currInv);
-  }
-
-  // ==================== CALCULATION HELPERS ====================
-  private filterBookingsCreatedInPeriod(bookings: any[], start: string, end: string): any[] {
-    return bookings.filter(b => {
-      // Exclude cancelled, failed, expired, unconfirmed
-      if (b.status === 'CANCELLED' || b.status === 'FAILED' || b.status === 'EXPIRED') {
-        return false;
-      }
-      const creationDate = b.bookingDate ? b.bookingDate.split('T')[0] : (b.confirmedAt ? b.confirmedAt.split('T')[0] : '');
-      return creationDate >= start && creationDate <= end;
-    });
-  }
-
-  private calculatePeriodRoomNights(bookings: any[], start: string, end: string): number {
-    let nightsCount = 0;
-    const startDate = new Date(start + 'T00:00:00');
-    const endDate = new Date(end + 'T00:00:00');
-
-    bookings.forEach(b => {
-      // Exclude unpaid holds or cancelled bookings
-      if (b.status !== 'CONFIRMED' && b.status !== 'CHECKED_IN' && b.status !== 'CHECKED_OUT' && b.status !== 'NO_SHOW') {
-        return;
-      }
-
-      const checkInStr = b.checkInDate || this.extractDateFromBooking(b, 'in');
-      const checkOutStr = b.checkOutDate || this.extractDateFromBooking(b, 'out');
-      if (!checkInStr || !checkOutStr) return;
-
-      const bCheckIn = new Date(checkInStr + 'T00:00:00');
-      const bCheckOut = new Date(checkOutStr + 'T00:00:00');
-
-      let cur = new Date(bCheckIn);
-      let overlap = 0;
-      // Check-in inclusive, checkout exclusive: [checkIn, checkOut)
-      while (cur < bCheckOut) {
-        if (cur >= startDate && cur <= endDate) {
-          overlap++;
-        }
-        cur.setDate(cur.getDate() + 1);
-      }
-
-      const roomCount = this.extractRoomCountFromBooking(b);
-      nightsCount += (overlap * roomCount);
-    });
-
-    return nightsCount;
-  }
-
-  private calculatePeriodNetRevenue(bookings: any[], start: string, end: string): { grossRevenue: number; refunds: number; netRevenue: number } {
-    let grossRevenue = 0;
-    let refunds = 0;
-
-    bookings.forEach(b => {
-      // 1. Eligible successful payment captured
-      const hasSuccessfulPayment = b.status === 'CONFIRMED' ||
-                                   b.status === 'CHECKED_IN' ||
-                                   b.status === 'CHECKED_OUT' ||
-                                   b.status === 'NO_SHOW' ||
-                                   (b.status === 'CANCELLED' && b.confirmedAt);
-
-      if (hasSuccessfulPayment) {
-        const paymentDate = b.confirmedAt ? b.confirmedAt.split('T')[0] : (b.bookingDate ? b.bookingDate.split('T')[0] : '');
-        if (paymentDate && paymentDate >= start && paymentDate <= end) {
-          grossRevenue += (Number(b.totalAmount) || 0);
-        }
-      }
-
-      // 2. Applicable refunds processed
-      if (b.status === 'CANCELLED' && (b.refundStatus === 'PROCESSED' || (Number(b.refundAmount) || 0) > 0)) {
-        const refundDate = b.cancelledAt ? b.cancelledAt.split('T')[0] : (b.bookingDate ? b.bookingDate.split('T')[0] : '');
-        if (refundDate && refundDate >= start && refundDate <= end) {
-          refunds += (Number(b.refundAmount) || 0);
-        }
-      }
-    });
-
-    const netRevenue = Math.max(0, grossRevenue - refunds);
-    return { grossRevenue, refunds, netRevenue };
-  }
-
-  private computeOperationalAlerts(currInv: any): void {
-    let arrivals = 0;
-    let departures = 0;
-
-    // 1. Arrivals: CONFIRMED reservations with checkInDate in reporting range (exclude PENDING_PAYMENT)
-    this.filteredReservations.forEach(b => {
-      const checkInStr = b.checkInDate || this.extractDateFromBooking(b, 'in');
-      if (checkInStr && checkInStr >= this.startDate && checkInStr <= this.endDate) {
-        if (b.status === 'CONFIRMED') {
-          arrivals++;
-        }
-      }
-    });
-
-    // 2. Departures: CHECKED_IN guests with checkOutDate in reporting range (exclude already CHECKED_OUT)
-    this.filteredReservations.forEach(b => {
-      const checkOutStr = b.checkOutDate || this.extractDateFromBooking(b, 'out');
-      if (checkOutStr && checkOutStr >= this.startDate && checkOutStr <= this.endDate) {
-        if (b.status === 'CHECKED_IN') {
-          departures++;
-        }
-      }
-    });
-
-    // 3. Active Room Blocks: Overlap rule [startDate, endDate)
-    // block.startDate <= this.endDate && block.endDate > this.startDate
-    const activeBlocks = this.roomBlocks.filter(b =>
-      b.status === 'ACTIVE' &&
-      b.startDate <= this.endDate &&
-      b.endDate > this.startDate
-    ).length;
-
-    // 4. Low Availability: Unique room types with date-wise availableRooms <= 2 on any date in period
-    let lowAvailCount = 0;
-    if (currInv && currInv.dailySummaries) {
-      // Check if daily available drops <= 2
-      const hasLow = currInv.dailySummaries.some((d: any) => d.availableRooms !== undefined && d.availableRooms <= 2);
-      lowAvailCount = hasLow ? Math.min(this.roomTypes.length, 2) : 0;
-    } else {
-      lowAvailCount = this.roomTypes.filter(rt =>
-        rt.availableRooms !== undefined && rt.availableRooms !== null && rt.availableRooms <= 2
-      ).length;
-    }
-
-    this.operationalAlerts = {
-      arrivalsCount: arrivals,
-      departuresCount: departures,
-      activeRoomBlocksCount: activeBlocks,
-      lowAvailabilityRoomsCount: lowAvailCount
-    };
-  }
-
-  private buildTrendsChartData(currInv: any, currRev: HotelRevenueReportResponse | null = null): void {
-    const rawItems: { isoStr: string; dateLabel: string; count: number; revenue: number }[] = [];
-    const dStart = new Date(this.startDate + 'T00:00:00');
-    const dEnd = new Date(this.endDate + 'T00:00:00');
-
-    let maxCount = 0;
-    let maxRev = 0;
-
-    let cur = new Date(dStart);
-
-    while (cur <= dEnd) {
-      const isoStr = this.formatDateIso(cur);
-      const dateLabel = this.formatDateShort(isoStr);
-
-      // Bookings created on this day
-      const dayBookings = this.filterBookingsCreatedInPeriod(this.filteredReservations, isoStr, isoStr);
-      const dayCount = dayBookings.length;
-
-      // Net revenue collected on this day from actual payment transactions
-      let dayRev = 0;
-      if (currRev && currRev.dailyBreakdown) {
-        const dayItem = currRev.dailyBreakdown.find(d => d.date === isoStr);
-        dayRev = dayItem ? dayItem.netRevenue : 0;
-      } else {
-        const dayRevenueData = this.calculatePeriodNetRevenue(this.filteredReservations, isoStr, isoStr);
-        dayRev = dayRevenueData.netRevenue;
-      }
-
-      if (dayCount > maxCount) maxCount = dayCount;
-      if (dayRev > maxRev) maxRev = dayRev;
-
-      rawItems.push({ isoStr, dateLabel, count: dayCount, revenue: dayRev });
-      cur.setDate(cur.getDate() + 1);
-    }
-
-    const totalDays = rawItems.length;
-
-    // Adaptive step calculation based on total number of days:
-    // Short ranges (<= 8 days): display all dates (step = 1)
-    // Medium-short (9 - 16 days): every 2nd day (step = 2)
-    // Medium (17 - 24 days): every 3rd day (step = 3)
-    // Long (25 - 35 days, e.g. 30 days / 1 month): every 5th day (step = 5)
-    // Very long (> 35 days): target 5 to 7 total labels
-    let step = 1;
-    if (totalDays <= 8) {
-      step = 1;
-    } else if (totalDays <= 16) {
-      step = 2;
-    } else if (totalDays <= 24) {
-      step = 3;
-    } else if (totalDays <= 35) {
-      step = 5;
-    } else {
-      step = Math.ceil(totalDays / 6);
-    }
-
-    // Determine which days display an X-axis date label
-    const shouldShow = new Array(totalDays).fill(false);
-    if (totalDays <= 8) {
-      shouldShow.fill(true);
-    } else {
-      let lastShown = -999;
-      for (let i = 0; i < totalDays; i++) {
-        const isStepMilestone = (i % step === 0);
-        const isLast = (i === totalDays - 1);
-
-        if (isStepMilestone) {
-          // If milestone is too close to the final day, skip it so the final day displays without colliding
-          if (totalDays - 1 - i >= Math.max(2, Math.floor(step * 0.7))) {
-            shouldShow[i] = true;
-            lastShown = i;
-          }
-        }
-
-        if (isLast) {
-          // Always show the last day if it has at least 2 days clearance from the previous milestone
-          if (i - lastShown >= 2) {
-            shouldShow[i] = true;
-          }
-        }
-      }
-    }
-
-    this.maxChartValue = Math.max(40, Math.ceil((maxCount + 5) / 10) * 10);
-    this.maxRevenueChartValue = Math.max(50000, Math.ceil((maxRev + 5000) / 10000) * 10000);
-
-    const days: TrendDayItem[] = rawItems.map((item, idx) => ({
-      dateLabel: item.dateLabel,
-      fullDate: item.isoStr,
-      count: item.count,
-      revenue: item.revenue,
-      heightPercent: item.count > 0
-        ? Math.min(100, Math.max(2, Math.round((item.count / this.maxChartValue) * 100)))
-        : 0,
-      revenueHeightPercent: item.revenue > 0
-        ? Math.min(100, Math.max(2, Math.round((item.revenue / this.maxRevenueChartValue) * 100)))
-        : 0,
-      heightPx: Math.max(4, Math.round((item.count / this.maxChartValue) * 200)),
-      revenueHeightPx: item.revenue > 0
-        ? Math.max(4, Math.round((item.revenue / this.maxRevenueChartValue) * 200))
-        : 4,
-      showLabel: shouldShow[idx]
-    }));
-
-    this.trendDays = days;
+    // ================= 7. OPERATIONAL ALERTS =================
+    this.operationalAlerts = computeOperationalAlerts(
+      this.filteredReservations,
+      this.startDate,
+      this.endDate,
+      currInv,
+      this.roomTypes,
+      this.roomBlocks
+    );
   }
 
   toggleBookingsTrend(mode: 'bookings' | 'revenue'): void {
@@ -1587,83 +1459,7 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
   }
 
   buildKpiComparison(curr: number, prev: number, isPercentPoints: boolean = false, hasHistoricalData: boolean = true): KpiComparison {
-    const diff = Math.round((curr - prev) * 10) / 10;
-    if (!hasHistoricalData) {
-      return {
-        currentValue: curr,
-        previousValue: prev,
-        diff: 0,
-        percentageChange: null,
-        isPositive: false,
-        isNegative: false,
-        isNeutral: true,
-        trendText: 'No prior data',
-        hasData: false
-      };
-    }
-
-    if (isPercentPoints) {
-      const isPos = diff > 0;
-      const isNeg = diff < 0;
-      const isNeut = diff === 0;
-      const sign = diff > 0 ? '+' : '';
-      return {
-        currentValue: curr,
-        previousValue: prev,
-        diff,
-        percentageChange: diff,
-        isPositive: isPos,
-        isNegative: isNeg,
-        isNeutral: isNeut,
-        trendText: `${isPos ? '↑ ' : isNeg ? '↓ ' : ''}${sign}${diff} pp`,
-        hasData: true
-      };
-    }
-
-    if (prev === 0) {
-      if (curr === 0) {
-        return {
-          currentValue: curr,
-          previousValue: 0,
-          diff: 0,
-          percentageChange: 0,
-          isPositive: false,
-          isNegative: false,
-          isNeutral: true,
-          trendText: '0%',
-          hasData: true
-        };
-      } else {
-        return {
-          currentValue: curr,
-          previousValue: 0,
-          diff: curr,
-          percentageChange: 100,
-          isPositive: true,
-          isNegative: false,
-          isNeutral: false,
-          trendText: `↑ +${curr} (new)`,
-          hasData: true
-        };
-      }
-    }
-
-    const pct = Math.round(((curr - prev) / prev) * 100);
-    const isPos = pct > 0;
-    const isNeg = pct < 0;
-    const isNeut = pct === 0;
-    const sign = pct > 0 ? '+' : '';
-    return {
-      currentValue: curr,
-      previousValue: prev,
-      diff,
-      percentageChange: pct,
-      isPositive: isPos,
-      isNegative: isNeg,
-      isNeutral: isNeut,
-      trendText: `${isPos ? '↑ ' : isNeg ? '↓ ' : ''}${sign}${pct}%`,
-      hasData: true
-    };
+    return buildKpiComparisonMetric(curr, prev, isPercentPoints, hasHistoricalData);
   }
 
   private defaultKpiComparison(): KpiComparison {
@@ -4345,6 +4141,9 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
 
   extractRoomTypeFromBooking(res: any): string {
     if (!res) return 'Standard Room';
+    if (typeof res.roomTypeSummary === 'string' && res.roomTypeSummary.trim().length > 0) {
+      return res.roomTypeSummary.trim();
+    }
     if (res.detailsJson) {
       try {
         const parsed = typeof res.detailsJson === 'string' ? JSON.parse(res.detailsJson) : res.detailsJson;
@@ -4361,29 +4160,8 @@ export class HotelManagerDashboardComponent implements OnInit, OnDestroy {
       const parts = res.serviceTitle.split('-');
       if (parts.length > 1) return parts[1].trim();
     }
-    return 'Deluxe Room';
-  }
-
-  private extractRoomCountFromBooking(res: any): number {
-    if (!res?.detailsJson) return 1;
-    try {
-      const parsed = typeof res.detailsJson === 'string' ? JSON.parse(res.detailsJson) : res.detailsJson;
-      return parsed.roomCount || parsed.roomsBooked || parsed.count || 1;
-    } catch {
-      return 1;
-    }
-  }
-
-  private extractDateFromBooking(res: any, type: 'in' | 'out'): string | null {
-    if (!res?.detailsJson) return null;
-    try {
-      const parsed = typeof res.detailsJson === 'string' ? JSON.parse(res.detailsJson) : res.detailsJson;
-      if (type === 'in') return parsed.checkInDate || parsed.checkIn || null;
-      if (type === 'out') return parsed.checkOutDate || parsed.checkOut || null;
-    } catch {
-      return null;
-    }
-    return null;
+    const count = resolveBookingRoomCount(res);
+    return count > 1 ? `Assigned Rooms (${count})` : 'Assigned Room';
   }
 
   getStatusBadgeClass(status: string): string {

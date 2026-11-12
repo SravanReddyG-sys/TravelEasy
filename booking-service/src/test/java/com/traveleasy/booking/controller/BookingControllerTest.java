@@ -1156,4 +1156,105 @@ public class BookingControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].customerName").value("guest@traveleasy.com"));
     }
+
+    @Test
+    @DisplayName("GET /api/bookings/hotel/{hotelId} - Enforces hotel ownership and enriches snapshot allocations")
+    void getHotelBookings_OwnershipAndSnapshotEnrichment() throws Exception {
+        mockMvc.perform(get("/api/bookings/hotel/10"))
+                .andExpect(status().isUnauthorized());
+
+        when(securityService.validateToken("mgr.token")).thenReturn(true);
+        when(securityService.extractRole("mgr.token")).thenReturn("ROLE_HOTEL_MANAGER");
+        when(securityService.extractUserId("mgr.token")).thenReturn(5L);
+        when(internalTokenService.generateInternalToken()).thenReturn("booking-internal-jwt");
+
+        // Cross-hotel manager denied (hotel owned by 99L)
+        when(restTemplate.exchange(
+                contains("/api/hotels/internal/10"),
+                eq(HttpMethod.GET),
+                any(),
+                eq(Map.class)
+        )).thenReturn(ResponseEntity.ok(Map.of("id", 10L, "managerId", 99L)));
+
+        mockMvc.perform(get("/api/bookings/hotel/10")
+                        .header("Authorization", "Bearer mgr.token"))
+                .andExpect(status().isForbidden());
+
+        // Owning manager allowed (hotel owned by 5L) + allocation enrichment
+        when(restTemplate.exchange(
+                contains("/api/hotels/internal/10"),
+                eq(HttpMethod.GET),
+                any(),
+                eq(Map.class)
+        )).thenReturn(ResponseEntity.ok(Map.of("id", 10L, "managerId", 5L)));
+
+        Booking hotelBooking = Booking.builder()
+                .id(77L)
+                .bookingRef("HTL-77")
+                .serviceType("HOTEL")
+                .serviceId(10L)
+                .providerId(5L)
+                .customerName("Aditi Rao")
+                .status("CONFIRMED")
+                .totalAmount(9500.0)
+                .checkInDate(LocalDate.of(2026, 11, 12))
+                .checkOutDate(LocalDate.of(2026, 11, 14))
+                .bookingDate(LocalDateTime.of(2026, 11, 10, 11, 0))
+                .build();
+
+        when(bookingRepository.findByServiceTypeAndServiceIdOrderByBookingDateDesc("HOTEL", 10L))
+                .thenReturn(List.of(hotelBooking));
+
+        com.traveleasy.booking.model.HotelAllocationSnapshot alloc1 =
+                com.traveleasy.booking.model.HotelAllocationSnapshot.builder()
+                        .roomId(101L)
+                        .roomTypeName("Deluxe Suite")
+                        .quantity(2)
+                        .build();
+        com.traveleasy.booking.model.HotelAllocationSnapshot alloc2 =
+                com.traveleasy.booking.model.HotelAllocationSnapshot.builder()
+                        .roomId(102L)
+                        .roomTypeName("Family Villa")
+                        .quantity(1)
+                        .build();
+        com.traveleasy.booking.model.HotelReservationSnapshot snap =
+                com.traveleasy.booking.model.HotelReservationSnapshot.builder()
+                        .bookingId(77L)
+                        .hotelId(10L)
+                        .allocations(List.of(alloc1, alloc2))
+                        .build();
+        when(snapshotRepository.findByBookingIdIn(List.of(77L))).thenReturn(List.of(snap));
+
+        mockMvc.perform(get("/api/bookings/hotel/10")
+                        .header("Authorization", "Bearer mgr.token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].bookingRef").value("HTL-77"))
+                .andExpect(jsonPath("$[0].totalRoomsBooked").value(3))
+                .andExpect(jsonPath("$[0].roomTypeSummary").value("Deluxe Suite (x2), Family Villa"))
+                .andExpect(jsonPath("$[0].allocations.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("GET /api/bookings/hotel/{hotelId}/refs - Rejects unauthenticated internal header bypass and serves valid internal token")
+    void getHotelBookingRefs_StrictInternalAuth() throws Exception {
+        when(securityService.verifyStrictInternalToken(any(), any(), any(), eq("payment-service"), eq("hotel-service")))
+                .thenReturn(false)
+                .thenReturn(true);
+
+        mockMvc.perform(get("/api/bookings/hotel/10/refs")
+                        .header("X-Internal-Service", "payment-service"))
+                .andExpect(status().isUnauthorized());
+
+        when(bookingRepository.findDistinctHotelBookingRefsByHotelId(10L))
+                .thenReturn(List.of("HTL-101", "HTL-102"));
+
+        mockMvc.perform(get("/api/bookings/hotel/10/refs")
+                        .header("X-Internal-Token", "signed-payment-jwt")
+                        .header("X-Internal-Service", "payment-service"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0]").value("HTL-101"))
+                .andExpect(jsonPath("$[1]").value("HTL-102"));
+    }
 }

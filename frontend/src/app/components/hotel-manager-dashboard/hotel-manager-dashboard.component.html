@@ -96,7 +96,7 @@
             <div class="text-muted" style="font-size: 11px;">{{ currentUser?.email }}</div>
             <span class="badge bg-info text-white mt-1" style="font-size: 10px;">HOTEL PARTNER</span>
           </div>
-          <a class="dropdown-item py-2 small rounded-2 cursor-pointer" (click)="activeNav = 'properties'; showUserDropdown = false">
+          <a class="dropdown-item py-2 small rounded-2 cursor-pointer" (click)="switchActiveNav('properties')">
             <i class="fa-solid fa-hotel me-2 text-primary"></i>My Properties
           </a>
           <a class="dropdown-item py-2 small rounded-2 cursor-pointer" (click)="activeNav = 'reservations'; showUserDropdown = false">
@@ -147,7 +147,7 @@
         <!-- 2. My Properties -->
         <a class="nav-link-custom" 
            [class.active]="activeNav === 'properties'" 
-           (click)="activeNav = 'properties'; isMobileSidebarOpen = false"
+           (click)="switchActiveNav('properties')"
            title="My Properties">
           <i class="fa-solid fa-hotel sidebar-icon"></i>
           <span *ngIf="!isSidebarCollapsed">My Properties</span>
@@ -330,11 +330,11 @@
                 </div>
                 <div>
                   <div class="kpi-label">Total Bookings</div>
-                  <div class="kpi-value">{{ bookingsKpi.currentValue }}</div>
+                  <div class="kpi-value">{{ overviewLoadErrors.bookings ? 'Unavailable' : bookingsKpi.currentValue }}</div>
                   <div class="kpi-trend fw-bold" 
                        [ngClass]="{'text-success': bookingsKpi.isPositive, 'text-danger': bookingsKpi.isNegative, 'text-muted': bookingsKpi.isNeutral}">
                     <span>{{ bookingsKpi.trendText }}</span>
-                    <span class="text-muted fw-normal">vs. prev. period</span>
+                    <span *ngIf="bookingsKpi.hasData" class="text-muted fw-normal">vs. prev. period</span>
                   </div>
                 </div>
               </div>
@@ -350,11 +350,11 @@
                 </div>
                 <div>
                   <div class="kpi-label">Room Nights</div>
-                  <div class="kpi-value">{{ nightsKpi.currentValue }}</div>
+                  <div class="kpi-value">{{ overviewLoadErrors.bookings ? 'Unavailable' : nightsKpi.currentValue }}</div>
                   <div class="kpi-trend fw-bold"
                        [ngClass]="{'text-success': nightsKpi.isPositive, 'text-danger': nightsKpi.isNegative, 'text-muted': nightsKpi.isNeutral}">
                     <span>{{ nightsKpi.trendText }}</span>
-                    <span class="text-muted fw-normal">vs. prev. period</span>
+                    <span *ngIf="nightsKpi.hasData" class="text-muted fw-normal">vs. prev. period</span>
                   </div>
                 </div>
               </div>
@@ -370,11 +370,11 @@
                 </div>
                 <div>
                   <div class="kpi-label">Occupancy Rate</div>
-                  <div class="kpi-value">{{ occupancyRate }}%</div>
+                  <div class="kpi-value">{{ overviewLoadErrors.inventory ? 'Unavailable' : (occupancyRate + '%') }}</div>
                   <div class="kpi-trend fw-bold"
                        [ngClass]="{'text-success': occupancyKpi.isPositive, 'text-danger': occupancyKpi.isNegative, 'text-muted': occupancyKpi.isNeutral}">
                     <span>{{ occupancyKpi.trendText }}</span>
-                    <span class="text-muted fw-normal">vs. prev. period</span>
+                    <span *ngIf="occupancyKpi.hasData" class="text-muted fw-normal">vs. prev. period</span>
                   </div>
                 </div>
               </div>
@@ -390,11 +390,11 @@
                 </div>
                 <div>
                   <div class="kpi-label">Net Revenue</div>
-                  <div class="kpi-value">{{ formatCurrency(revenueKpi.currentValue) }}</div>
+                  <div class="kpi-value">{{ overviewLoadErrors.revenue ? 'Unavailable' : formatCurrency(revenueKpi.currentValue) }}</div>
                   <div class="kpi-trend fw-bold"
                        [ngClass]="{'text-success': revenueKpi.isPositive, 'text-danger': revenueKpi.isNegative, 'text-muted': revenueKpi.isNeutral}">
                     <span>{{ revenueKpi.trendText }}</span>
-                    <span class="text-muted fw-normal">vs. prev. period</span>
+                    <span *ngIf="revenueKpi.hasData" class="text-muted fw-normal">vs. prev. period</span>
                   </div>
                 </div>
               </div>
@@ -455,7 +455,8 @@
                 </div>
 
                 <!-- Bars Row -->
-                <div class="chart-bars-row">
+                <div class="chart-bars-row"
+                     *ngIf="!(bookingsTrendToggle === 'bookings' && overviewLoadErrors.bookings) && !(bookingsTrendToggle === 'revenue' && overviewLoadErrors.revenue)">
                   <div *ngFor="let day of trendDays" class="chart-bar-col">
                     <div class="chart-bar-tooltip">
                       {{ day.dateLabel }}: {{ bookingsTrendToggle === 'bookings' ? day.count + ' Bookings' : formatCurrency(day.revenue) }}
@@ -464,6 +465,14 @@
                          [style.height.%]="bookingsTrendToggle === 'bookings' ? day.heightPercent : day.revenueHeightPercent">
                     </div>
                   </div>
+                </div>
+                <div *ngIf="(bookingsTrendToggle === 'bookings' && overviewLoadErrors.bookings) || (bookingsTrendToggle === 'revenue' && overviewLoadErrors.revenue)"
+                     class="chart-bars-row align-items-center justify-content-center">
+                  <span class="text-muted small">
+                    {{ bookingsTrendToggle === 'revenue'
+                      ? 'Revenue trend unavailable — payment service did not respond.'
+                      : 'Bookings trend unavailable — booking service did not respond.' }}
+                  </span>
                 </div>
 
                 <!-- X-Axis Date Labels -->
@@ -502,8 +511,8 @@
                             transform="rotate(-90 50 50)" />
                   </svg>
                   <div class="donut-inner-content">
-                    <div class="donut-pct-text">{{ occupancyRate }}%</div>
-                    <div class="donut-sub-text">Occupied</div>
+                    <div class="donut-pct-text">{{ overviewLoadErrors.inventory ? '—' : (occupancyRate + '%') }}</div>
+                    <div class="donut-sub-text">{{ overviewLoadErrors.inventory ? 'Unavailable' : 'Occupied' }}</div>
                   </div>
                 </div>
               </div>
@@ -516,7 +525,7 @@
                     <span class="legend-swatch swatch-occupied"></span>
                     <span class="legend-label">Occupied Nights</span>
                   </div>
-                  <span class="legend-value">{{ occupiedRoomNights }}</span>
+                  <span class="legend-value">{{ overviewLoadErrors.inventory ? '—' : occupiedRoomNights }}</span>
                 </div>
 
                 <!-- Row 2: Held Nights (Active Holds) -->
@@ -525,7 +534,7 @@
                     <span class="legend-swatch swatch-held"></span>
                     <span class="legend-label">Held Nights</span>
                   </div>
-                  <span class="legend-value">{{ heldRoomNights }}</span>
+                  <span class="legend-value">{{ overviewLoadErrors.inventory ? '—' : heldRoomNights }}</span>
                 </div>
 
                 <!-- Row 3: Available Nights -->
@@ -534,7 +543,7 @@
                     <span class="legend-swatch swatch-available"></span>
                     <span class="legend-label">Available Nights</span>
                   </div>
-                  <span class="legend-value">{{ availableRoomNights }}</span>
+                  <span class="legend-value">{{ overviewLoadErrors.inventory ? '—' : availableRoomNights }}</span>
                 </div>
 
                 <!-- Row 3: Blocked Nights -->
@@ -543,7 +552,7 @@
                     <span class="legend-swatch swatch-blocked"></span>
                     <span class="legend-label">Blocked Nights</span>
                   </div>
-                  <span class="legend-value">{{ blockedRoomNights }}</span>
+                  <span class="legend-value">{{ overviewLoadErrors.inventory ? '—' : blockedRoomNights }}</span>
                 </div>
               </div>
 
@@ -551,7 +560,7 @@
               <div class="occupancy-footer">
                 <div class="d-flex align-items-center justify-content-between">
                   <span class="footer-label">Sellable Capacity</span>
-                  <span class="footer-value">{{ applicableRoomNightCapacity }}</span>
+                  <span class="footer-value">{{ overviewLoadErrors.inventory ? '—' : applicableRoomNightCapacity }}</span>
                 </div>
               </div>
             </div>
@@ -619,7 +628,7 @@
               <div class="d-flex justify-content-between align-items-center mb-3">
                 <div class="d-flex align-items-center gap-2">
                   <h5 class="fw-bold text-dark mb-0">Upcoming Reservations</h5>
-                  <span class="badge bg-light text-secondary border small">{{ selectedDateRangeLabel }}</span>
+                  <span class="badge bg-light text-secondary border small">Confirmed Check-ins</span>
                 </div>
                 <a class="btn btn-link text-info text-decoration-none fw-semibold p-0 small" 
                    (click)="activeNav = 'reservations'">
@@ -658,7 +667,9 @@
                     <tbody>
                       <tr>
                         <td colspan="6" class="text-center py-4 text-muted small">
-                          No reservations found for the selected reporting period ({{ formatDateShort(startDate) }} – {{ formatDateShort(endDate) }}).
+                          {{ overviewLoadErrors.bookings
+                            ? 'Unable to load upcoming reservations right now.'
+                            : 'No upcoming confirmed reservations for this property.' }}
                         </td>
                       </tr>
                     </tbody>
@@ -681,7 +692,7 @@
                       <i class="fa-solid fa-calendar-day"></i>
                     </div>
                     <div>
-                      <div class="alert-item-title">{{ operationalAlerts.arrivalsCount }} arrivals in period</div>
+                      <div class="alert-item-title">{{ overviewLoadErrors.bookings ? '—' : operationalAlerts.arrivalsCount }} arrivals in period</div>
                       <div class="alert-item-subtitle">Confirmed guests checking in (excludes pending)</div>
                     </div>
                   </div>
@@ -695,7 +706,7 @@
                       <i class="fa-solid fa-arrow-right-from-bracket"></i>
                     </div>
                     <div>
-                      <div class="alert-item-title">{{ operationalAlerts.departuresCount }} departures in period</div>
+                      <div class="alert-item-title">{{ overviewLoadErrors.bookings ? '—' : operationalAlerts.departuresCount }} departures in period</div>
                       <div class="alert-item-subtitle">In-house guests checking out (excludes completed)</div>
                     </div>
                   </div>
@@ -709,7 +720,7 @@
                       <i class="fa-solid fa-triangle-exclamation"></i>
                     </div>
                     <div>
-                      <div class="alert-item-title">{{ operationalAlerts.activeRoomBlocksCount }} room blocks active</div>
+                      <div class="alert-item-title">{{ (overviewLoadErrors.inventory && overviewLoadErrors.roomBlocks) ? '—' : operationalAlerts.activeRoomBlocksCount }} room blocks active</div>
                       <div class="alert-item-subtitle">Maintenance blocks overlapping period</div>
                     </div>
                   </div>
@@ -723,7 +734,7 @@
                       <i class="fa-solid fa-circle-info"></i>
                     </div>
                     <div>
-                      <div class="alert-item-title">{{ operationalAlerts.lowAvailabilityRoomsCount }} room categories low</div>
+                      <div class="alert-item-title">{{ overviewLoadErrors.inventory ? '—' : operationalAlerts.lowAvailabilityRoomsCount }} room categories low</div>
                       <div class="alert-item-subtitle">&le; 2 rooms left on dates in period</div>
                     </div>
                   </div>

@@ -31,6 +31,10 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     List<Booking> findByProviderIdOrderByBookingDateDesc(Long providerId);
     List<Booking> findByServiceTypeAndProviderId(String serviceType, Long providerId);
     List<Booking> findByServiceTypeAndServiceId(String serviceType, Long serviceId);
+    List<Booking> findByServiceTypeAndServiceIdOrderByBookingDateDesc(String serviceType, Long serviceId);
+
+    @Query("SELECT DISTINCT b.bookingRef FROM Booking b WHERE UPPER(b.serviceType) = 'HOTEL' AND b.serviceId = :hotelId AND b.bookingRef IS NOT NULL")
+    List<String> findDistinctHotelBookingRefsByHotelId(@Param("hotelId") Long hotelId);
     List<Booking> findByStatusInAndBookingDateBefore(List<String> statuses, LocalDateTime dateTime);
     List<Booking> findByStatusInAndExpiresAtBefore(List<String> statuses, LocalDateTime dateTime);
 

@@ -162,13 +162,13 @@ export class HotelService {
     return this.http.get<any[]>(`${this.apiUrl}/rooms/${roomId}/blocks`);
   }
 
-  getHotelInventorySummary(hotelId: number, startDate?: string, endDate?: string): Observable<any> {
+  getHotelInventorySummary(hotelId: number, startDate?: string, endDate?: string): Observable<HotelInventorySummary> {
     let url = `${this.apiUrl}/${hotelId}/inventory/summary`;
     const params: string[] = [];
     if (startDate) params.push(`startDate=${encodeURIComponent(startDate)}`);
     if (endDate) params.push(`endDate=${encodeURIComponent(endDate)}`);
     if (params.length > 0) url += `?${params.join('&')}`;
-    return this.http.get<any>(url);
+    return this.http.get<HotelInventorySummary>(url);
   }
 
   // --- WP-05: PROPERTY REGISTRATION WIZARD (STEP 1) ---
@@ -215,4 +215,33 @@ export class HotelService {
   deleteDraft(draftId: number): Observable<any> {
     return this.http.delete<any>(`${this.apiUrl}/draft/${draftId}`);
   }
+}
+
+export interface HotelLowAvailabilityRoom {
+  roomTypeId: number;
+  roomTypeName: string;
+  totalRooms: number;
+  minAvailableRooms: number;
+  exhausted: boolean;
+  worstDate?: string | null;
+}
+
+export interface HotelInventorySummary {
+  hotelId: number;
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  totalPhysicalRoomNights: number;
+  occupiedRoomNights: number;
+  heldRoomNights: number;
+  blockedRoomNights: number;
+  applicableRoomNightCapacity: number;
+  availableRoomNights: number;
+  occupancyRate: number;
+  activeRoomTypesCount?: number;
+  activeRoomBlocksCount?: number;
+  lowAvailabilityRoomsCount?: number;
+  exhaustedRoomsCount?: number;
+  lowAvailabilityRooms?: HotelLowAvailabilityRoom[];
+  dailySummaries?: any[];
 }

@@ -978,4 +978,71 @@ public class HotelInventoryPricingAndBlockingTest {
         assertTrue(summary.getOccupancyRate() > 0.0);
         assertEquals(3, summary.getDailySummaries().size());
     }
+
+    @Test
+    @DisplayName("Hotel inventory summary reports all low/exhausted active categories (>2), excludes ARCHIVED, and counts overlapping blocks")
+    public void testHotelInventorySummary_LowAvailabilityAndBlocksExcludeArchived() {
+        Long managerId = 2601L;
+        String token = createManagerToken(managerId);
+        HotelProperty hotel = createProperty(managerId, "Low Avail Grand", "Mysore");
+
+        // 3 ACTIVE room types with <= 2 minimum availability across the window (plus 1 plentiful ACTIVE and 1 ARCHIVED)
+        RoomType rtExhausted = createRoom(hotel.getId(), "Executive Twin", 5000.0, 2);
+        RoomType rtOneLeft = createRoom(hotel.getId(), "Deluxe King", 4000.0, 3);
+        RoomType rtTwoLeft = createRoom(hotel.getId(), "Standard Studio", 3000.0, 2);
+        createRoom(hotel.getId(), "Presidential Suite", 12000.0, 6);
+
+        RoomType rtArchived = createRoom(hotel.getId(), "Deprecated Loft", 2000.0, 1);
+        rtArchived.setStatus("ARCHIVED");
+        roomTypeRepository.save(rtArchived);
+
+        LocalDate start = LocalDate.now().plusDays(10);
+        LocalDate end = start.plusDays(2);
+
+        // Exhaust Executive Twin on start+1 (0 available)
+        RoomDailyInventory invExhausted = inventoryService.getOrCreateDailyInventory(rtExhausted, start.plusDays(1));
+        invExhausted.setBookedRooms(2);
+        dailyInventoryRepository.save(invExhausted);
+
+        // Leave 1 room on Deluxe King (3 total - 2 booked = 1 available <= 2)
+        RoomDailyInventory invOne = inventoryService.getOrCreateDailyInventory(rtOneLeft, start);
+        invOne.setBookedRooms(2);
+        dailyInventoryRepository.save(invOne);
+
+        // Create 1 active overlapping block [start, end+1) and 1 non-overlapping block starting on end+1 [end+1, end+2)
+        RoomBlockRequestDto activeBlock = RoomBlockRequestDto.builder()
+                .blockedCount(1)
+                .startDate(start)
+                .endDate(end.plusDays(1))
+                .reason("MAINTENANCE")
+                .build();
+        restTemplate.exchange("/api/hotels/" + hotel.getId() + "/rooms/" + rtTwoLeft.getId() + "/blocks",
+                HttpMethod.POST, new HttpEntity<>(activeBlock, authHeaders(token)), Map.class);
+
+        RoomBlockRequestDto futureBlock = RoomBlockRequestDto.builder()
+                .blockedCount(1)
+                .startDate(end.plusDays(1))
+                .endDate(end.plusDays(2))
+                .reason("EVENT")
+                .build();
+        restTemplate.exchange("/api/hotels/" + hotel.getId() + "/rooms/" + rtTwoLeft.getId() + "/blocks",
+                HttpMethod.POST, new HttpEntity<>(futureBlock, authHeaders(token)), Map.class);
+
+        ResponseEntity<HotelInventorySummaryDto> resp = restTemplate.exchange(
+                "/api/hotels/" + hotel.getId() + "/inventory/summary?startDate=" + start + "&endDate=" + end,
+                HttpMethod.GET, new HttpEntity<>(authHeaders(token)), HotelInventorySummaryDto.class);
+
+        assertEquals(HttpStatus.OK, resp.getStatusCode());
+        HotelInventorySummaryDto summary = resp.getBody();
+        assertNotNull(summary);
+        assertEquals(4, summary.getActiveRoomTypesCount());
+        assertEquals(3, summary.getLowAvailabilityRoomsCount());
+        assertEquals(1, summary.getExhaustedRoomsCount());
+        assertEquals(1, summary.getActiveRoomBlocksCount());
+        assertNotNull(summary.getLowAvailabilityRooms());
+        assertEquals(3, summary.getLowAvailabilityRooms().size());
+        assertTrue(summary.getLowAvailabilityRooms().stream()
+                .noneMatch(r -> "Deprecated Loft".equals(r.getRoomTypeName())));
+        assertEquals(0, summary.getLowAvailabilityRooms().get(0).getMinAvailableRooms());
+    }
 }

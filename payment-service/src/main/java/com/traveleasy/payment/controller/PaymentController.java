@@ -212,6 +212,11 @@ public class PaymentController {
             Object uid = securityService.extractClaims(token).get("userId");
             if (uid instanceof Number) {
                 userId = ((Number) uid).longValue();
+            } else if (uid != null) {
+                String uidStr = uid.toString().trim();
+                if (!uidStr.isEmpty()) {
+                    userId = Long.parseLong(uidStr);
+                }
             }
         } catch (Exception ignored) {}
 

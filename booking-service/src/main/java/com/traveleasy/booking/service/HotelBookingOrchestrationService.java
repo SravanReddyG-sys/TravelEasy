@@ -146,6 +146,9 @@ public class HotelBookingOrchestrationService {
 
         LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(15);
 
+        // 5B. Resolve hotel manager (providerId) authoritatively when available
+        Long resolvedProviderId = resolveHotelManagerIdSafely(request.getHotelId());
+
         // 6. Create Initial Parent Booking with status INITIATED
         Booking booking = Booking.builder()
                 .bookingRef(bookingRef)
@@ -154,6 +157,7 @@ public class HotelBookingOrchestrationService {
                 .customerEmail(request.getCustomerEmail())
                 .serviceType("HOTEL")
                 .serviceId(request.getHotelId())
+                .providerId(resolvedProviderId)
                 .serviceTitle(request.getHotelName() != null ? request.getHotelName() : "Hotel Reservation")
                 .checkInDate(request.getCheckInDate())
                 .checkOutDate(request.getCheckOutDate())
@@ -777,6 +781,33 @@ public class HotelBookingOrchestrationService {
                     .refundAmount(booking.getRefundAmount())
                     .refundStatus(booking.getRefundStatus())
                     .build();
+        }
+        return null;
+    }
+
+    private Long resolveHotelManagerIdSafely(Long hotelId) {
+        if (hotelId == null || restTemplate == null || internalTokenService == null) {
+            return null;
+        }
+        try {
+            String url = hotelServiceUrl + "/api/hotels/internal/" + hotelId;
+            HttpHeaders headers = new HttpHeaders();
+            String token = internalTokenService.generateInternalToken();
+            headers.set("Authorization", "Bearer " + token);
+            headers.set("X-Internal-Token", token);
+            headers.set("X-Internal-Service", "booking-service");
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+            ResponseEntity<Map> resp = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
+            if (resp != null && resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
+                Object mgrIdObj = resp.getBody().get("managerId");
+                if (mgrIdObj instanceof Number n) {
+                    return n.longValue();
+                } else if (mgrIdObj != null) {
+                    return Long.parseLong(mgrIdObj.toString().trim());
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Could not resolve managerId for hotel {} during initiation: {}", hotelId, e.getMessage());
         }
         return null;
     }

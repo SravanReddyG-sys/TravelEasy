@@ -384,4 +384,50 @@ public class PaymentControllerTest {
                 .andExpect(jsonPath("$.refundId").value("rfnd_rec_1"))
                 .andExpect(jsonPath("$.refundAmount").value(1800.0));
     }
+
+    @Test
+    @DisplayName("POST /api/payments/hotel/revenue-summary - Security and controller delegation")
+    void testHotelRevenueSummary_SecurityAndDelegation() throws Exception {
+        String bodyJson = "{\"hotelId\":10,\"bookingRefs\":[\"BKG-1\"],\"startDate\":\"2026-11-01\",\"endDate\":\"2026-11-07\"}";
+
+        mockMvc.perform(post("/api/payments/hotel/revenue-summary")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bodyJson))
+                .andExpect(status().isUnauthorized());
+
+        when(securityService.validateToken("cust.token")).thenReturn(true);
+        when(securityService.extractRole("cust.token")).thenReturn("ROLE_CUSTOMER");
+        mockMvc.perform(post("/api/payments/hotel/revenue-summary")
+                        .header("Authorization", "Bearer cust.token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bodyJson))
+                .andExpect(status().isForbidden());
+
+        when(securityService.validateToken("mgr.token")).thenReturn(true);
+        when(securityService.extractRole("mgr.token")).thenReturn("ROLE_HOTEL_MANAGER");
+        io.jsonwebtoken.Claims mgrClaims = io.jsonwebtoken.Jwts.claims(Map.of("userId", "42"));
+        when(securityService.extractClaims("mgr.token")).thenReturn(mgrClaims);
+
+        HotelRevenueReportResponse stubResp = HotelRevenueReportResponse.builder()
+                .hotelId(10L)
+                .startDate(LocalDate.of(2026, 11, 1))
+                .endDate(LocalDate.of(2026, 11, 7))
+                .successfulPaymentsAmount(10000.0)
+                .successfulPaymentsCount(2)
+                .processedRefundsAmount(2000.0)
+                .processedRefundsCount(1)
+                .netRevenue(8000.0)
+                .dailyBreakdown(List.of())
+                .build();
+        when(paymentService.getHotelRevenueSummary(any(), eq("ROLE_HOTEL_MANAGER"), eq(42L)))
+                .thenReturn(stubResp);
+
+        mockMvc.perform(post("/api/payments/hotel/revenue-summary")
+                        .header("Authorization", "Bearer mgr.token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bodyJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hotelId").value(10))
+                .andExpect(jsonPath("$.netRevenue").value(8000.0));
+    }
 }
